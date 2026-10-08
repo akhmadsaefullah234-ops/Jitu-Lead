@@ -2,7 +2,7 @@
     <style>
         .jl-bar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
         .jl-chip { border: 1px solid var(--gray-300); background: white; border-radius: 9999px; padding: .3rem .8rem; font-size: .8125rem; font-weight: 500; }
-        .jl-chip[aria-pressed="true"] { background: var(--gray-950); border-color: var(--gray-950); color: white; }
+        .jl-chip[aria-pressed="true"] { background: var(--primary-600); border-color: var(--primary-600); color: white; }
         .jl-input { border: 1px solid var(--gray-300); background: white; border-radius: .5rem; padding: .4rem .7rem; font-size: .875rem; min-width: 0; }
         .jl-board { display: flex; gap: .75rem; overflow-x: auto; padding-bottom: .75rem; align-items: flex-start; }
         .jl-col { flex: 0 0 17rem; background: var(--gray-100); border-radius: .75rem; display: flex; flex-direction: column; max-height: calc(100vh - 16rem); min-height: 12rem; }
@@ -24,6 +24,13 @@
         .jl-card .next .d.late { color: var(--danger-600); font-weight: 600; }
         .jl-card .acts { display: flex; justify-content: space-between; align-items: center; }
         .jl-link { font-size: .75rem; font-weight: 600; color: var(--primary-600); }
+        .jl-board { scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+        .jl-col { scroll-snap-align: start; }
+        @media (max-width: 640px) {
+            .jl-col, .jl-col.is-closed { flex-basis: 84vw; max-height: none; }
+            .jl-bar .jl-input[type="search"] { flex: 1 1 100% !important; max-width: none !important; }
+            .jl-card { cursor: default; }
+        }
         .jl-empty { font-size: .75rem; color: var(--gray-500); padding: .5rem .25rem; }
         .dark .jl-chip, .dark .jl-input { background: var(--gray-900); border-color: var(--gray-700); color: var(--gray-100); }
         .dark .jl-chip[aria-pressed="true"] { background: white; color: var(--gray-950); border-color: white; }

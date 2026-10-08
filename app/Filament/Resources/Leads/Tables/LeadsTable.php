@@ -28,29 +28,34 @@ class LeadsTable
                     ->label('Nama')
                     ->searchable()
                     ->sortable()
-                    ->description(fn (Lead $record) => $record->property?->name),
+                    ->wrap()
+                    ->description(fn (Lead $record) => collect([$record->phone, $record->property?->name])->filter()->implode(' · ')),
                 TextColumn::make('phone')
                     ->label('Telepon')
                     ->searchable()
                     ->copyable()
+                    ->visibleFrom('lg')
                     ->toggleable(),
                 TextColumn::make('stage.name')
                     ->label('Tahap')
                     ->badge()
+                    ->visibleFrom('md')
                     ->color('gray'),
                 TextColumn::make('interest')
                     ->label('Minat')
                     ->badge(),
                 TextColumn::make('owner.name')
                     ->label('Agen')
+                    ->visibleFrom('lg')
                     ->toggleable(),
                 TextColumn::make('next_action')
                     ->label('Aksi berikutnya')
                     ->limit(40)
+                    ->visibleFrom('lg')
                     ->wrap(),
                 TextColumn::make('next_action_due_at')
                     ->label('Tenggat')
-                    ->dateTime('D, j M H:i')
+                    ->dateTime('j M, H:i')
                     ->sortable()
                     ->color(fn (Lead $record) => $record->isOverdue() && $record->stage?->isOpen() ? 'danger' : null)
                     ->weight(fn (Lead $record) => $record->isOverdue() && $record->stage?->isOpen() ? 'bold' : null),
