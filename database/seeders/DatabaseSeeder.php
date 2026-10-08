@@ -5,10 +5,13 @@ namespace Database\Seeders;
 use App\Actions\MoveLeadToStage;
 use App\Actions\ProvisionTenant;
 use App\Enums\Interest;
+use App\Enums\MessageStatus;
 use App\Enums\Need;
 use App\Enums\PaymentMethod;
 use App\Enums\PropertyKind;
 use App\Enums\Role;
+use App\Enums\WaChannelStatus;
+use App\Enums\WaChannelType;
 use App\Models\Lead;
 use App\Models\LeadSource;
 use App\Models\LostReason;
@@ -16,6 +19,9 @@ use App\Models\Property;
 use App\Models\Stage;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Models\WaChannel;
+use App\Models\WaConversation;
+use App\Models\WaTemplate;
 use App\Support\CurrentTenant;
 use Illuminate\Database\Seeder;
 
@@ -41,7 +47,10 @@ class DatabaseSeeder extends Seeder
             return $user;
         });
 
-        app(CurrentTenant::class)->run($tenant, fn () => $this->griyaPrima($tenant, $admin, $agents->all()));
+        app(CurrentTenant::class)->run($tenant, function () use ($tenant, $admin, $agents) {
+            $this->griyaPrima($tenant, $admin, $agents->all());
+            $this->whatsApp($admin);
+        });
 
         $other = app(ProvisionTenant::class)('Nusa Properti', 'nusa-properti', $this->user('Bayu Saputra', 'admin@nusaproperti.test'));
         app(CurrentTenant::class)->run($other, function () use ($other) {
@@ -58,6 +67,30 @@ class DatabaseSeeder extends Seeder
     private function user(string $name, string $email): User
     {
         return User::factory()->create(['name' => $name, 'email' => $email]);
+    }
+
+    private function whatsApp(User $admin): void
+    {
+        $official = WaChannel::create([
+            'type' => WaChannelType::Official, 'name' => 'CS Iklan Meta', 'phone' => '+6281100000001', 'status' => WaChannelStatus::Connected, 'position' => 0,
+            'credentials' => ['phone_number_id' => 'demo', 'access_token' => 'demo', 'app_secret' => 'demo', 'verify_token' => 'demo'],
+        ]);
+        WaChannel::create([
+            'type' => WaChannelType::Gateway, 'name' => 'Gateway follow-up', 'phone' => '+6281100000002', 'status' => WaChannelStatus::Connected, 'position' => 1,
+            'credentials' => ['base_url' => 'https://gateway.contoh.com', 'api_key' => 'demo', 'signing_secret' => 'demo'],
+        ]);
+        WaTemplate::create(['name' => 'follow_up_unit_baru', 'category' => 'marketing', 'language' => 'id', 'body' => 'Halo {nama}, ada kabar terbaru soal {properti} dari {agensi}. Boleh kami hubungi?', 'status' => 'approved']);
+
+        $lead = Lead::query()->where('name', 'Budi Santoso')->first();
+        if ($lead) {
+            $conversation = WaConversation::create([
+                'lead_id' => $lead->getKey(), 'phone' => $lead->phone, 'ad_entry_at' => now()->subHours(5), 'free_window_ends_at' => now()->addHours(67),
+                'last_inbound_at' => now()->subHours(5), 'last_inbound_channel_id' => $official->getKey(), 'last_message_at' => now()->subHours(4), 'unread_count' => 1,
+                'ad_data' => ['source_id' => 'ad-demo', 'headline' => 'Cluster Bukit Asri mulai 785 juta'],
+            ]);
+            $conversation->messages()->create(['channel_id' => $official->getKey(), 'direction' => 'in', 'type' => 'text', 'body' => 'Halo, masih ada unit tipe 36?', 'status' => MessageStatus::Delivered, 'sent_at' => now()->subHours(5)]);
+            $conversation->messages()->create(['channel_id' => $official->getKey(), 'user_id' => $admin->getKey(), 'direction' => 'out', 'type' => 'text', 'body' => 'Masih ada, Pak. Mau saya kirim brosurnya?', 'status' => MessageStatus::Read, 'sent_at' => now()->subHours(4)]);
+        }
     }
 
     private function griyaPrima(Tenant $tenant, User $admin, array $agents): void
