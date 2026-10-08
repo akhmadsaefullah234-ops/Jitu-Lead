@@ -12,6 +12,22 @@ Semua permintaan membawa header `Authorization: Bearer <API key>`. Gateway tidak
 
 Cek koneksi. Balasan 200 dengan JSON `{"status": "connected"}`. Status lain (`disconnected`, `qr_required`) dianggap belum terhubung.
 
+### Menyambungkan nomor lewat QR
+
+Nomor gateway disambungkan seperti WhatsApp Web. CRM menampilkan QR yang dibuat gateway dan menunggu sampai sesi terhubung.
+
+`POST /session/start` memulai sesi baru. Balasan 200 dengan `{"status": "qr_required"}`.
+
+`GET /session/qr` mengembalikan QR terbaru:
+
+```json
+{ "status": "qr_required", "qr": "<teks yang di-render menjadi QR>", "expires_in": 20 }
+```
+
+CRM memanggil endpoint ini tiap beberapa detik selama dialog terbuka, dan mengambil `GET /session` sampai `status` menjadi `connected`. Setelah terhubung, `GET /session/qr` membalas `{"status": "connected"}`.
+
+`POST /session/logout` memutus sesi dan mengosongkan kredensial perangkat di gateway.
+
 ### `POST /messages`
 
 ```json
