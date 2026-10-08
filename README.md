@@ -14,7 +14,10 @@ Stack: Laravel 13, Filament 5 (Livewire 4), PostgreSQL 16.
 - Aturan pindah tahap: aksi berikutnya dan tenggat diisi otomatis; Jadwal survei wajib tanggal dan lokasi, Booking wajib unit dan nilai, Gugur wajib alasan (`app/Actions/MoveLeadToStage.php`).
 - Daftar lead dengan pencarian, filter, nomor telepon dinormalisasi ke +62, peringatan lead ganda, dan pembagian bergiliran (round-robin) ke agen aktif.
 
-Belum ada: WhatsApp dua jalur, impor dan ekspor, formulir web, dashboard laporan, dan halaman pengaturan tahap/sumber/properti.
+- WhatsApp dua jalur (`app/WhatsApp`, `app/Actions/SendWhatsAppMessage.php`): nomor resmi (WhatsApp Business API) untuk chat dari iklan Meta dengan jendela gratis 72 jam, dan nomor gateway untuk follow-up setelah jendela gratis tutup. Jalur dipilih otomatis saat kirim (`RouteSelector`), pesan perkenalan dikirim dulu dari nomor gateway yang belum pernah menulis ke klien, nomor gateway cadangan dipakai bila yang pertama gagal, dan template berbayar butuh konfirmasi agen. Webhook masuk memverifikasi tanda tangan, mencegah pesan ganda, dan membuat lead baru dari chat (termasuk data iklan). Kontrak gateway ada di `docs/whatsapp-gateway-contract.md`.
+- Inbox WhatsApp (agen hanya melihat chat leadnya) dan pengaturan koneksi nomor (khusus Admin; kredensial dienkripsi dan tidak pernah dikirim balik ke browser).
+
+Belum ada: impor dan ekspor, formulir web, dashboard laporan, dan halaman pengaturan tahap/sumber/properti.
 
 ## Menjalankan di komputer sendiri
 

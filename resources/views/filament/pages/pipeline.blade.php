@@ -101,7 +101,12 @@
                                 </div>
                             @endif
                             <div class="acts">
-                                <a class="jl-link" href="{{ $editUrl($lead) }}" wire:navigate>Buka</a>
+                                <span style="display:flex;gap:.75rem">
+                                    <a class="jl-link" href="{{ $editUrl($lead) }}" wire:navigate>Buka</a>
+                                    @if ($lead->phone)
+                                        <a class="jl-link" href="{{ \App\Filament\Pages\Inbox::getUrl(['lead' => $lead->id]) }}" wire:navigate>Chat</a>
+                                    @endif
+                                </span>
                                 <button type="button" class="jl-link" wire:click="mountAction('move', { lead: {{ $lead->id }} })">Pindah tahap</button>
                             </div>
                         </article>
