@@ -23,6 +23,21 @@ jobs:
 
     name: PHP ${{ matrix.php }}
 
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: jitu
+          POSTGRES_PASSWORD: jitu
+          POSTGRES_DB: jitu_lead_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U jitu"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -33,7 +48,7 @@ jobs:
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, pgsql, pdo_pgsql
           coverage: none
 
       - name: Install Composer dependencies
@@ -47,3 +62,7 @@ jobs:
 
       - name: Execute tests
         run: php artisan test
+        env:
+          DB_HOST: 127.0.0.1
+          DB_USERNAME: jitu
+          DB_PASSWORD: jitu
