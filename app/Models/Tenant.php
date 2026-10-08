@@ -7,15 +7,33 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 #[Fillable(['name', 'slug', 'plan', 'status', 'timezone', 'trial_ends_at'])]
 class Tenant extends Model
 {
+    protected $hidden = ['capture_token'];
+
     protected function casts(): array
     {
         return [
             'trial_ends_at' => 'datetime',
         ];
+    }
+
+    /**
+     * The secret in the public form address; changing it switches off old embeds.
+     */
+    public function regenerateCaptureToken(): string
+    {
+        $this->forceFill(['capture_token' => Str::random(40)])->save();
+
+        return $this->capture_token;
+    }
+
+    public function captureUrl(): ?string
+    {
+        return $this->capture_token ? route('capture.store', $this->capture_token) : null;
     }
 
     public function users(): BelongsToMany
