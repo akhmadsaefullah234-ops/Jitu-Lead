@@ -1,58 +1,48 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# JITU LEAD
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+CRM multi tenant untuk agensi properti: menangkap lead, membaginya ke agen, dan menindaklanjutinya lewat pipeline sampai booking dan closing. Spesifikasi lengkap ada di PRD project CRM JITU LEAD.
 
-## About Laravel
+Stack: Laravel 13, Filament 5 (Livewire 4), PostgreSQL 16.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Yang sudah ada
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- Pendaftaran user dan agensi (tenant) sendiri, dengan verifikasi email dan reset password.
+- Isolasi data per tenant: setiap model milik tenant punya global scope `tenant_id`, tenant diisi otomatis saat membuat data, dan relasi ke tenant lain ditolak di level model (`app/Models/Concerns/BelongsToTenant.php`, `app/Models/Lead.php`).
+- Peran Admin, Team leader, dan Agen. Agen hanya melihat dan mengubah lead miliknya (`app/Policies/LeadPolicy.php`).
+- Pipeline properti default: Lead baru, Dihubungi, Terkualifikasi, Jadwal survei, Sudah survei, Negosiasi, Booking, Closing, Gugur.
+- Kanban pipeline dengan drag and drop, filter Hot, aksi hari ini, terlambat, dan per agen (`app/Filament/Pages/Pipeline.php`).
+- Aturan pindah tahap: aksi berikutnya dan tenggat diisi otomatis; Jadwal survei wajib tanggal dan lokasi, Booking wajib unit dan nilai, Gugur wajib alasan (`app/Actions/MoveLeadToStage.php`).
+- Daftar lead dengan pencarian, filter, nomor telepon dinormalisasi ke +62, peringatan lead ganda, dan pembagian bergiliran (round-robin) ke agen aktif.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+Belum ada: WhatsApp dua jalur, impor dan ekspor, formulir web, dashboard laporan, dan halaman pengaturan tahap/sumber/properti.
 
-## Learning Laravel
+## Menjalankan di komputer sendiri
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+Butuh PHP 8.3+, Composer, dan PostgreSQL.
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+```sh
+composer install
+cp .env.example .env
+php artisan key:generate
+# isi DB_* di .env, lalu:
+php artisan migrate --seed
+php artisan serve
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Buka http://localhost:8000/app. Data contoh memakai password `password`:
 
-## Contributing
+| Email | Peran |
+| --- | --- |
+| admin@griyaprima.test | Admin Griya Prima Realty |
+| rina@griyaprima.test | Agen Griya Prima Realty |
+| admin@nusaproperti.test | Admin Nusa Properti (tenant lain) |
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Pengujian
 
-## Code of Conduct
+Uji memakai database PostgreSQL `jitu_lead_test` (lihat `phpunit.xml`).
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```sh
+php artisan test
+```
 
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Uji isolasi tenant ada di `tests/Feature/TenantIsolationTest.php` dan wajib lulus sebelum setiap rilis.
