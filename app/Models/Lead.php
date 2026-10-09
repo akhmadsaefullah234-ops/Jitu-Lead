@@ -16,13 +16,14 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 use LogicException;
 
 #[Fillable([
     'name', 'phone', 'email', 'lead_source_id', 'stage_id', 'owner_id', 'interest',
     'next_action', 'next_action_due_at', 'need', 'property_type', 'location',
     'budget_min', 'budget_max', 'payment_method', 'property_id', 'survey_at',
-    'survey_location', 'unit', 'deal_value', 'lost_reason_id', 'custom_fields',
+    'survey_location', 'unit', 'deal_value', 'lost_reason_id', 'custom_fields', 'stage_entered_at',
 ])]
 class Lead extends Model
 {
@@ -66,6 +67,7 @@ class Lead extends Model
             'payment_method' => PaymentMethod::class,
             'next_action_due_at' => 'datetime',
             'survey_at' => 'datetime',
+            'stage_entered_at' => 'datetime',
             'custom_fields' => 'array',
         ];
     }
@@ -108,6 +110,12 @@ class Lead extends Model
     public function activities(): HasMany
     {
         return $this->hasMany(LeadActivity::class)->latest();
+    }
+
+    /** When the lead arrived in its current stage; follow-up delays count from here. */
+    public function stageEnteredAt(): Carbon
+    {
+        return $this->stage_entered_at ?? $this->created_at;
     }
 
     public function isOverdue(): bool
