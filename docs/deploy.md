@@ -98,3 +98,13 @@ Pemeriksaan harian `plan:check` (dijadwalkan 01:00, butuh `schedule:run` di cron
 - email pengingat ke admin agensi 3 hari sebelum berakhir (perlu pengaturan `MAIL_*`)
 
 Lead baru dari formulir dan WhatsApp tetap diterima walau melebihi batas lead aktif atau status hanya-baca; lead tidak pernah dibuang. Biaya template WhatsApp resmi ditagih Meta langsung ke agensi dan bukan bagian paket. Pembayaran otomatis (Xendit/Midtrans) dan invoice belum ada (tahap 2).
+
+## Landing page builder
+
+Panduan lengkap dan format data ada di [landing-builder.md](landing-builder.md). Untuk server:
+
+- `deploy/install.sh` memasang `php8.3-gd` (pengecil gambar, WebP) dan menulis `/etc/php/8.3/fpm/conf.d/90-jitu.ini`
+  (`upload_max_filesize=10M`, `post_max_size=12M`, `memory_limit=256M`). Di server yang sudah berjalan, jalankan ulang
+  `install.sh`, atau buat file itu sendiri lalu `sudo systemctl restart php8.3-fpm`.
+- Setelah `git pull`: `php artisan migrate --force` (menambah kolom halaman dan mengubah format halaman lama sekali),
+  lalu `php artisan view:clear`.

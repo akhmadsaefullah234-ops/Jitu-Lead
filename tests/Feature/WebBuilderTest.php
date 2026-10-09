@@ -312,14 +312,16 @@ class WebBuilderTest extends TestCase
 
         $this->tenant->forceFill(['capture_token' => null])->save();
         $this->actingInTenant($this->member($this->tenant, Role::Manager), $this->tenant);
-        Livewire::test(CreateLandingPage::class)->fillForm(['title' => 'Promo Oktober', 'slug' => 'promo-oktober', 'status' => 'published', 'color' => '#dc2626'])
+        Livewire::test(CreateLandingPage::class)->fillForm(['title' => 'Promo Oktober', 'slug' => 'promo-oktober', 'template' => 'cluster'])
             ->call('create')->assertHasNoFormErrors();
 
         $page = $this->inTenant(fn () => LandingPage::where('slug', 'promo-oktober')->firstOrFail());
         $this->assertNotEmpty($page->blocks);
-        $this->assertNotNull($page->published_at);
+        $this->assertSame('draft', $page->status); // sample copy is never public until the agent publishes it
+        $this->assertNull($page->published_at);
         $this->assertNotNull($this->tenant->fresh()->capture_token); // the form on the page needs somewhere to post
-        $this->get('/p/griya-prima/promo-oktober')->assertOk()->assertSee('Hunian nyaman');
+        $this->get('/p/griya-prima/promo-oktober')->assertNotFound();
+        $this->get(LandingPageResource::previewUrl($page))->assertOk()->assertSee('Hunian eksklusif');
     }
 
     public function test_page_list_renders_with_status_and_links(): void

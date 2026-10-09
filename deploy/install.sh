@@ -36,6 +36,15 @@ elif [ "$ID" = "debian" ] && ! apt-cache show php8.3-fpm >/dev/null 2>&1; then
 fi
 apt-get install -y php8.3-fpm php8.3-cli php8.3-pgsql php8.3-mbstring php8.3-xml php8.3-curl php8.3-zip php8.3-intl php8.3-bcmath php8.3-gd
 
+# Photo uploads (landing pages): PHP's default 2 MB limit is below nginx's 10 MB,
+# and shrinking a phone photo needs memory. Safe to re-run: the file is rewritten.
+cat > /etc/php/8.3/fpm/conf.d/90-jitu.ini <<'INI'
+upload_max_filesize = 10M
+post_max_size = 12M
+memory_limit = 256M
+INI
+systemctl restart php8.3-fpm
+
 if ! command -v composer >/dev/null; then
   curl -fsSL https://getcomposer.org/installer -o /tmp/composer-setup.php
   php /tmp/composer-setup.php --install-dir=/usr/local/bin --filename=composer
