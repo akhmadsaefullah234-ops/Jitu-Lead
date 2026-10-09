@@ -25,9 +25,12 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y ca-certificates curl git unzip lsb-release gnupg software-properties-common nginx cron postgresql certbot python3-certbot-nginx
+apt-get install -y ca-certificates curl git unzip lsb-release gnupg nginx cron postgresql certbot python3-certbot-nginx
 
 . /etc/os-release
+# software-properties-common (for add-apt-repository) is Ubuntu only: on Debian it
+# pulls in AppStream, which makes apt-get update fail.
+[ "$ID" != "ubuntu" ] || apt-get install -y software-properties-common
 if [ "$ID" = "ubuntu" ] && ! apt-cache show php8.3-fpm >/dev/null 2>&1; then
   add-apt-repository -y ppa:ondrej/php && apt-get update -y
 elif [ "$ID" = "debian" ] && ! apt-cache show php8.3-fpm >/dev/null 2>&1; then
@@ -85,7 +88,7 @@ as_www composer install --no-dev --optimize-autoloader --no-interaction
 grep -q '^APP_KEY=.\+' .env || as_www php artisan key:generate --force
 as_www php artisan migrate --force
 as_www php artisan filament:assets 2>/dev/null || true
-as_www php artisan storage:link 2>/dev/null || true
+[ -e public/storage ] || [ -L public/storage ] || as_www php artisan storage:link 2>/dev/null || true
 as_www php artisan optimize
 chmod 640 .env
 

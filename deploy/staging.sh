@@ -125,7 +125,7 @@ fi
 log "Migrasi database staging"
 as_www php artisan migrate --force
 as_www php artisan filament:assets 2>/dev/null || true
-as_www php artisan storage:link 2>/dev/null || true
+[ -e public/storage ] || [ -L public/storage ] || as_www php artisan storage:link 2>/dev/null || true
 as_www php artisan optimize
 chmod 640 .env
 
