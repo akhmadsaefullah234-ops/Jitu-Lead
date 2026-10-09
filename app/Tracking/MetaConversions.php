@@ -6,7 +6,7 @@ use App\Models\TrackingSetting;
 use Illuminate\Support\Facades\Http;
 
 /**
- * Meta Conversions API: sends the same "Lead" event the browser pixel fired,
+ * Meta Conversions API: sends the same event (the agency's chosen one, "Lead" by default) the browser pixel fired,
  * with the same event_id so Meta counts it once.
  */
 class MetaConversions
@@ -30,7 +30,7 @@ class MetaConversions
 
         $body = array_filter([
             'data' => [array_filter([
-                'event_name' => 'Lead',
+                'event_name' => $settings->eventFor('meta'),
                 'event_time' => $payload->eventTime,
                 'event_id' => $payload->eventId,
                 'action_source' => 'website',

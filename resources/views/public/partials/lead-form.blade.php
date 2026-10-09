@@ -4,6 +4,7 @@
 --}}
 @php($formId = $formId ?? 'lead-form')
 <form id="{{ $formId }}" class="lf" novalidate data-endpoint="{{ $endpoint }}" data-page="{{ $pageId }}"
+      data-meta-event="{{ $tracking?->eventFor('meta') }}" data-tiktok-event="{{ $tracking?->eventFor('tiktok') }}" data-google-event="{{ $tracking?->eventFor('google') }}"
       data-google-label="{{ str_starts_with((string) $tracking?->google_tag_id, 'AW-') && $tracking?->google_ads_label ? $tracking->google_tag_id.'/'.$tracking->google_ads_label : '' }}">
     @if (! $endpoint)
         <p class="lf-note">Formulir belum diaktifkan oleh pemilik halaman.</p>

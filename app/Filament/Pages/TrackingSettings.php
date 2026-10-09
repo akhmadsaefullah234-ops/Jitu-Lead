@@ -9,6 +9,7 @@ use App\Models\TrackingSetting;
 use App\Support\CurrentTenant;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -56,11 +57,11 @@ class TrackingSettings extends Page
 
         return [
             ['name' => 'Meta (Facebook & Instagram)', 'ok' => filled($s?->meta_pixel_id), 'browser' => filled($s?->meta_pixel_id), 'server' => filled($s?->credential('meta_capi_token')),
-                'hint' => 'Event "Lead" dari browser dan dari server, dengan ID yang sama agar tidak terhitung dua kali.'],
+                'hint' => 'Event "'.($s?->eventFor('meta') ?? 'Lead').'" dari browser dan dari server, dengan ID yang sama agar tidak terhitung dua kali.'],
             ['name' => 'TikTok', 'ok' => filled($s?->tiktok_pixel_id), 'browser' => filled($s?->tiktok_pixel_id), 'server' => filled($s?->credential('tiktok_events_token')),
-                'hint' => 'Event "SubmitForm" dari browser dan dari server.'],
+                'hint' => 'Event "'.($s?->eventFor('tiktok') ?? 'SubmitForm').'" dari browser dan dari server.'],
             ['name' => 'Google (GA4 / Google Ads)', 'ok' => filled($s?->google_tag_id), 'browser' => filled($s?->google_tag_id), 'server' => false,
-                'hint' => 'Event "generate_lead", dan konversi Google Ads bila Anda mengisi label konversi. Dari browser saja.'],
+                'hint' => 'Event "'.($s?->eventFor('google') ?? 'generate_lead').'", dan konversi Google Ads bila Anda mengisi label konversi. Dari browser saja.'],
         ];
     }
 
@@ -69,16 +70,19 @@ class TrackingSettings extends Page
         return [
             Action::make('edit')->label('Atur pelacakan')->visible(fn () => $this->lockedReason() === null)->icon(Heroicon::OutlinedCog6Tooth)
                 ->modalHeading('Atur pelacakan iklan')->modalWidth('3xl')
-                ->fillForm(fn () => $this->settings()?->only(['meta_pixel_id', 'tiktok_pixel_id', 'google_tag_id', 'google_ads_label', 'cred']) ?? [])
+                ->fillForm(fn () => $this->settings()?->only(['meta_pixel_id', 'tiktok_pixel_id', 'google_tag_id', 'google_ads_label', 'meta_event', 'tiktok_event', 'google_event', 'cred']) ?? [])
                 ->schema([
                     Section::make('Meta')->columns(2)->schema([
                         NoAutofill::text(TextInput::make('meta_pixel_id'))->label('Pixel ID')->regex('/^\d{6,20}$/')->placeholder('1234567890123456')->validationMessages(['regex' => 'Pixel ID berisi angka saja.']),
+                        Select::make('meta_event')->label('Event saat formulir dikirim')->options(TrackingSetting::EVENTS['meta'])->default('Lead')->native(false)
+                            ->helperText('Pilih "Lead" bila ragu. Ganti bila kampanye Anda dioptimalkan untuk event lain.'),
                         NoAutofill::secret(TextInput::make('cred.meta_capi_token')->label('Token Conversions API'))
                             ->placeholder(fn () => $this->settings()?->credential('meta_capi_token') ? 'Tersimpan. Kosongkan jika tidak diubah.' : null),
                         NoAutofill::text(TextInput::make('cred.meta_test_event_code'))->label('Kode uji event (opsional)')->maxLength(40)->helperText('Dari Events Manager, tab Test Events. Kosongkan setelah selesai menguji.'),
                     ]),
                     Section::make('TikTok')->columns(2)->schema([
                         NoAutofill::text(TextInput::make('tiktok_pixel_id'))->label('Pixel ID')->regex('/^[A-Za-z0-9]{8,40}$/')->validationMessages(['regex' => 'Pixel ID berisi huruf dan angka saja.']),
+                        Select::make('tiktok_event')->label('Event saat formulir dikirim')->options(TrackingSetting::EVENTS['tiktok'])->default('SubmitForm')->native(false),
                         NoAutofill::secret(TextInput::make('cred.tiktok_events_token')->label('Token Events API'))
                             ->placeholder(fn () => $this->settings()?->credential('tiktok_events_token') ? 'Tersimpan. Kosongkan jika tidak diubah.' : null),
                         NoAutofill::text(TextInput::make('cred.tiktok_test_event_code'))->label('Kode uji event (opsional)')->maxLength(40),
@@ -86,6 +90,7 @@ class TrackingSettings extends Page
                     Section::make('Google')->columns(2)->schema([
                         NoAutofill::text(TextInput::make('google_tag_id'))->label('ID tag')->regex('/^(G|AW|GT)-[A-Za-z0-9]{4,20}$/')->placeholder('G-XXXXXXXXXX atau AW-123456789')
                             ->validationMessages(['regex' => 'Awali dengan G-, AW-, atau GT-.']),
+                        Select::make('google_event')->label('Event saat formulir dikirim')->options(TrackingSetting::EVENTS['google'])->default('generate_lead')->native(false),
                         NoAutofill::text(TextInput::make('google_ads_label'))->label('Label konversi Google Ads (opsional)')->regex('/^[A-Za-z0-9_-]{4,60}$/')
                             ->helperText('Hanya dipakai bila ID tag diawali AW-.'),
                     ]),
@@ -107,6 +112,9 @@ class TrackingSettings extends Page
                         'tiktok_pixel_id' => $data['tiktok_pixel_id'] ?? null,
                         'google_tag_id' => $data['google_tag_id'] ?? null,
                         'google_ads_label' => $data['google_ads_label'] ?? null,
+                        'meta_event' => $data['meta_event'] ?? 'Lead',
+                        'tiktok_event' => $data['tiktok_event'] ?? 'SubmitForm',
+                        'google_event' => $data['google_event'] ?? 'generate_lead',
                         'credentials' => $credentials,
                     ])->save();
 

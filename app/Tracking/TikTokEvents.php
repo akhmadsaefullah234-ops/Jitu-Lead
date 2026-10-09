@@ -33,7 +33,7 @@ class TikTokEvents
             'event_source_id' => $settings->tiktok_pixel_id,
             'test_event_code' => $settings->credential('tiktok_test_event_code'),
             'data' => [array_filter([
-                'event' => 'SubmitForm',
+                'event' => $settings->eventFor('tiktok'),
                 'event_time' => $payload->eventTime,
                 'event_id' => $payload->eventId,
                 'user' => $user,
