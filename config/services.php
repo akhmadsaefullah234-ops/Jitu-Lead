@@ -35,4 +35,14 @@ return [
         ],
     ],
 
+    // Server-side ad events (Conversions API and Events API).
+    'meta' => [
+        'graph_url' => env('META_GRAPH_URL', 'https://graph.facebook.com'),
+        'graph_version' => env('META_GRAPH_VERSION', 'v21.0'),
+    ],
+
+    'tiktok' => [
+        'events_url' => env('TIKTOK_EVENTS_URL', 'https://business-api.tiktok.com/open_api/v1.3/event/track/'),
+    ],
+
 ];

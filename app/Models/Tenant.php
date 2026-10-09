@@ -18,6 +18,7 @@ class Tenant extends Model
     {
         return [
             'trial_ends_at' => 'datetime',
+            'capture_settings' => 'array',
         ];
     }
 
@@ -34,6 +35,26 @@ class Tenant extends Model
     public function captureUrl(): ?string
     {
         return $this->capture_token ? route('capture.store', $this->capture_token) : null;
+    }
+
+    /**
+     * Texts and colour of the hosted lead form, with defaults for anything unset.
+     *
+     * @return array<string, mixed>
+     */
+    public function formSettings(): array
+    {
+        return array_replace([
+            'title' => 'Dapatkan informasi lengkap',
+            'intro' => 'Isi data Anda, tim kami akan menghubungi lewat WhatsApp.',
+            'button' => 'Kirim',
+            'success' => 'Terima kasih! Tim kami akan segera menghubungi Anda.',
+            'color' => '#dc2626',
+            'ask_email' => false,
+            'ask_note' => true,
+            'show_privacy' => true,
+            'privacy' => 'Dengan mengirim, Anda setuju dihubungi oleh tim kami terkait permintaan ini.',
+        ], array_filter((array) $this->capture_settings, fn ($v) => $v !== null));
     }
 
     public function users(): BelongsToMany
