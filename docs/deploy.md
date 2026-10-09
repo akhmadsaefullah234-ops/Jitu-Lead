@@ -52,3 +52,16 @@ REGISTRATION_MODE=invite   # bawaan, wajib kode undangan
 ```
 
 Akun yang sudah ada tidak terpengaruh.
+
+
+## WhatsApp lewat scan QR (opsional)
+
+Agar agensi menyambungkan nomor cukup dengan scan QR (tanpa mengisi API key), jalankan gateway yang mengikuti `docs/whatsapp-gateway-contract.md` lalu isi di `.env`:
+
+```
+WHATSAPP_GATEWAY_URL=https://gateway.domainanda.com
+WHATSAPP_GATEWAY_API_KEY=...
+WHATSAPP_GATEWAY_SIGNING_SECRET=...
+```
+
+Lalu `php artisan config:cache`. Tanpa isian ini, agensi yang memilih "WhatsApp biasa" harus mengisi alamat dan kunci gateway mereka sendiri di bagian lanjutan.

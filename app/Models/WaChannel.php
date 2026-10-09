@@ -78,6 +78,14 @@ class WaChannel extends Model
         $this->forceFill(['status' => WaChannelStatus::Disconnected, 'last_error' => $reason])->save();
     }
 
+    /** A gateway number that uses the platform's own gateway (QR only) instead of agency-entered details. */
+    public function usesPlatformGateway(): bool
+    {
+        return $this->type === WaChannelType::Gateway
+            && blank($this->credential('base_url'))
+            && filled(config('whatsapp.gateway.url'));
+    }
+
     public function webhookUrl(): string
     {
         return route('webhooks.whatsapp.'.$this->type->value, ['token' => $this->webhook_token]);

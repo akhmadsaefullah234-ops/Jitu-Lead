@@ -15,7 +15,9 @@ use Throwable;
  * Adapter for the in-house WhatsApp gateway. The contract it expects is in
  * docs/whatsapp-gateway-contract.md.
  *
- * Credentials: base_url, api_key, signing_secret.
+ * Credentials: base_url, api_key, signing_secret. When a channel has none of
+ * them, the platform gateway from config/whatsapp.php is used, and every
+ * request names the channel's session in X-Session-Id.
  */
 class GatewayProvider implements WhatsAppProvider
 {
@@ -56,7 +58,7 @@ class GatewayProvider implements WhatsAppProvider
 
     public function verifySignature(Request $request): bool
     {
-        $secret = $this->channel->credential('signing_secret');
+        $secret = $this->signingSecret();
         $header = (string) $request->header('X-Gateway-Signature');
 
         if (blank($secret) || ! str_starts_with($header, 'sha256=')) {
@@ -112,6 +114,70 @@ class GatewayProvider implements WhatsAppProvider
         return ['messages' => $messages, 'statuses' => $statuses, 'session' => $session];
     }
 
+    /** Starts a pairing session; returns a problem text, or null when the gateway is ready to show a QR. */
+    public function startSession(): ?string
+    {
+        if ($problem = $this->configurationProblem()) {
+            return $problem;
+        }
+
+        try {
+            $response = $this->http()->post($this->url('/session/start'), [
+                'webhook_url' => $this->channel->webhookUrl(),
+                'signing_secret' => $this->signingSecret(),
+            ]);
+        } catch (Throwable $e) {
+            return 'Tidak bisa menghubungi gateway: '.$e->getMessage();
+        }
+
+        return $response->successful() ? null : "Gateway menolak memulai sesi (HTTP {$response->status()}).";
+    }
+
+    /**
+     * Latest pairing state: status is connected, qr_required or error.
+     *
+     * @return array{status: string, qr: ?string, error: ?string}
+     */
+    public function pairing(): array
+    {
+        if ($problem = $this->configurationProblem()) {
+            return ['status' => 'error', 'qr' => null, 'error' => $problem];
+        }
+
+        try {
+            $response = $this->http()->get($this->url('/session/qr'));
+        } catch (Throwable $e) {
+            return ['status' => 'error', 'qr' => null, 'error' => 'Tidak bisa menghubungi gateway.'];
+        }
+
+        if (! $response->successful()) {
+            return ['status' => 'error', 'qr' => null, 'error' => "Gateway menjawab HTTP {$response->status()}."];
+        }
+
+        $status = (string) $response->json('status');
+
+        return [
+            'status' => $status === 'connected' ? 'connected' : 'qr_required',
+            'qr' => $status === 'connected' ? null : $response->json('qr'),
+            'error' => null,
+        ];
+    }
+
+    public function logout(): ?string
+    {
+        if ($problem = $this->configurationProblem()) {
+            return $problem;
+        }
+
+        try {
+            $response = $this->http()->post($this->url('/session/logout'));
+        } catch (Throwable $e) {
+            return 'Tidak bisa menghubungi gateway.';
+        }
+
+        return $response->successful() ? null : "Gateway menjawab HTTP {$response->status()}.";
+    }
+
     private function post(string $path, array $payload): SendResult
     {
         if ($problem = $this->configurationProblem()) {
@@ -133,16 +199,20 @@ class GatewayProvider implements WhatsAppProvider
 
     private function configurationProblem(): ?string
     {
-        if (blank($this->channel->credential('base_url')) || blank($this->channel->credential('api_key'))) {
-            return 'URL dan API key gateway belum diisi.';
+        if (blank($this->baseUrl()) || blank($this->apiKey())) {
+            return $this->channel->usesPlatformGateway()
+                ? 'Layanan WhatsApp QR belum aktif di server ini. Hubungi pengelola.'
+                : 'URL dan API key gateway belum diisi.';
         }
 
-        return GatewayUrlGuard::problem($this->channel->credential('base_url'));
+        // Only addresses typed in by an agency are checked; the platform's own is set by the operator.
+        return $this->channel->usesPlatformGateway() ? null : GatewayUrlGuard::problem($this->baseUrl());
     }
 
     private function http(): PendingRequest
     {
-        return Http::withToken((string) $this->channel->credential('api_key'))
+        return Http::withToken((string) $this->apiKey())
+            ->withHeaders(['X-Session-Id' => (string) $this->channel->webhook_token])
             ->acceptJson()
             ->timeout(config('whatsapp.timeout'))
             ->withoutRedirecting();
@@ -150,6 +220,21 @@ class GatewayProvider implements WhatsAppProvider
 
     private function url(string $path): string
     {
-        return rtrim($this->channel->credential('base_url'), '/').$path;
+        return rtrim((string) $this->baseUrl(), '/').$path;
+    }
+
+    private function baseUrl(): ?string
+    {
+        return $this->channel->usesPlatformGateway() ? config('whatsapp.gateway.url') : $this->channel->credential('base_url');
+    }
+
+    private function apiKey(): ?string
+    {
+        return $this->channel->usesPlatformGateway() ? config('whatsapp.gateway.api_key') : $this->channel->credential('api_key');
+    }
+
+    private function signingSecret(): ?string
+    {
+        return $this->channel->usesPlatformGateway() ? config('whatsapp.gateway.signing_secret') : $this->channel->credential('signing_secret');
     }
 }

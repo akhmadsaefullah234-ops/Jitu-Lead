@@ -13,7 +13,7 @@ enum WaChannelType: string implements HasLabel
     {
         return match ($this) {
             self::Official => 'Resmi (WhatsApp Business API)',
-            self::Gateway => 'Gateway (nomor follow-up)',
+            self::Gateway => 'WhatsApp biasa (scan QR)',
         };
     }
 }
