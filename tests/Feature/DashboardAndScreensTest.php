@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Actions\DemoData;
 use App\Enums\Role;
 use App\Filament\Pages\AiAssistant;
-use App\Filament\Pages\AutoFollowUp;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\Reports;
 use App\Filament\Pages\Tasks;
@@ -144,7 +143,6 @@ class DashboardAndScreensTest extends TestCase
     public function test_planned_features_have_menu_pages(): void
     {
         $this->actingInTenant($this->adminOf($this->tenant), $this->tenant);
-        Livewire::test(AutoFollowUp::class)->assertSee('Segera hadir');
         Livewire::test(AiAssistant::class)->assertSee('Segera hadir');
     }
 }

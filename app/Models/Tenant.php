@@ -95,6 +95,11 @@ class Tenant extends Model
         return $this->hasMany(LostReason::class);
     }
 
+    public function followUpRules(): HasMany
+    {
+        return $this->hasMany(FollowUpRule::class);
+    }
+
     public function properties(): HasMany
     {
         return $this->hasMany(Property::class);

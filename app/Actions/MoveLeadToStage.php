@@ -37,6 +37,7 @@ class MoveLeadToStage
 
             $lead->fill($changes);
             $lead->stage()->associate($stage);
+            $lead->stage_entered_at = now();
 
             if (! $stage->isOpen() && $stage->default_action === null) {
                 $lead->next_action = null;

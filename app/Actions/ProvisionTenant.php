@@ -46,6 +46,13 @@ class ProvisionTenant
         ['Walk-in', 'manual'],
     ];
 
+    /** Starter follow-ups, switched off until the agency checks the wording. [name, stage, hours, body] */
+    public const FOLLOW_UPS = [
+        ['Sapaan H+1', 'Lead baru', 1, 'Halo {nama}, saya {agen} dari {agensi}. Kemarin Anda menanyakan {properti}. Boleh saya bantu dengan informasi unit dan harganya?'],
+        ['Tanya kebutuhan H+3', 'Dihubungi', 3, 'Halo {nama}, apakah masih mencari properti? Kalau berkenan, ceritakan budget dan lokasi yang Anda inginkan, nanti saya carikan pilihan terbaik.'],
+        ['Tawarkan survei H+7', 'Terkualifikasi', 7, 'Halo {nama}, bagaimana kalau kita jadwalkan survei ke {properti}? Saya bisa atur waktunya sesuai jadwal Anda.'],
+    ];
+
     public function __construct(private CurrentTenant $current) {}
 
     public function __invoke(string $name, string $slug, User $admin): Tenant
@@ -75,6 +82,16 @@ class ProvisionTenant
 
                 foreach (self::LOST_REASONS as $label) {
                     $tenant->lostReasons()->create(['label' => $label]);
+                }
+
+                foreach (self::FOLLOW_UPS as [$ruleName, $stageName, $days, $body]) {
+                    $tenant->followUpRules()->create([
+                        'name' => $ruleName,
+                        'stage_id' => $tenant->stages()->where('name', $stageName)->value('id'),
+                        'delay_days' => $days,
+                        'body' => $body,
+                        'active' => false,
+                    ]);
                 }
 
                 foreach (self::SOURCES as [$sourceName, $type]) {
