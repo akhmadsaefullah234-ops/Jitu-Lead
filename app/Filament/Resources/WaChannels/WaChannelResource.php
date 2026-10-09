@@ -40,6 +40,8 @@ class WaChannelResource extends Resource
 
     protected static ?string $navigationLabel = 'Koneksi WhatsApp';
 
+    protected static string|\UnitEnum|null $navigationGroup = 'Pengaturan';
+
     protected static ?int $navigationSort = 20;
 
     /** Credential fields per type. Secrets are never sent back to the browser. */

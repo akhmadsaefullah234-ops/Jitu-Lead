@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Webhooks\LeadCaptureController;
 use App\Http\Controllers\Webhooks\WhatsAppWebhookController;
 use Illuminate\Support\Facades\Route;
 
@@ -9,4 +10,11 @@ Route::middleware('throttle:webhooks')->prefix('webhooks/whatsapp')->group(funct
     Route::get('official/{token}', [WhatsAppWebhookController::class, 'verify'])->name('webhooks.whatsapp.official.verify');
     Route::post('official/{token}', [WhatsAppWebhookController::class, 'receive'])->name('webhooks.whatsapp.official');
     Route::post('gateway/{token}', [WhatsAppWebhookController::class, 'receive'])->name('webhooks.whatsapp.gateway');
+});
+
+// Website forms post here from any origin; no cookies are involved, and the
+// token plus a per-visitor rate limit keep it from being flooded.
+Route::middleware('throttle:capture')->prefix('capture')->group(function () {
+    Route::post('{token}', [LeadCaptureController::class, 'store'])->name('capture.store');
+    Route::options('{token}', [LeadCaptureController::class, 'preflight']);
 });
