@@ -2,12 +2,8 @@
 
 namespace App\Providers\Filament;
 
-use App\Filament\Pages\Auth\Register;
-use App\Filament\Pages\Dashboard;
-use App\Filament\Pages\Tenancy\RegisterAgency;
-use App\Http\Middleware\SetCurrentTenant;
-use App\Models\Tenant;
-use Filament\Facades\Filament;
+use App\Filament\Admin\Pages\Dashboard;
+use App\Http\Middleware\NoCurrentTenant;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -21,32 +17,28 @@ use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
-use Illuminate\Support\Facades\Blade;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
-class AppPanelProvider extends PanelProvider
+/**
+ * The platform owner's panel (/admin): every agency, plan, payment request,
+ * invite code and support chat in one place. Only users flagged is_super_admin
+ * get in (see User::canAccessPanel); it has no tenant, so it sees all agencies.
+ */
+class AdminPanelProvider extends PanelProvider
 {
     public function panel(Panel $panel): Panel
     {
         return $panel
-            ->default()
-            ->id('app')
-            ->path('app')
-            ->brandName('JITU LEAD')
+            ->id('admin')
+            ->path('admin')
+            ->brandName('JITU LEAD Admin')
             ->login()
-            ->registration(config('jitu.registration') === 'closed' ? null : Register::class)
-            ->passwordReset()
-            ->emailVerification()
-            ->tenant(Tenant::class, slugAttribute: 'slug')
-            ->tenantRegistration(RegisterAgency::class)
-            ->tenantMiddleware([SetCurrentTenant::class], isPersistent: true)
             ->brandLogo(asset('images/logo.svg'))
             ->brandLogoHeight('2.25rem')
             ->favicon(asset('images/icon.png'))
             ->font('Inter')
             ->darkMode(false)
             ->maxContentWidth('full')
-            ->sidebarCollapsibleOnDesktop()
             ->colors([
                 'primary' => Color::Red,
                 'danger' => Color::Rose,
@@ -54,14 +46,10 @@ class AppPanelProvider extends PanelProvider
                 'success' => Color::Green,
             ])
             ->renderHook(PanelsRenderHook::HEAD_END, fn () => view('filament.theme'))
-            ->renderHook(PanelsRenderHook::USER_MENU_BEFORE, fn () => Filament::getTenant() ? view('filament.plan-badge') : '')
-            ->renderHook(PanelsRenderHook::BODY_END, fn () => Filament::getTenant() && auth()->check() ? Blade::render('@livewire(\\App\\Livewire\\PlanPopup::class) @livewire(\\App\\Livewire\\SupportChat::class)') : '')
-            ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
-            ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
-            ->pages([
-                Dashboard::class,
-            ])
-            ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
+            ->discoverResources(in: app_path('Filament/Admin/Resources'), for: 'App\Filament\Admin\Resources')
+            ->discoverPages(in: app_path('Filament/Admin/Pages'), for: 'App\Filament\Admin\Pages')
+            ->pages([Dashboard::class])
+            ->discoverWidgets(in: app_path('Filament/Admin/Widgets'), for: 'App\Filament\Admin\Widgets')
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
@@ -75,6 +63,7 @@ class AppPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
-            ]);
+            ])
+            ->middleware([NoCurrentTenant::class], isPersistent: true);
     }
 }

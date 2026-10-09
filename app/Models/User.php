@@ -48,9 +48,10 @@ class User extends Authenticatable implements FilamentUser, HasTenants, MustVeri
 
     public function canAccessPanel(Panel $panel): bool
     {
-        // Tenant access is checked per tenant in canAccessTenant(); a new user
-        // with no tenant yet still needs the panel to register their agency.
-        return true;
+        // The owner's panel is for super admins only. In the agency panel, tenant
+        // access is checked per tenant in canAccessTenant(); a new user with no
+        // tenant yet still needs the panel to register their agency.
+        return $panel->getId() === 'admin' ? (bool) $this->is_super_admin : true;
     }
 
     public function getTenants(Panel $panel): Collection
@@ -60,7 +61,8 @@ class User extends Authenticatable implements FilamentUser, HasTenants, MustVeri
 
     public function canAccessTenant(Model $tenant): bool
     {
-        return $this->activeTenants()->whereKey($tenant->getKey())->exists();
+        // A suspended agency is locked out by the platform owner.
+        return $tenant->status !== 'suspended' && $this->activeTenants()->whereKey($tenant->getKey())->exists();
     }
 
     /**
