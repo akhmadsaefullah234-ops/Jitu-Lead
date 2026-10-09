@@ -132,7 +132,7 @@
         </div></div></section>
     @endunless
 
-    <footer class="foot"><div class="wrap">&copy; {{ now()->year }} {{ $tenant->name }}</div></footer>
+    <footer class="foot"><div class="wrap">&copy; {{ now()->year }} {{ $tenant->name }} · <a href="{{ url('/kebijakan-privasi') }}" rel="noopener" target="_blank" style="color:inherit">Kebijakan Privasi</a> · <a href="{{ url('/syarat-layanan') }}" rel="noopener" target="_blank" style="color:inherit">Syarat Layanan</a></div></footer>
 
     <nav class="dock" aria-label="Aksi cepat">
         @if ($waLink)<a class="btn wa" href="{{ $waLink }}" rel="noopener">WhatsApp</a>@endif

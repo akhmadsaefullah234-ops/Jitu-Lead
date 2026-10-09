@@ -49,6 +49,16 @@ sudo -u www-data php artisan up
 
 Opsi: `-y` melewati pertanyaan konfirmasi.
 
+## Kebijakan privasi dan syarat layanan
+
+Halaman publik `/kebijakan-privasi` dan `/syarat-layanan` sudah ada dan ditautkan di footer halaman depan, halaman daftar dan masuk, serta landing page agensi. Isinya disusun dari cara kerja aplikasi menurut UU No. 27 Tahun 2022 (data yang disimpan, tujuan, pihak penerima termasuk penyedia AI di luar negeri, lama simpan, hak subjek data, peran pengendali dan prosesor).
+
+**Teks ini rancangan dan wajib ditinjau ahli hukum sebelum rilis.** Selama belum ditandai ditinjau, halaman menampilkan pita kuning "Rancangan, belum ditinjau ahli hukum".
+
+- Isi `.env`: `LEGAL_COMPANY`, `LEGAL_CONTACT_EMAIL` (bawaan: `SUPPORT_EMAIL`), `LEGAL_ADDRESS`, lalu `php artisan config:cache`.
+- Ubah teks di **/admin → Halaman hukum** (penyunting teks; penanda seperti `{perusahaan}` diganti otomatis). Nyalakan "Sudah ditinjau ahli hukum" setelah selesai. Teks bawaan ada di `config/legal.php`; tombol "Kembalikan ke teks bawaan" menghapus ubahan.
+- Angka lama simpan cadangan di teks mengikuti `BACKUP_KEEP_DAYS` dan `BACKUP_REMOTE_KEEP_DAYS`.
+
 ## Hak atas data (ekspor dan hapus agensi)
 
 Admin agensi punya menu **Pengaturan → Data & privasi** (tetap bisa dibuka saat masa percobaan atau langganan berakhir):

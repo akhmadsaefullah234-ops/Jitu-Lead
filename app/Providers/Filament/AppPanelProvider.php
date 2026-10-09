@@ -55,6 +55,8 @@ class AppPanelProvider extends PanelProvider
             ])
             ->renderHook(PanelsRenderHook::HEAD_END, fn () => view('filament.theme'))
             ->renderHook(PanelsRenderHook::BODY_START, fn () => app()->environment('staging') ? view('filament.staging-banner') : '')
+            ->renderHook(PanelsRenderHook::AUTH_REGISTER_FORM_AFTER, fn () => view('filament.legal-links', ['register' => true]))
+            ->renderHook(PanelsRenderHook::AUTH_LOGIN_FORM_AFTER, fn () => view('filament.legal-links'))
             ->renderHook(PanelsRenderHook::USER_MENU_BEFORE, fn () => Filament::getTenant() ? view('filament.plan-badge') : '')
             ->renderHook(PanelsRenderHook::BODY_END, fn () => Filament::getTenant() && auth()->check() ? Blade::render('@livewire(\\App\\Livewire\\PlanPopup::class) @livewire(\\App\\Livewire\\SupportChat::class)') : '')
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
