@@ -31,7 +31,7 @@
         <div style="display:flex;flex-wrap:wrap;gap:.75rem 2rem;align-items:center">
             <div>
                 <div style="font-size:1.25rem;font-weight:800">{{ $currentPlan['name'] }}@if ($sub->status === 'trial') <span class="sb-note">(setara paket ini selama percobaan)</span>@endif</div>
-                <span class="sb-pill" style="{{ in_array($sub->status, ['active', 'trial']) ? 'background:#dcfce7;color:#166534' : ($sub->status === 'past_due' ? 'background:#fef3c7;color:#92400e' : 'background:#fee2e2;color:#991b1b') }}">{{ $sub->statusLabel() }}</span>
+                <span class="sb-pill" style="{{ in_array($sub->effectiveStatus(), ['active', 'trial']) ? 'background:#dcfce7;color:#166534' : ($sub->effectiveStatus() === 'past_due' ? 'background:#fef3c7;color:#92400e' : 'background:#fee2e2;color:#991b1b') }}">{{ $sub->statusLabel() }}</span>
             </div>
             @if ($end)
                 <div class="sb-note">
@@ -39,9 +39,9 @@
                     @if ($sub->daysLeft() !== null) ({{ $sub->daysLeft() }} hari lagi)@endif
                 </div>
             @endif
-            @if ($sub->status === 'past_due')
+            @if ($sub->effectiveStatus() === 'past_due')
                 <div class="sb-note" style="color:#92400e">Segera perpanjang. Setelah masa tenggang berakhir, akun menjadi hanya-baca.</div>
-            @elseif ($sub->status === 'read_only')
+            @elseif ($sub->effectiveStatus() === 'read_only')
                 <div class="sb-note" style="color:#991b1b">Data Anda aman dan masih bisa dilihat. Perpanjang paket untuk menambah dan mengubah data, serta mengaktifkan AI dan follow-up otomatis lagi.</div>
             @endif
         </div>

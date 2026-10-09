@@ -11,6 +11,8 @@ return [
     'trial_plan' => 'tim',
     // Days an overdue agency keeps working (past_due) before it turns read-only.
     'grace_days' => 3,
+    // A trial that ends goes to read-only after this many days (0 = at once, until a plan is chosen).
+    'trial_grace_days' => (int) env('TRIAL_GRACE_DAYS', 0),
     // The reminder email goes out this many days before a trial or period ends.
     'reminder_days' => 3,
 

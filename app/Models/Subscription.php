@@ -52,9 +52,29 @@ class Subscription extends Model
         return $this->status === self::TRIAL ? $this->trial_ends_at : $this->current_period_end;
     }
 
+    /**
+     * The status as of now. A trial that has run out counts at once, without
+     * waiting for the daily check: past due during its grace days (none by
+     * default), then read-only until a plan is chosen.
+     */
+    public function effectiveStatus(): string
+    {
+        if ($this->status === self::TRIAL && $this->trial_ends_at?->isPast()) {
+            return $this->trial_ends_at->copy()->addDays((int) config('plans.trial_grace_days'))->isPast() ? self::READ_ONLY : self::PAST_DUE;
+        }
+
+        return $this->status;
+    }
+
     public function isReadOnly(): bool
     {
-        return $this->status === self::READ_ONLY;
+        return $this->effectiveStatus() === self::READ_ONLY;
+    }
+
+    /** True while the agency has never paid: only a trial, or a trial that ran out. */
+    public function neverPaid(): bool
+    {
+        return $this->current_period_end === null;
     }
 
     /** Whole days left, never negative; null without an end date. */
@@ -73,11 +93,11 @@ class Subscription extends Model
 
     public function statusLabel(): string
     {
-        return match ($this->status) {
+        return match ($this->effectiveStatus()) {
             self::TRIAL => 'Masa percobaan',
             self::ACTIVE => 'Aktif',
             self::PAST_DUE => 'Jatuh tempo (masa tenggang)',
-            self::READ_ONLY => 'Hanya-baca',
+            self::READ_ONLY => $this->neverPaid() ? 'Percobaan berakhir (hanya-baca)' : 'Hanya-baca',
             default => $this->status,
         };
     }

@@ -377,11 +377,8 @@ class SubscriptionPlanTest extends TestCase
         Mail::assertSent(SubscriptionEnding::class, 1);
 
         $sub->update(['trial_ends_at' => now()->subHour()]);
-        $this->assertSame(1, app(Subscriptions::class)->dailyCheck()['past_due']);
-        $this->assertSame(Subscription::PAST_DUE, $sub->fresh()->status);
-        $this->assertEqualsWithDelta(3, now()->diffInDays($sub->fresh()->grace_ends_at), 1);
-
-        $sub->update(['grace_ends_at' => now()->subMinute()]);
+        // a trial that ended asks for a plan straight away (no grace by default)
+        $this->assertSame(Subscription::READ_ONLY, $sub->fresh()->effectiveStatus());
         $this->assertSame(1, app(Subscriptions::class)->dailyCheck()['read_only']);
         $this->assertSame(Subscription::READ_ONLY, $sub->fresh()->status);
     }

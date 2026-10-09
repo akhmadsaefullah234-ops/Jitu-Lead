@@ -38,9 +38,11 @@ class PlanAlerts extends Widget
         $sub = $limits->subscription();
         $alerts = [];
 
-        if ($sub->status === Subscription::READ_ONLY) {
-            $alerts[] = ['level' => 'danger', 'text' => 'Langganan berakhir. Data Anda aman dan bisa dilihat, tetapi tidak bisa ditambah atau diubah, dan AI serta follow-up otomatis berhenti.'];
-        } elseif ($sub->status === Subscription::PAST_DUE) {
+        $status = $sub->effectiveStatus();
+
+        if ($status === Subscription::READ_ONLY) {
+            $alerts[] = ['level' => 'danger', 'text' => ($sub->neverPaid() ? 'Masa percobaan berakhir. ' : 'Langganan berakhir. ').'Data Anda aman dan bisa dilihat, tetapi tidak bisa ditambah atau diubah, dan AI serta follow-up otomatis berhenti. Pilih paket untuk memakai CRM lagi.'];
+        } elseif ($status === Subscription::PAST_DUE) {
             $alerts[] = ['level' => 'danger', 'text' => 'Langganan jatuh tempo. Perpanjang sebelum masa tenggang berakhir agar akun tidak menjadi hanya-baca.'];
         } elseif (($days = $sub->daysLeft()) !== null && $days <= (int) config('plans.reminder_days') + 4) {
             $what = $sub->status === Subscription::TRIAL ? 'Masa percobaan' : 'Langganan';

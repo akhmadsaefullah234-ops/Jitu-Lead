@@ -33,9 +33,20 @@ sudo -u www-data php artisan config:cache && sudo systemctl restart jitu-queue
 
 Tanpa kunci, menu AI tetap bisa diisi tetapi tidak ada balasan yang dibuat. Biaya pemakaian AI ditagihkan ke akun Anthropic pemilik kunci.
 
-## Pendaftaran dengan undangan
+## Pendaftaran dan uji coba 14 hari
 
-Bawaan: pendaftaran akun baru butuh kode undangan. Buat kode di server:
+Bawaan: pendaftaran **terbuka**. Siapa pun yang mendaftar langsung masuk uji coba 14 hari (batas paket Tim). Saat uji coba habis, akun menjadi hanya-baca dan muncul popup untuk memilih paket (Mandiri/Tim/Agensi). Data tidak hilang.
+
+Atur di `.env` lalu jalankan `php artisan config:cache`:
+
+```
+REGISTRATION_MODE=open     # bawaan: daftar bebas, langsung uji coba 14 hari
+# REGISTRATION_MODE=invite # wajib kode undangan
+# REGISTRATION_MODE=closed # halaman daftar ditiadakan
+TRIAL_GRACE_DAYS=0         # hari tenggang setelah uji coba (0 = langsung hanya-baca)
+```
+
+Kode undangan (hanya dipakai bila `REGISTRATION_MODE=invite`) dibuat oleh pemilik aplikasi di server:
 
 ```
 cd /var/www/jitu-lead
@@ -43,16 +54,7 @@ sudo -u www-data php artisan invite:create --uses=1 --days=14 --note="Pak Budi"
 sudo -u www-data php artisan invite:list
 ```
 
-Atur di `.env` lalu jalankan `php artisan config:cache`:
-
-```
-REGISTRATION_MODE=invite   # bawaan, wajib kode undangan
-# REGISTRATION_MODE=open   # siapa pun boleh mendaftar
-# REGISTRATION_MODE=closed # halaman daftar ditiadakan
-```
-
-Akun yang sudah ada tidak terpengaruh.
-
+Verifikasi email butuh `MAIL_*` di `.env` yang benar (SMTP). Akun yang sudah ada tidak terpengaruh.
 
 ## WhatsApp lewat scan QR (opsional)
 

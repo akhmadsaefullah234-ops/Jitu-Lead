@@ -7,6 +7,7 @@ use Filament\Auth\Pages\Register as BaseRegister;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Component;
 use Filament\Schemas\Schema;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Validation\ValidationException;
 use SensitiveParameter;
@@ -20,6 +21,11 @@ class Register extends BaseRegister
     public static function needsInvite(): bool
     {
         return config('jitu.registration') !== 'open';
+    }
+
+    public function getHeading(): string|Htmlable
+    {
+        return static::needsInvite() ? 'Daftar dengan undangan' : 'Daftar dan coba gratis '.config('plans.trial_days').' hari';
     }
 
     public function form(Schema $schema): Schema
