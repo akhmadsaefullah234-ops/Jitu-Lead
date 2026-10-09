@@ -54,7 +54,7 @@ class LeadCaptureController extends Controller
 
             [, $created] = $register($data, $source, 'form', null, $campaign, $page?->property_id);
 
-            if ($created && filled($data['event_id'] ?? null) && TrackingSetting::current()?->hasAny()) {
+            if ($created && filled($data['event_id'] ?? null) && TrackingSetting::active()?->hasAny()) {
                 SendConversionEvents::dispatch($tenant->getKey(), ConversionPayload::make(
                     $data['event_id'], $data['email'] ?? null, $data['phone'] ?? null, $data['source_url'] ?? null,
                     $request->ip(), $request->userAgent(), array_filter(array_intersect_key($data, array_flip(self::BROWSER_IDS))),

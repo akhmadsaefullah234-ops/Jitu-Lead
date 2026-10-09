@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\Team;
 
+use App\Billing\Deny;
+use App\Billing\PlanLimits;
 use App\Enums\Role;
 use App\Filament\Resources\Team\Pages\ManageTeam;
 use App\Models\Membership;
@@ -60,7 +62,13 @@ class TeamResource extends Resource
                 ->formatStateUsing(fn (string $state) => $state === 'active' ? 'Aktif' : 'Nonaktif')
                 ->color(fn (string $state) => $state === 'active' ? 'success' : 'gray'),
         ])->recordActions([
-            EditAction::make(),
+            EditAction::make()->before(function (EditAction $action, array $data, Membership $record) {
+                // Turning someone back on takes a seat, so it is held to the same limit as adding.
+                if (($data['status'] ?? null) === 'active' && $record->status !== 'active' && ($denied = PlanLimits::current()?->denyAdding('users'))) {
+                    Deny::notify($denied);
+                    $action->halt();
+                }
+            }),
             DeleteAction::make()->label('Keluarkan')->modalHeading('Keluarkan dari tim?')
                 ->modalDescription('Lead miliknya tidak ikut terhapus; atur ulang pemiliknya dari daftar lead.'),
         ]);

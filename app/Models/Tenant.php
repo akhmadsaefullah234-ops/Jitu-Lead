@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Str;
 
 #[Fillable(['name', 'slug', 'plan', 'status', 'timezone', 'trial_ends_at', 'ai_instructions', 'ai_handoff_keywords'])]
@@ -55,6 +56,25 @@ class Tenant extends Model
             'show_privacy' => true,
             'privacy' => 'Dengan mengirim, Anda setuju dihubungi oleh tim kami terkait permintaan ini.',
         ], array_filter((array) $this->capture_settings, fn ($v) => $v !== null));
+    }
+
+    public function subscription(): HasOne
+    {
+        return $this->hasOne(Subscription::class);
+    }
+
+    /** The agency's subscription; a trial is started on first use if none exists yet. */
+    public function currentSubscription(): Subscription
+    {
+        if (! $this->relationLoaded('subscription') || $this->subscription === null) {
+            $this->setRelation('subscription', $this->subscription()->firstOr(fn () => $this->subscription()->create([
+                'status' => Subscription::TRIAL,
+                'trial_ends_at' => now()->addDays((int) config('plans.trial_days')),
+                'current_period_start' => now(),
+            ])));
+        }
+
+        return $this->subscription;
     }
 
     public function users(): BelongsToMany

@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['conversation_id', 'message_id', 'body', 'status', 'reason'])]
+#[Fillable(['conversation_id', 'message_id', 'body', 'status', 'reason', 'api_call'])]
 class AiDraft extends Model
 {
     use BelongsToTenant;

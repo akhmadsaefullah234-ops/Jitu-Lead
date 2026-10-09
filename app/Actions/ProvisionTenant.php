@@ -69,6 +69,8 @@ class ProvisionTenant
                 'ai_handoff_keywords' => Defaults::keywordText(),
             ]);
 
+            $tenant->currentSubscription();
+
             $tenant->users()->attach($admin, ['role' => Role::Admin->value, 'status' => 'active']);
 
             $this->current->run($tenant, function () use ($tenant) {

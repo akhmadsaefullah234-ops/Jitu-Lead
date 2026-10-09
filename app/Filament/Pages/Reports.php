@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Billing\PlanLimits;
 use App\Filament\Resources\Leads\LeadResource;
 use App\Models\Lead;
 use App\Models\Stage;
@@ -44,8 +45,17 @@ class Reports extends Page
         return $whole === 0 ? '0%' : round($part / $whole * 100, 1).'%';
     }
 
+    public function lockedReason(): ?string
+    {
+        return PlanLimits::current()?->denyFeature('reports');
+    }
+
     public function getViewData(): array
     {
+        if ($this->lockedReason()) {
+            return ['locked' => true];
+        }
+
         $leads = $this->leads()->with(['stage:id,type,name', 'source:id,name', 'owner:id,name'])->get();
         $won = fn ($group) => $group->filter(fn (Lead $l) => $l->stage?->type->value === 'won');
 

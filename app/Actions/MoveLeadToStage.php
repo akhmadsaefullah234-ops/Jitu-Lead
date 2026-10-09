@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\Billing\PlanLimits;
 use App\Enums\StageRequirement;
 use App\Models\Lead;
 use App\Models\LostReason;
@@ -22,6 +23,10 @@ class MoveLeadToStage
      */
     public function __invoke(Lead $lead, Stage $stage, User $actor, array $details = []): Lead
     {
+        if (PlanLimits::current()?->readOnly()) {
+            throw ValidationException::withMessages(['stage' => 'Langganan hanya-baca, lead tidak bisa dipindah. Perpanjang paket di menu Langganan.']);
+        }
+
         if ((int) $stage->tenant_id !== (int) $lead->tenant_id) {
             throw ValidationException::withMessages(['stage' => 'Tahap tidak ditemukan.']);
         }

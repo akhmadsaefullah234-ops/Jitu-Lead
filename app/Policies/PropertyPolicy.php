@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Billing\PlanLimits;
 use App\Enums\Role;
 use App\Models\Property;
 use App\Models\User;
@@ -37,7 +38,7 @@ class PropertyPolicy
 
     public function create(User $user): bool
     {
-        return $this->role($user)?->seesAllLeads() ?? false;
+        return ($this->role($user)?->seesAllLeads() ?? false) && ! PlanLimits::readOnlyNow();
     }
 
     public function update(User $user, Property $property): bool
@@ -47,6 +48,6 @@ class PropertyPolicy
 
     public function delete(User $user, Property $property): bool
     {
-        return $this->role($user) === Role::Admin && $this->mine($property);
+        return $this->role($user) === Role::Admin && $this->mine($property) && ! PlanLimits::readOnlyNow();
     }
 }

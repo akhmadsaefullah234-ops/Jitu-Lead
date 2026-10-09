@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Billing\PlanLimits;
 use App\Enums\Role;
 use App\Models\User;
 use App\Models\WaChannel;
@@ -36,12 +37,12 @@ class WaChannelPolicy
 
     public function create(User $user): bool
     {
-        return $this->admin($user);
+        return $this->admin($user) && ! PlanLimits::readOnlyNow();
     }
 
     public function update(User $user, WaChannel $channel): bool
     {
-        return $this->admin($user) && $this->mine($channel);
+        return $this->admin($user) && $this->mine($channel) && ! PlanLimits::readOnlyNow();
     }
 
     public function delete(User $user, WaChannel $channel): bool

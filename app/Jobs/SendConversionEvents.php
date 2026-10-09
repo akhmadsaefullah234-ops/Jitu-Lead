@@ -40,7 +40,7 @@ class SendConversionEvents implements ShouldQueue
         $failure = null;
 
         $current->run($tenant, function () use ($meta, $tiktok, &$failure) {
-            $settings = TrackingSetting::current();
+            $settings = TrackingSetting::active();
 
             if ($settings === null) {
                 return;

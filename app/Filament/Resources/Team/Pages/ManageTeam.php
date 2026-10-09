@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\Team\Pages;
 
+use App\Billing\Deny;
+use App\Billing\PlanLimits;
 use App\Enums\Role;
 use App\Filament\Resources\Team\TeamResource;
 use App\Models\Membership;
@@ -32,6 +34,12 @@ class ManageTeam extends ManageRecords
                     TextInput::make('password')->label('Kata sandi sementara')->password()->revealable()->required()->minLength(10),
                     Select::make('role')->label('Peran')->options(Role::class)->default(Role::Agent->value)->required(),
                 ])
+                ->before(function (Action $action) {
+                    if ($denied = PlanLimits::current()?->denyAdding('users')) {
+                        Deny::notify($denied);
+                        $action->halt();
+                    }
+                })
                 ->action(function (array $data) {
                     $tenantId = app(CurrentTenant::class)->id();
 

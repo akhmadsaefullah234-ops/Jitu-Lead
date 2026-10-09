@@ -1,4 +1,7 @@
 <x-filament-panels::page>
+    @if ($this->lockedReason())
+        @include('billing.locked', ['reason' => $this->lockedReason()])
+    @else
     <style>
         .rp-bar { display: flex; flex-wrap: wrap; gap: .5rem; }
         .rp-chip { border: 1px solid var(--gray-300); background: #fff; border-radius: 9999px; padding: .3rem .9rem; font-size: .8125rem; font-weight: 500; }
@@ -66,4 +69,5 @@
             </table></div>
         </x-filament::section>
     </div>
+    @endif
 </x-filament-panels::page>

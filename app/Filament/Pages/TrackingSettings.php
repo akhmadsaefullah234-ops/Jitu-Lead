@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Billing\PlanLimits;
 use App\Enums\Role;
 use App\Filament\Support\NoAutofill;
 use App\Models\TrackingSetting;
@@ -38,6 +39,12 @@ class TrackingSettings extends Page
         return app(CurrentTenant::class)->roleOf(auth()->user()) === Role::Admin;
     }
 
+    /** Why this plan cannot use ad pixels, or null when it can. */
+    public function lockedReason(): ?string
+    {
+        return PlanLimits::current()?->denyFeature('pixels');
+    }
+
     public function settings(): ?TrackingSetting
     {
         return TrackingSetting::current();
@@ -61,7 +68,7 @@ class TrackingSettings extends Page
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('edit')->label('Atur pelacakan')->icon(Heroicon::OutlinedCog6Tooth)
+            Action::make('edit')->label('Atur pelacakan')->visible(fn () => $this->lockedReason() === null)->icon(Heroicon::OutlinedCog6Tooth)
                 ->modalHeading('Atur pelacakan iklan')->modalWidth('3xl')
                 ->fillForm(fn () => $this->settings()?->only(['meta_pixel_id', 'tiktok_pixel_id', 'google_tag_id', 'google_ads_label', 'meta_event', 'tiktok_event', 'google_event', 'cred']) ?? [])
                 ->schema([
