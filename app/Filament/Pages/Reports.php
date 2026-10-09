@@ -25,7 +25,7 @@ class Reports extends Page
 
     protected static ?string $title = 'Laporan';
 
-    protected static ?int $navigationSort = 9;
+    protected static ?int $navigationSort = 10;
 
     public const PERIODS = [7 => '7 hari', 30 => '30 hari', 90 => '90 hari', 365 => '1 tahun'];
 

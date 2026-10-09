@@ -30,7 +30,7 @@ class PropertyResource extends Resource
 
     protected static ?string $navigationLabel = 'Properti';
 
-    protected static ?int $navigationSort = 7;
+    protected static ?int $navigationSort = 8;
 
     public const STATUSES = ['available' => 'Tersedia', 'booked' => 'Dibooking', 'sold' => 'Terjual'];
 

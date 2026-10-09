@@ -80,7 +80,15 @@ as_www php artisan storage:link 2>/dev/null || true
 as_www php artisan optimize
 chmod 640 .env
 
-# Nginx
+# Nginx. Public form and landing pages must be embeddable on other sites, so
+# only the rest of the app is protected from framing. $request_uri, not $uri: by the
+# time headers are added, $uri has been rewritten to /index.php.
+cat > /etc/nginx/conf.d/jitu-lead-frames.conf <<'MAP'
+map $request_uri $jitu_xfo {
+    ~^/(f|p)/ "";
+    default   "SAMEORIGIN";
+}
+MAP
 cat > /etc/nginx/sites-available/jitu-lead <<NGINX
 server {
     listen 80;
@@ -88,7 +96,7 @@ server {
     root $APP_DIR/public;
     index index.php;
     client_max_body_size 10M;
-    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Frame-Options \$jitu_xfo always;
     add_header X-Content-Type-Options "nosniff" always;
     location / { try_files \$uri \$uri/ /index.php?\$query_string; }
     location ~ \.php\$ {

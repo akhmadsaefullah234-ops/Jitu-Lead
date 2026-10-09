@@ -18,9 +18,10 @@ class RegisterLead
 
     /**
      * @param  array{name: string, phone?: ?string, email?: ?string, note?: ?string}  $data
+     * @param  array<string, string>  $campaign  UTM tags and the like, kept on the lead
      * @return array{0: Lead, 1: bool} the lead and whether it was newly created
      */
-    public function __invoke(array $data, string $sourceName, string $sourceType, ?int $ownerId = null): array
+    public function __invoke(array $data, string $sourceName, string $sourceType, ?int $ownerId = null, array $campaign = [], ?int $propertyId = null): array
     {
         $phone = PhoneNumber::normalize($data['phone'] ?? null);
         $email = filled($data['email'] ?? null) ? mb_strtolower(trim($data['email'])) : null;
@@ -35,6 +36,7 @@ class RegisterLead
             $existing->activities()->create([
                 'type' => 'note',
                 'body' => "Menghubungi lagi lewat {$sourceName}".($note ? ": {$note}" : ''),
+                'meta' => $campaign === [] ? null : ['kampanye' => $campaign],
             ]);
 
             return [$existing, false];
@@ -50,6 +52,8 @@ class RegisterLead
             'lead_source_id' => $source->getKey(),
             'stage_id' => $stage->getKey(),
             'owner_id' => $ownerId ?? $this->assign->nextAgent()?->getKey(),
+            'property_id' => $propertyId,
+            'custom_fields' => $campaign === [] ? null : ['kampanye' => $campaign],
             'interest' => 'warm',
             'next_action' => $stage->default_action,
             'next_action_due_at' => $stage->default_due_hours === null ? null : now()->addHours($stage->default_due_hours),
