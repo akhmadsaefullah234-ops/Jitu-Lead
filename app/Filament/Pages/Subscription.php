@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Billing\PlanLimits;
+use App\Billing\PlanRequests;
 use App\Enums\Role;
 use App\Models\SubscriptionRequest;
 use App\Support\CurrentTenant;
@@ -52,21 +53,9 @@ class Subscription extends Page
     {
         abort_unless(static::canAccess(), 403);
 
-        $price = config("plans.plans.$plan.price.$this->cycle");
-
-        if ($price === null || ! in_array($this->cycle, ['monthly', 'yearly'], true)) {
+        if (PlanRequests::create(app(CurrentTenant::class)->get(), auth()->user(), $plan, $this->cycle) === null) {
             return;
         }
-
-        $tenantId = app(CurrentTenant::class)->id();
-
-        SubscriptionRequest::query()->where('tenant_id', $tenantId)->where('status', SubscriptionRequest::PENDING)
-            ->update(['status' => SubscriptionRequest::CANCELLED, 'handled_at' => now()]);
-
-        SubscriptionRequest::create([
-            'tenant_id' => $tenantId, 'requested_by' => auth()->id(), 'plan' => $plan,
-            'billing_cycle' => $this->cycle, 'amount' => $price,
-        ]);
 
         Notification::make()->title('Permintaan paket dibuat')->body('Ikuti instruksi transfer di halaman ini. Paket aktif setelah pembayaran kami konfirmasi.')->success()->send();
     }

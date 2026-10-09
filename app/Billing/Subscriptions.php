@@ -64,7 +64,9 @@ class Subscriptions
             }
 
             if (in_array($sub->status, [Subscription::TRIAL, Subscription::ACTIVE], true) && $sub->endsAt()?->isPast()) {
-                $sub->update(['status' => Subscription::PAST_DUE, 'grace_ends_at' => $sub->endsAt()->copy()->addDays($grace)]);
+                // A trial has no payment to wait for, so by default it goes straight to read-only until a plan is chosen.
+                $days = $sub->status === Subscription::TRIAL ? (int) config('plans.trial_grace_days') : $grace;
+                $sub->update(['status' => Subscription::PAST_DUE, 'grace_ends_at' => $sub->endsAt()->copy()->addDays($days)]);
                 $result['past_due']++;
             }
 
