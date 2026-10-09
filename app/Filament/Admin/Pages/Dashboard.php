@@ -2,6 +2,7 @@
 
 namespace App\Filament\Admin\Pages;
 
+use App\Filament\Admin\Widgets\BackupStatus;
 use App\Filament\Admin\Widgets\PlatformOverview;
 use App\Filament\Admin\Widgets\SignupsChart;
 use App\Filament\Admin\Widgets\TrialsEnding;
@@ -22,6 +23,6 @@ class Dashboard extends BaseDashboard
 
     public function getWidgets(): array
     {
-        return [PlatformOverview::class, SignupsChart::class, TrialsEnding::class];
+        return [BackupStatus::class, PlatformOverview::class, SignupsChart::class, TrialsEnding::class];
     }
 }

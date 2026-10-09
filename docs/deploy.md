@@ -49,6 +49,56 @@ sudo -u www-data php artisan up
 
 Opsi: `-y` melewati pertanyaan konfirmasi.
 
+## Backup harian dan restore
+
+Scheduler menjalankan `php artisan backup:run` tiap hari **02:00 WIB** (cron dari `install.sh` sudah menjalankan scheduler). Satu backup = satu folder bertanggal di `storage/app/backups/` (izin 700, file 600) berisi:
+
+- `database.sql.gz`: dump PostgreSQL
+- `storage.tar.gz`: seluruh `storage/app` (unggahan: gambar landing page, dokumen pengetahuan AI)
+- `gateway.tar.gz`: sesi WhatsApp di `/opt/jitu-gateway/data`, bila ada
+
+Folder lokal lebih dari 7 hari dihapus (`BACKUP_KEEP_DAYS`). Hasil tiap langkah dan status terakhir tampil di **/admin** (dasbor dan menu Backup). Bila gagal, email dikirim ke `SUPPORT_EMAIL` (butuh `MAIL_*` benar). Tanpa salinan di luar server, backup berstatus "peringatan": cadangan yang hanya ada di server ikut hilang bila server hilang.
+
+**Salinan di luar server (rclone).** Skrip `install.sh` memasang rclone. Atur remote lewat `.env` tanpa file konfigurasi rclone, contoh Backblaze B2 / S3-compatible (nama remote `OFFSITE`; ganti sesuai penyedia):
+
+```
+BACKUP_RCLONE_REMOTE=offsite:nama-bucket/jitu-lead
+RCLONE_CONFIG_OFFSITE_TYPE=s3
+RCLONE_CONFIG_OFFSITE_PROVIDER=Other
+RCLONE_CONFIG_OFFSITE_ACCESS_KEY_ID=...
+RCLONE_CONFIG_OFFSITE_SECRET_ACCESS_KEY=...
+RCLONE_CONFIG_OFFSITE_ENDPOINT=https://s3.us-west-004.backblazeb2.com
+```
+
+Google Drive memakai `RCLONE_CONFIG_OFFSITE_TYPE=drive` dan token OAuth dari `rclone config` di komputer Anda (lihat dokumentasi rclone). Lalu `php artisan config:cache`. Pakai folder/bucket khusus: salinan lebih dari 30 hari (`BACKUP_REMOTE_KEEP_DAYS`) di folder itu dihapus otomatis. Kunci jangan diberi izin hapus-semua bila penyedia mendukung izin terbatas.
+
+**Sesi WhatsApp gateway.** Folder itu milik pengguna `jitu-gw`. Beri aplikasi hak baca agar ikut tercadang (tanpa ini langkahnya berstatus peringatan):
+
+```
+sudo setfacl -R -m u:www-data:rX /opt/jitu-gateway/data
+sudo setfacl -R -d -m u:www-data:rX /opt/jitu-gateway/data
+```
+
+**Coba sekarang:** `sudo -u www-data php artisan backup:run` (cek hasilnya di /admin → Backup).
+
+### Memulihkan (restore)
+
+Uji prosedur ini sekali di staging sebelum Anda membutuhkannya. Data yang masuk setelah backup akan hilang.
+
+1. Ambil backup: dari `storage/app/backups/TANGGAL/`, atau dari penyimpanan luar: `rclone copy offsite:nama-bucket/jitu-lead/TANGGAL /tmp/restore` (butuh variabel `RCLONE_CONFIG_*` di shell).
+2. Hentikan aplikasi: `cd /var/www/jitu-lead && sudo -u www-data php artisan down`, lalu `sudo systemctl stop jitu-queue`.
+3. Database (menggantikan isi sekarang):
+   ```
+   sudo -u postgres psql jitu_lead -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO jitu;'
+   gunzip -c /tmp/restore/database.sql.gz | sudo -u postgres psql -v ON_ERROR_STOP=1 jitu_lead
+   ```
+4. Unggahan: `sudo -u www-data tar -xzf /tmp/restore/storage.tar.gz -C /var/www/jitu-lead/storage/app` lalu `sudo -u www-data php artisan storage:link` bila perlu.
+5. WhatsApp (jika ada): `sudo systemctl stop jitu-gateway && sudo tar -xzf /tmp/restore/gateway.tar.gz -C /opt/jitu-gateway/data && sudo chown -R jitu-gw:jitu-gw /opt/jitu-gateway/data && sudo systemctl start jitu-gateway`.
+6. Nyalakan lagi: `sudo -u www-data php artisan migrate --force` (bila kode lebih baru dari backup), `sudo systemctl start jitu-queue`, `sudo -u www-data php artisan up`.
+7. Hapus `/tmp/restore` (berisi data pelanggan).
+
+Langkah database sudah dicoba di mesin pengembangan (dump lalu pulihkan ke database kosong); prosedur lengkap di VPS belum.
+
 ## Mengaktifkan AI Asisten
 
 AI Asisten membutuhkan kunci API Anthropic. Tambahkan di `/var/www/jitu-lead/.env` (sesuaikan folder instalasi), lalu muat ulang konfigurasi dan queue worker:
