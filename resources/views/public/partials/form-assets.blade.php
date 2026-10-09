@@ -44,9 +44,9 @@
                 .then(function (res) {
                     if (!res.ok) { throw new Error((res.j && res.j.message) || 'Gagal mengirim. Coba lagi.'); }
                     // Same event_id as the server-side event, so each platform counts it once.
-                    try { if (window.fbq) fbq('track', 'Lead', {}, { eventID: body.event_id }); } catch (e) {}
-                    try { if (window.ttq) ttq.track('SubmitForm', {}, { event_id: body.event_id }); } catch (e) {}
-                    try { if (window.gtag) { gtag('event', 'generate_lead'); if (form.dataset.googleLabel) gtag('event', 'conversion', { send_to: form.dataset.googleLabel }); } } catch (e) {}
+                    try { if (window.fbq) fbq('track', form.dataset.metaEvent || 'Lead', {}, { eventID: body.event_id }); } catch (e) {}
+                    try { if (window.ttq) ttq.track(form.dataset.tiktokEvent || 'SubmitForm', {}, { event_id: body.event_id }); } catch (e) {}
+                    try { if (window.gtag) { gtag('event', form.dataset.googleEvent || 'generate_lead'); if (form.dataset.googleLabel) gtag('event', 'conversion', { send_to: form.dataset.googleLabel }); } } catch (e) {}
                     Array.prototype.forEach.call(form.children, function (c) { if (c !== ok) c.hidden = true; });
                     ok.hidden = false;
                     form.dispatchEvent(new CustomEvent('lead:sent', { bubbles: true }));
