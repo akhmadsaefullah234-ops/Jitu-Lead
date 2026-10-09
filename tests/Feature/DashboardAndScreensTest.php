@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Actions\DemoData;
 use App\Enums\Role;
-use App\Filament\Pages\AiAssistant;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\Reports;
 use App\Filament\Pages\Tasks;
@@ -138,11 +137,5 @@ class DashboardAndScreensTest extends TestCase
         $this->assertSame($this->tenant->getKey(), $property->tenant_id);
         $this->assertFalse($this->member($this->tenant, Role::Manager)->can('delete', $property));
         $this->assertTrue($this->adminOf($this->tenant)->can('delete', $property));
-    }
-
-    public function test_planned_features_have_menu_pages(): void
-    {
-        $this->actingInTenant($this->adminOf($this->tenant), $this->tenant);
-        Livewire::test(AiAssistant::class)->assertSee('Segera hadir');
     }
 }

@@ -12,3 +12,19 @@ Skrip memasang PHP 8.3, PostgreSQL, Nginx, HTTPS, aplikasi, queue worker, dan sc
 Setelah selesai, buka `https://app.contoh.com/app` dan daftar akun admin pertama.
 
 Memperbarui ke versi terbaru: jalankan lagi perintah di atas, atau `sudo bash install.sh app.contoh.com email@contoh.com nama-cabang` untuk mencoba cabang tertentu.
+
+## Mengaktifkan AI Asisten
+
+AI Asisten membutuhkan kunci API Anthropic. Tambahkan di `/var/www/jitu-lead/.env` (sesuaikan folder instalasi), lalu muat ulang konfigurasi dan queue worker:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+# opsional, bawaan: claude-haiku-5-5
+ANTHROPIC_MODEL=claude-haiku-5-5
+```
+
+```
+sudo -u www-data php artisan config:cache && sudo systemctl restart jitu-queue
+```
+
+Tanpa kunci, menu AI tetap bisa diisi tetapi tidak ada balasan yang dibuat. Biaya pemakaian AI ditagihkan ke akun Anthropic pemilik kunci.

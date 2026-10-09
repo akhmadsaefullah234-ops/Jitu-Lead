@@ -84,6 +84,20 @@
                         <div class="wa-empty">Belum ada pesan.</div>
                     @endforelse
                 </div>
+                @if ($aiDraft)
+                    <div class="ai-draft" style="margin:.5rem 0;padding:.6rem .75rem;border:1px solid #fecaca;background:#fef2f2;border-radius:.6rem;font-size:.85rem">
+                        @if ($aiDraft->status === \App\Models\AiDraft::HANDOFF)
+                            <strong>AI menyerahkan chat ini ke Anda.</strong> {{ $aiDraft->reason }}.
+                            <button type="button" wire:click="discardAiDraft({{ $aiDraft->id }})" style="margin-left:.5rem;text-decoration:underline">Tutup</button>
+                        @else
+                            <strong>Saran balasan AI</strong>
+                            @if ($aiDraft->reason) <span style="color:#6b7280">({{ $aiDraft->reason }})</span> @endif
+                            <div style="margin:.35rem 0;white-space:pre-wrap">{{ $aiDraft->body }}</div>
+                            <button type="button" wire:click="useAiDraft({{ $aiDraft->id }})" style="font-weight:600;color:#b91c1c">Pakai saran ini</button>
+                            <button type="button" wire:click="discardAiDraft({{ $aiDraft->id }})" style="margin-left:.75rem;color:#6b7280">Buang</button>
+                        @endif
+                    </div>
+                @endif
                 <div class="wa-compose">
                     @if ($decision->isPaid())
                         {{ $this->sendPaidTemplateAction }}

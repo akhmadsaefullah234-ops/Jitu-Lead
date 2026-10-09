@@ -2,9 +2,11 @@
 
 namespace App\Filament\Pages;
 
+use App\Actions\LearnFromReply;
 use App\Actions\SendWhatsAppMessage;
 use App\Enums\MessageStatus;
 use App\Filament\Resources\Leads\LeadResource;
+use App\Models\AiDraft;
 use App\Models\Lead;
 use App\Models\WaConversation;
 use App\Models\WaTemplate;
@@ -39,6 +41,9 @@ class Inbox extends Page
     public ?int $leadId = null;
 
     public string $draft = '';
+
+    /** The AI suggestion the agent loaded into the box, marked as used once sent. */
+    public ?int $usedAiDraft = null;
 
     public function close(): void
     {
@@ -77,6 +82,7 @@ class Inbox extends Page
     {
         $this->leadId = $leadId;
         $this->draft = '';
+        $this->usedAiDraft = null;
     }
 
     public function getViewData(): array
@@ -93,6 +99,7 @@ class Inbox extends Page
             'conversations' => static::visibleConversations()->with('lead:id,name,phone')->orderByDesc('last_message_at')->limit(100)->get(),
             'conversation' => $conversation?->load(['lead.stage', 'lead.owner', 'messages.channel']),
             'decision' => $decision,
+            'aiDraft' => $conversation ? AiDraft::query()->where('conversation_id', $conversation->getKey())->whereIn('status', [AiDraft::PENDING, AiDraft::HANDOFF])->latest('id')->first() : null,
             'leadUrl' => fn (Lead $lead) => LeadResource::getUrl('edit', ['record' => $lead]),
         ];
     }
@@ -119,7 +126,33 @@ class Inbox extends Page
             return;
         }
 
+        $this->markAiDraft($conversation, AiDraft::SENT);
+        app(LearnFromReply::class)($conversation, $message);
         $this->draft = '';
+        $this->usedAiDraft = null;
+    }
+
+    public function useAiDraft(int $id): void
+    {
+        $draft = AiDraft::query()->where('conversation_id', $this->current()?->getKey())->whereKey($id)->first();
+
+        if ($draft?->body !== null) {
+            $this->draft = $draft->body;
+            $this->usedAiDraft = $draft->getKey();
+        }
+    }
+
+    public function discardAiDraft(int $id): void
+    {
+        AiDraft::query()->where('conversation_id', $this->current()?->getKey())->whereKey($id)->update(['status' => AiDraft::DISCARDED]);
+    }
+
+    /** Once an agent has answered, any waiting AI suggestion for the chat is settled. */
+    private function markAiDraft(WaConversation $conversation, string $status): void
+    {
+        AiDraft::query()->where('conversation_id', $conversation->getKey())
+            ->whereIn('status', [AiDraft::PENDING, AiDraft::HANDOFF])
+            ->update(['status' => $status]);
     }
 
     /** Only reachable when the free windows are closed and no gateway is connected. */

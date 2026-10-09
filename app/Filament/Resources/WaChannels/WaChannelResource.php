@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\WaChannels;
 
+use App\Enums\AiMode;
 use App\Enums\WaChannelStatus;
 use App\Enums\WaChannelType;
 use App\Filament\Resources\WaChannels\Pages\CreateWaChannel;
@@ -63,6 +64,10 @@ class WaChannelResource extends Resource
                 TextInput::make('position')->label('Urutan pakai')->numeric()->default(0)->minValue(0)
                     ->helperText('Untuk gateway: nomor dengan urutan terkecil dipakai dulu, sisanya cadangan.'),
             ]),
+            Section::make('Asisten AI')->schema([
+                Select::make('ai_mode')->label('Mode asisten AI untuk nomor ini')->options(AiMode::class)->default(AiMode::Off->value)->required()
+                    ->helperText('Draft: AI menyiapkan balasan, agen yang menyetujui. Balas otomatis: AI langsung membalas bila jawabannya ada di pengetahuan Anda; selain itu chat diserahkan ke agen. Isi pengetahuan di menu AI Asisten.'),
+            ]),
             Section::make('Akses WhatsApp Business API')->columns(2)
                 ->visible(fn (Get $get) => static::typeOf($get('type')) === 'official')
                 ->schema([
@@ -99,6 +104,7 @@ class WaChannelResource extends Resource
             TextColumn::make('name')->label('Nama')->searchable(),
             TextColumn::make('type')->label('Jenis')->badge(),
             TextColumn::make('phone')->label('Nomor'),
+            TextColumn::make('ai_mode')->label('AI')->badge(),
             TextColumn::make('status')->label('Status')->badge()
                 ->color(fn (WaChannelStatus $state) => $state->getColor()),
             TextColumn::make('last_error')->label('Catatan')->limit(50)->placeholder('-'),
