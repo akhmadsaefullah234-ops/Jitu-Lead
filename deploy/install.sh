@@ -39,6 +39,9 @@ elif [ "$ID" = "debian" ] && ! apt-cache show php8.3-fpm >/dev/null 2>&1; then
 fi
 apt-get install -y php8.3-fpm php8.3-cli php8.3-pgsql php8.3-mbstring php8.3-xml php8.3-curl php8.3-zip php8.3-intl php8.3-bcmath php8.3-gd
 
+# rclone sends the daily backup off the server (optional; skipped if the package is missing).
+apt-get install -y rclone || echo "rclone tidak terpasang: salinan backup di luar server belum bisa dipakai."
+
 # Photo uploads (landing pages): PHP's default 2 MB limit is below nginx's 10 MB,
 # and shrinking a phone photo needs memory. Safe to re-run: the file is rewritten.
 cat > /etc/php/8.3/fpm/conf.d/90-jitu.ini <<'INI'
