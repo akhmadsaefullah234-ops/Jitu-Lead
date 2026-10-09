@@ -99,6 +99,7 @@ class Inbox extends Page
             'conversations' => static::visibleConversations()->with('lead:id,name,phone')->orderByDesc('last_message_at')->limit(100)->get(),
             'conversation' => $conversation?->load(['lead.stage', 'lead.owner', 'messages.channel']),
             'decision' => $decision,
+            'aiMode' => $conversation?->lastInboundChannel?->ai_mode,
             'aiPausedUntil' => $conversation?->aiPaused() ? $conversation->ai_paused_until : null,
             'aiDraft' => $conversation ? AiDraft::query()->where('conversation_id', $conversation->getKey())->whereIn('status', [AiDraft::PENDING, AiDraft::HANDOFF])->latest('id')->first() : null,
             'leadUrl' => fn (Lead $lead) => LeadResource::getUrl('edit', ['record' => $lead]),

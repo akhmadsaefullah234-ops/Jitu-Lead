@@ -324,6 +324,7 @@ class AiAssistantTest extends TestCase
         $this->actingInTenant($this->adminOf($this->tenant), $this->tenant);
         Livewire::test(Inbox::class, ['leadId' => $conversation->lead_id])
             ->assertSee('Saran balasan AI')
+            ->assertSee('Pembalas: AI menyiapkan, agen yang kirim')
             ->assertSee($this->aiAnswer)
             ->call('useAiDraft', $this->draftFor($message)->getKey())
             ->assertSet('draft', $this->aiAnswer)

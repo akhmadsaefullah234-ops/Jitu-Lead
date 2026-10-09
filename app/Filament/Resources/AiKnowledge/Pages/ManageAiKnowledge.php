@@ -32,8 +32,8 @@ class ManageAiKnowledge extends ManageRecords
     public function getSubheading(): ?string
     {
         return app(AnthropicClient::class)->configured()
-            ? 'Semua yang AI ketahui tentang agensi Anda ada di sini. AI hanya menjawab dari catatan ini. Mengatur AI aktif atau tidak per nomor ada di menu Mode AI.'
-            : 'AI belum aktif: kunci API (ANTHROPIC_API_KEY) belum diisi di server. Catatan di sini tetap tersimpan.';
+            ? 'Semua yang AI ketahui tentang agensi Anda ada di sini. AI hanya menjawab dari catatan ini. Memilih siapa yang membalas chat (agen sendiri atau AI) ada di menu Mode AI.'
+            : 'Layanan AI belum diaktifkan di server ini, hubungi penyedia aplikasi. Catatan di sini tetap tersimpan.';
     }
 
     protected function getHeaderActions(): array

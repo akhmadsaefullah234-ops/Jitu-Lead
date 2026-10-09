@@ -60,7 +60,7 @@
                     <div>
                         <button type="button" class="wa-back" wire:click="close">&larr; Semua chat</button>
                         <br class="wa-back-br"><strong>{{ $conversation->lead->name }}</strong>
-                        <div class="p" style="font-size:.75rem;color:var(--gray-500)">{{ $conversation->phone }} · {{ $conversation->lead->stage?->name }}</div>
+                        <div class="p" style="font-size:.75rem;color:var(--gray-500)">{{ $conversation->phone }} · {{ $conversation->lead->stage?->name }}@if ($aiMode) · Pembalas: {{ $aiMode->getLabel() }}@endif</div>
                     </div>
                     <a class="jl-link" style="font-size:.8rem;font-weight:600" href="{{ $leadUrl($conversation->lead) }}" wire:navigate>Buka lead</a>
                 </div>

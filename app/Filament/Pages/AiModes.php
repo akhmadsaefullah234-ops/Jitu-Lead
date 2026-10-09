@@ -29,7 +29,7 @@ class AiModes extends Page implements HasTable
 
     protected static ?string $navigationLabel = 'Mode AI';
 
-    protected static ?string $title = 'Mode AI per nomor WhatsApp';
+    protected static ?string $title = 'Siapa yang membalas chat';
 
     protected static string|\UnitEnum|null $navigationGroup = 'AI Asisten';
 
@@ -57,7 +57,7 @@ class AiModes extends Page implements HasTable
                 TextColumn::make('name')->label('Nomor')->weight('bold')->description(fn (WaChannel $r) => $r->phone),
                 TextColumn::make('type')->label('Jenis')->badge(),
                 TextColumn::make('status')->label('Status')->badge()->color(fn ($state) => $state->getColor()),
-                SelectColumn::make('ai_mode')->label('Mode')->options(AiMode::class)->selectablePlaceholder(false),
+                SelectColumn::make('ai_mode')->label('Pembalas')->options(AiMode::class)->selectablePlaceholder(false),
             ]);
     }
 }

@@ -14,9 +14,9 @@ enum AiMode: string implements HasColor, HasLabel
     public function getLabel(): string
     {
         return match ($this) {
-            self::Off => 'Mati',
-            self::Draft => 'Draft untuk agen',
-            self::Auto => 'Balas otomatis',
+            self::Off => 'Saya balas sendiri',
+            self::Draft => 'AI menyiapkan, agen yang kirim',
+            self::Auto => 'AI membalas otomatis',
         };
     }
 

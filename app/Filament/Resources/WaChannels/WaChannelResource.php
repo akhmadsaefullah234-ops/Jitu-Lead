@@ -65,8 +65,8 @@ class WaChannelResource extends Resource
                     ->helperText('Untuk gateway: nomor dengan urutan terkecil dipakai dulu, sisanya cadangan.'),
             ]),
             Section::make('Asisten AI')->schema([
-                Select::make('ai_mode')->label('Mode asisten AI untuk nomor ini')->options(AiMode::class)->default(AiMode::Off->value)->required()
-                    ->helperText('Draft: AI menyiapkan balasan, agen yang menyetujui. Balas otomatis: AI langsung membalas bila jawabannya ada di pengetahuan Anda; selain itu chat diserahkan ke agen. Isi pengetahuan di menu AI Asisten.'),
+                Select::make('ai_mode')->label('Siapa yang membalas chat di nomor ini')->options(AiMode::class)->default(AiMode::Off->value)->required()
+                    ->helperText('Saya balas sendiri: tanpa AI. AI menyiapkan: agen memutuskan mengirim. AI membalas otomatis: AI langsung membalas bila jawabannya ada di pengetahuan Anda, selain itu chat diserahkan ke agen. Mudah diganti juga di menu AI Asisten > Mode AI.'),
             ]),
             Section::make('Akses WhatsApp Business API')->columns(2)
                 ->visible(fn (Get $get) => static::typeOf($get('type')) === 'official')
