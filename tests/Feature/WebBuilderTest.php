@@ -244,6 +244,38 @@ class WebBuilderTest extends TestCase
         }
     }
 
+    public function test_chosen_form_event_is_used_in_browser_form_and_server_events(): void
+    {
+        $this->actingInTenant($this->adminOf($this->tenant), $this->tenant);
+        Livewire::test(TrackingSettings::class)->callAction('edit', ['meta_pixel_id' => '1234567890', 'tiktok_pixel_id' => 'CABC123XYZ', 'google_tag_id' => 'G-ABCD1234',
+            'meta_event' => 'CompleteRegistration', 'tiktok_event' => 'Contact', 'google_event' => 'sign_up',
+            'cred' => ['meta_capi_token' => 'm', 'tiktok_events_token' => 't']])->assertHasNoActionErrors();
+
+        $setting = $this->inTenant(fn () => TrackingSetting::firstOrFail());
+        $this->assertSame(['CompleteRegistration', 'Contact', 'sign_up'], [$setting->eventFor('meta'), $setting->eventFor('tiktok'), $setting->eventFor('google')]);
+
+        Http::fake();
+        $payload = ConversionPayload::make('e1', null, '081200001111', null, null, null);
+        app(MetaConversions::class)->send($setting, $payload);
+        app(TikTokEvents::class)->send($setting, $payload);
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'graph.facebook.com') && $r['data'][0]['event_name'] === 'CompleteRegistration');
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'tiktok') && $r['data'][0]['event'] === 'Contact');
+
+        $html = view('public.partials.lead-form', ['settings' => ['ask_email' => false, 'ask_note' => false, 'button' => 'Kirim', 'privacy' => '', 'show_privacy' => false, 'success' => 'Terima kasih'], 'endpoint' => '/x', 'tracking' => $setting, 'pageId' => null, 'formId' => 'f'])->render();
+        $this->assertStringContainsString('data-meta-event="CompleteRegistration"', $html);
+        $this->assertStringContainsString('data-google-event="sign_up"', $html);
+    }
+
+    public function test_unknown_form_event_is_rejected_and_unset_one_defaults(): void
+    {
+        $this->actingInTenant($this->adminOf($this->tenant), $this->tenant);
+        Livewire::test(TrackingSettings::class)->callAction('edit', ['meta_pixel_id' => '1234567890', 'meta_event' => 'Purchase'])->assertHasActionErrors(['meta_event']);
+
+        $setting = new TrackingSetting(['meta_event' => 'Bogus']);
+        $this->assertSame('Lead', $setting->eventFor('meta'));
+        $this->assertSame('SubmitForm', $setting->eventFor('tiktok'));
+    }
+
     public function test_only_admin_edits_tracking_and_secrets_are_kept_hidden(): void
     {
         $this->actingInTenant($this->member($this->tenant, Role::Manager), $this->tenant);
