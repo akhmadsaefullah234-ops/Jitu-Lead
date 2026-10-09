@@ -14,6 +14,7 @@ use App\Filament\Resources\AiSuggestions\Pages\ManageAiSuggestions;
 use App\Models\AiDraft;
 use App\Models\AiKnowledgeItem;
 use App\Models\AiSuggestion;
+use App\Models\Lead;
 use App\Models\Tenant;
 use App\Models\WaChannel;
 use App\Models\WaConversation;
@@ -329,5 +330,99 @@ class AiAssistantTest extends TestCase
             ->call('send');
 
         $this->assertSame(AiDraft::SENT, $this->draftFor($message)->status);
+    }
+
+    private function openInbox(WaMessage $message)
+    {
+        $this->actingInTenant($this->adminOf($this->tenant), $this->tenant);
+
+        return Livewire::test(Inbox::class, ['leadId' => $this->inTenant(fn () => $message->conversation)->lead_id]);
+    }
+
+    private function conversationOf(WaMessage $message): WaConversation
+    {
+        return $this->inTenant(fn () => WaConversation::findOrFail($message->conversation_id));
+    }
+
+    public function test_only_viewing_a_chat_does_not_pause_the_ai(): void
+    {
+        $channel = $this->gateway(AiMode::Auto);
+        $first = $this->inbound($channel, 'Halo, ada unit?');
+
+        $this->openInbox($first)->assertOk();
+
+        $this->assertFalse($this->conversationOf($first)->aiPaused());
+    }
+
+    public function test_typing_pauses_the_ai_and_it_comes_back_by_itself(): void
+    {
+        $this->knowledge();
+        $channel = $this->gateway(AiMode::Auto);
+        $first = $this->inbound($channel, 'Halo, ada unit?');
+
+        $this->openInbox($first)->set('draft', 'Selamat siang Kak, ');
+        $this->assertTrue($this->conversationOf($first)->aiPaused());
+
+        // The client writes again while the agent is typing: the AI only prepares a draft.
+        $second = $this->inbound($channel, 'Berapa harga cluster mawar?');
+        $draft = $this->draftFor($second);
+        $this->assertSame(AiDraft::PENDING, $draft->status);
+        $this->assertStringContainsString('Agen sedang membalas', $draft->reason);
+        $before = $this->inTenant(fn () => WaMessage::where('direction', 'out')->count());
+
+        // The agent walks away: after the pause the AI answers by itself again.
+        $this->travel(config('whatsapp.ai_typing_pause_seconds') + 5)->seconds();
+        $third = $this->inbound($channel, 'Dan DP-nya berapa?');
+
+        $this->assertSame(AiDraft::SENT, $this->draftFor($third)->status);
+        $this->assertGreaterThan($before, $this->inTenant(fn () => WaMessage::where('direction', 'out')->count()));
+    }
+
+    public function test_an_empty_box_does_not_pause(): void
+    {
+        $first = $this->inbound($this->gateway(AiMode::Auto), 'Halo');
+
+        $this->openInbox($first)->set('draft', '   ');
+
+        $this->assertFalse($this->conversationOf($first)->aiPaused());
+    }
+
+    public function test_sending_by_hand_pauses_longer_than_typing(): void
+    {
+        $first = $this->inbound($this->gateway(AiMode::Auto), 'Halo, ada unit?');
+
+        $this->openInbox($first)->set('draft', 'Ada Kak, tipe 36 masih tersedia.')->call('send');
+
+        $left = now()->diffInSeconds($this->conversationOf($first)->ai_paused_until, false);
+        $this->assertGreaterThan(config('whatsapp.ai_typing_pause_seconds'), $left);
+        $this->assertLessThanOrEqual(config('whatsapp.ai_after_send_pause_seconds'), $left);
+    }
+
+    public function test_an_agent_who_starts_typing_while_the_ai_is_writing_wins(): void
+    {
+        $this->knowledge();
+        $channel = $this->gateway(AiMode::Auto);
+        $conversationId = null;
+
+        Http::fake([
+            'api.anthropic.com/*' => function () use (&$conversationId) {
+                // The agent starts typing while the AI request is in flight.
+                WaConversation::withoutGlobalScopes()->whereKey($conversationId)->first()->pauseAiFor(60);
+
+                return Http::response(['stop_reason' => 'end_turn', 'content' => [['type' => 'text', 'text' => $this->aiAnswer]]]);
+            },
+            'gw.example.com/*' => fn () => Http::response(['id' => 'g'.++$this->n]),
+        ]);
+        $this->inTenant(function () use (&$conversationId) {
+            $lead = Lead::create(['name' => 'Budi', 'phone' => '+6281234567890', 'stage_id' => $this->stage($this->tenant, 'Lead baru')->getKey()]);
+            $conversationId = WaConversation::create(['lead_id' => $lead->getKey(), 'phone' => $lead->phone])->getKey();
+        });
+
+        $message = $this->inbound($channel, 'Berapa harga cluster mawar?');
+
+        $this->assertSame($conversationId, $message->conversation_id);
+        $draft = $this->draftFor($message);
+        $this->assertSame(AiDraft::PENDING, $draft->status);
+        $this->assertSame(0, $this->inTenant(fn () => WaMessage::where('direction', 'out')->count()), 'Nothing was sent over the agent');
     }
 }

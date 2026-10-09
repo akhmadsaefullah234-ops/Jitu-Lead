@@ -99,6 +99,7 @@ class Inbox extends Page
             'conversations' => static::visibleConversations()->with('lead:id,name,phone')->orderByDesc('last_message_at')->limit(100)->get(),
             'conversation' => $conversation?->load(['lead.stage', 'lead.owner', 'messages.channel']),
             'decision' => $decision,
+            'aiPausedUntil' => $conversation?->aiPaused() ? $conversation->ai_paused_until : null,
             'aiDraft' => $conversation ? AiDraft::query()->where('conversation_id', $conversation->getKey())->whereIn('status', [AiDraft::PENDING, AiDraft::HANDOFF])->latest('id')->first() : null,
             'leadUrl' => fn (Lead $lead) => LeadResource::getUrl('edit', ['record' => $lead]),
         ];
@@ -126,10 +127,19 @@ class Inbox extends Page
             return;
         }
 
+        $conversation->pauseAiFor(config('whatsapp.ai_after_send_pause_seconds'));
         $this->markAiDraft($conversation, AiDraft::SENT);
         app(LearnFromReply::class)($conversation, $message);
         $this->draft = '';
         $this->usedAiDraft = null;
+    }
+
+    /** Typing in the box means a person is on this chat: the AI waits, and returns on its own once they stop. */
+    public function updatedDraft(): void
+    {
+        if (trim($this->draft) !== '') {
+            $this->current()?->pauseAiFor(config('whatsapp.ai_typing_pause_seconds'));
+        }
     }
 
     public function useAiDraft(int $id): void

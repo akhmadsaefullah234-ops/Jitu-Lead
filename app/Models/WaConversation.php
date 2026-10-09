@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use LogicException;
 
-#[Fillable(['lead_id', 'phone', 'last_inbound_at', 'last_inbound_channel_id', 'ad_entry_at', 'free_window_ends_at', 'ad_data', 'unread_count', 'last_message_at'])]
+#[Fillable(['lead_id', 'phone', 'last_inbound_at', 'last_inbound_channel_id', 'ad_entry_at', 'free_window_ends_at', 'ad_data', 'unread_count', 'last_message_at', 'ai_paused_until'])]
 class WaConversation extends Model
 {
     use BelongsToTenant;
@@ -32,6 +32,7 @@ class WaConversation extends Model
             'ad_entry_at' => 'datetime',
             'free_window_ends_at' => 'datetime',
             'last_message_at' => 'datetime',
+            'ai_paused_until' => 'datetime',
             'ad_data' => 'array',
         ];
     }
@@ -49,6 +50,22 @@ class WaConversation extends Model
     public function messages(): HasMany
     {
         return $this->hasMany(WaMessage::class, 'conversation_id')->orderBy('sent_at')->orderBy('id');
+    }
+
+    /** An agent is working this chat, so the assistant must not reply on its own. */
+    public function aiPaused(): bool
+    {
+        return $this->ai_paused_until !== null && $this->ai_paused_until->isFuture();
+    }
+
+    /** Extends the pause, never shortens it. */
+    public function pauseAiFor(int $seconds): void
+    {
+        $until = now()->addSeconds($seconds);
+
+        if ($this->ai_paused_until === null || $until->greaterThan($this->ai_paused_until)) {
+            $this->forceFill(['ai_paused_until' => $until])->save();
+        }
     }
 
     /** The 72-hour window of free messages that follows a reply to a Click-to-WhatsApp ad. */

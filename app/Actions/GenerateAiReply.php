@@ -98,6 +98,13 @@ class GenerateAiReply
             return $this->draft($inbound, $answer, AiDraft::PENDING, 'Batas balasan otomatis per jam tercapai');
         }
 
+        // The answer took a moment to write; an agent may have started on the chat since.
+        $conversation->refresh();
+
+        if ($conversation->aiPaused()) {
+            return $this->draft($inbound, $answer, AiDraft::PENDING, 'Agen sedang membalas chat ini, AI tidak mengirim sendiri');
+        }
+
         $decision = $this->routes->decide($conversation);
         $free = in_array($decision->kind, [RouteKind::FreeWindow, RouteKind::ReplyOfficial, RouteKind::ReplyGateway], true);
         $actor = $this->actor($conversation->lead);

@@ -98,11 +98,14 @@
                         @endif
                     </div>
                 @endif
+                @if ($aiPausedUntil && $conversation->lead)
+                    <div style="font-size:.78rem;color:#6b7280;margin:.25rem 0">AI dijeda di chat ini sampai {{ $aiPausedUntil->format('H:i:s') }} karena Anda sedang membalas. Setelah itu AI aktif lagi sendiri.</div>
+                @endif
                 <div class="wa-compose">
                     @if ($decision->isPaid())
                         {{ $this->sendPaidTemplateAction }}
                     @elseif ($decision->canSend())
-                        <textarea rows="2" wire:model="draft" placeholder="Tulis pesan" aria-label="Pesan" x-on:keydown.enter.prevent="if (! $event.shiftKey) $wire.send()"></textarea>
+                        <textarea rows="2" wire:model.live.debounce.1500ms="draft" placeholder="Tulis pesan" aria-label="Pesan" x-on:keydown.enter.prevent="if (! $event.shiftKey) $wire.send()"></textarea>
                         <x-filament::button wire:click="send" wire:loading.attr="disabled">Kirim</x-filament::button>
                     @else
                         <span class="wa-empty" style="padding:.3rem">Hubungkan nomor di menu Koneksi WhatsApp.</span>
