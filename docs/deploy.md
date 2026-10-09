@@ -49,6 +49,13 @@ sudo -u www-data php artisan up
 
 Opsi: `-y` melewati pertanyaan konfirmasi.
 
+## Hak atas data (ekspor dan hapus agensi)
+
+Admin agensi punya menu **Pengaturan → Data & privasi** (tetap bisa dibuka saat masa percobaan atau langganan berakhir):
+
+- **Unduh semua data (ZIP)**: lead, aktivitas, percakapan dan pesan WhatsApp, properti, landing page, aturan follow-up, pengetahuan dan draf AI, anggota, langganan, dan chat support, sebagai CSV (UTF-8, aman dibuka di Excel). Kata sandi, kunci integrasi, dan token formulir tidak ikut. Dibatasi 3 kali per jam per agensi.
+- **Hapus agensi**: admin mengetik alamat ruang kerja dan kata sandinya; tidak perlu persetujuan super admin. Seluruh data agensi dihapus seketika, termasuk gambar landing page. Akun anggota yang hanya terdaftar di agensi itu ikut dihapus; akun admin yang menghapus dan akun super admin tetap ada. Salinan di cadangan hilang sendiri setelah masa simpannya (7 hari lokal, 30 hari di luar server). Bila ada permintaan penghapusan yang mendesak, hapus juga folder cadangan terkait secara manual.
+
 ## Mengaktifkan AI Asisten
 
 AI Asisten membutuhkan kunci API Anthropic. Tambahkan di `/var/www/jitu-lead/.env` (sesuaikan folder instalasi), lalu muat ulang konfigurasi dan queue worker:
