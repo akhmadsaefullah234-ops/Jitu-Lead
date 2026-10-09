@@ -4,7 +4,7 @@ namespace App\Ai;
 
 /**
  * Messages the assistant must not answer by itself: the client asks for a
- * person, complains, or haggles. Agencies add their own words on top.
+ * person, complains, or haggles. The agency's list lives on its tenant and starts as these words.
  */
 class HandoffRules
 {
@@ -14,11 +14,15 @@ class HandoffRules
         'refund', 'pengembalian dana', 'nego', 'tawar', 'diskon', 'penipuan',
     ];
 
-    public function matches(string $text, ?string $custom): bool
+    /**
+     * @param  ?string  $configured  The agency's own list. Blank means it was never set, so the defaults apply.
+     */
+    public function matches(string $text, ?string $configured): bool
     {
         $text = mb_strtolower($text);
+        $words = $this->parse($configured);
 
-        foreach (array_merge(self::DEFAULTS, $this->parse($custom)) as $word) {
+        foreach ($words ?: self::DEFAULTS as $word) {
             if (str_contains($text, $word)) {
                 return true;
             }

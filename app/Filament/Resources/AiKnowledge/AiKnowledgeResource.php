@@ -49,7 +49,11 @@ class AiKnowledgeResource extends Resource
     {
         return $table->defaultSort('id', 'desc')->columns([
             TextColumn::make('title')->label('Judul')->searchable()->description(fn (AiKnowledgeItem $r) => str($r->content)->limit(90)),
-            TextColumn::make('source')->label('Asal')->badge()->formatStateUsing(fn ($state) => $state === 'learned' ? 'Dipelajari' : 'Manual'),
+            TextColumn::make('source')->label('Asal')->badge()->formatStateUsing(fn ($state) => match ($state) {
+                'learned' => 'Dipelajari',
+                'upload' => 'Dokumen',
+                default => 'Manual',
+            }),
             ToggleColumn::make('active')->label('Dipakai'),
         ])->recordActions([EditAction::make(), DeleteAction::make()])
             ->emptyStateHeading('Belum ada pengetahuan')

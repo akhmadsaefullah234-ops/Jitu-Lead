@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\Ai\Defaults;
 use App\Enums\Role;
 use App\Enums\StageRequirement;
 use App\Enums\StageType;
@@ -64,6 +65,8 @@ class ProvisionTenant
                 'plan' => 'trial',
                 'status' => 'trial',
                 'trial_ends_at' => now()->addDays(14),
+                'ai_instructions' => Defaults::INSTRUCTIONS,
+                'ai_handoff_keywords' => Defaults::keywordText(),
             ]);
 
             $tenant->users()->attach($admin, ['role' => Role::Admin->value, 'status' => 'active']);
