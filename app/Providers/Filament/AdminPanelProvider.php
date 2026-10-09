@@ -46,6 +46,7 @@ class AdminPanelProvider extends PanelProvider
                 'success' => Color::Green,
             ])
             ->renderHook(PanelsRenderHook::HEAD_END, fn () => view('filament.theme'))
+            ->renderHook(PanelsRenderHook::BODY_START, fn () => app()->environment('staging') ? view('filament.staging-banner') : '')
             ->discoverResources(in: app_path('Filament/Admin/Resources'), for: 'App\Filament\Admin\Resources')
             ->discoverPages(in: app_path('Filament/Admin/Pages'), for: 'App\Filament\Admin\Pages')
             ->pages([Dashboard::class])

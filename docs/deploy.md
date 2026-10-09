@@ -11,7 +11,43 @@ Skrip memasang PHP 8.3, PostgreSQL, Nginx, HTTPS, aplikasi, queue worker, dan sc
 
 Setelah selesai, buka `https://app.contoh.com/app` dan daftar akun admin pertama.
 
-Memperbarui ke versi terbaru: jalankan lagi perintah di atas, atau `sudo bash install.sh app.contoh.com email@contoh.com nama-cabang` untuk mencoba cabang tertentu.
+Memperbarui ke versi terbaru: pakai `deploy/update.sh` (lebih aman, lihat bagian "Update aman dan staging"). Menjalankan ulang `install.sh` juga masih bisa.
+
+## Update aman dan staging (preview)
+
+Tujuannya: versi baru dicoba dulu di salinan terpisah, lalu dipasang ke produksi dengan cadangan dan jaring pengaman, sehingga pengguna tidak terganggu. Skrip ini belum pernah dijalankan di server sungguhan; jalankan pertama kali saat sepi.
+
+**1. Coba di staging** (alamat terpisah, mis. `staging.contoh.com`, DNS A-nya harus sudah mengarah ke VPS):
+
+```bash
+sudo bash deploy/staging.sh staging.contoh.com email@contoh.com nama-cabang
+# atau dengan salinan data produksi (wajib kata sandi akses):
+sudo bash deploy/staging.sh staging.contoh.com email@contoh.com nama-cabang --copy-data --basic-auth tim:sandi-panjang-ya
+```
+
+- Folder, database, dan cookie login sendiri; produksi tidak disentuh. Ada pita kuning "LINGKUNGAN UJI COBA" di panel, dan mesin pencari diminta tidak mengindeks.
+- Tidak ada yang terkirim dari staging: email hanya ke log, tanpa queue worker/scheduler, kunci AI kosong.
+- Tanpa `--copy-data` database kosong (daftar akun baru, pakai "Isi data contoh"). Dengan `--copy-data`, data produksi disalin lalu dimigrasi dengan kode baru, jadi terlihat bagaimana update berjalan pada data asli. Kredensial WhatsApp/pixel serta antrean dibuang dari salinan. Isinya data pelanggan asli: wajib `--basic-auth`, dan hapus staging bila tak dipakai lagi.
+- Dijalankan ulang: kode diperbarui dan dimigrasi, data staging dipertahankan (kecuali `--copy-data` lagi).
+
+**2. Pasang ke produksi:**
+
+```bash
+sudo bash deploy/update.sh nama-cabang      # atau tanpa nama = main
+```
+
+Urutannya: tampilkan versi lama vs baru dan peringatan bila belum dicoba di staging → cadangkan database ke `/var/backups/jitu-lead` (14 terakhir disimpan) → halaman "Sedang diperbarui" untuk pengunjung (memuat ulang sendiri) → ambil kode, composer, migrasi → cek `/` dan `/app/login` lewat tautan rahasia → buka kembali, queue worker dimulai ulang setelah pekerjaannya selesai. Pemilik tetap bisa melihat situs saat pemeliharaan lewat tautan rahasia yang dicetak `artisan down`.
+
+**Jika gagal:** kode otomatis dikembalikan ke versi sebelumnya dan situs dibuka lagi. Migrasi berjalan dalam transaksi di PostgreSQL, jadi migrasi yang gagal tidak setengah jadi. Migrasi yang sudah selesai tidak dibatalkan otomatis; karena migrasi proyek ini hanya menambah (tidak mengubah yang lama), kode lama biasanya tetap jalan di skema baru. Bila benar-benar harus kembali ke data sebelum update, pulihkan cadangan (data yang masuk setelah cadangan akan hilang):
+
+```bash
+sudo -u www-data php artisan down
+sudo -u postgres psql jitu_lead -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO jitu;'
+gunzip -c /var/backups/jitu-lead/db-TANGGAL-XXXX.sql.gz | sudo -u postgres psql jitu_lead
+sudo -u www-data php artisan up
+```
+
+Opsi: `-y` melewati pertanyaan konfirmasi.
 
 ## Mengaktifkan AI Asisten
 
