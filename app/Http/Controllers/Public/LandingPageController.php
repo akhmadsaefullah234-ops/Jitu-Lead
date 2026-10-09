@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Public;
 
 use App\Http\Controllers\Controller;
+use App\LandingPages\PageData;
 use App\Models\LandingPage;
 use App\Models\Tenant;
 use App\Models\TrackingSetting;
@@ -50,28 +51,7 @@ class LandingPageController extends Controller
                 $page->newQuery()->whereKey($page->getKey())->increment('views');
             }
 
-            return view('public.landing', [
-                'tenant' => $tenant,
-                'page' => $page,
-                'blocks' => $this->blocks($page),
-                'settings' => $tenant->formSettings(),
-                'endpoint' => $tenant->captureUrl(),
-                'tracking' => $preview ? null : TrackingSetting::active(),
-                'preview' => $preview,
-            ]);
+            return view('public.landing', PageData::for($page, $tenant, $preview));
         });
-    }
-
-    /**
-     * Only block types the builder offers reach the view.
-     *
-     * @return list<array{type: string, data: array<string, mixed>}>
-     */
-    private function blocks(LandingPage $page): array
-    {
-        return collect($page->blocks ?? [])
-            ->filter(fn ($b) => is_array($b) && in_array($b['type'] ?? null, ['hero', 'highlights', 'gallery', 'details', 'location', 'text', 'faq', 'testimonials', 'form', 'whatsapp'], true))
-            ->map(fn ($b) => ['type' => $b['type'], 'data' => (array) ($b['data'] ?? [])])
-            ->values()->all();
     }
 }
