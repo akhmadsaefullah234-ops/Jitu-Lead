@@ -27,7 +27,7 @@ class ImportLeads extends Page
 
     protected static ?string $title = 'Impor lead';
 
-    protected static ?int $navigationSort = 5;
+    protected static ?int $navigationSort = 8;
 
     public static function canAccess(): bool
     {

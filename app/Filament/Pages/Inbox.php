@@ -40,6 +40,11 @@ class Inbox extends Page
 
     public string $draft = '';
 
+    public function close(): void
+    {
+        $this->leadId = null;
+    }
+
     public static function getNavigationBadge(): ?string
     {
         $count = (int) static::visibleConversations()->sum('unread_count');

@@ -1,7 +1,14 @@
 <x-filament-panels::page>
     <style>
         .wa { display: grid; grid-template-columns: 20rem 1fr; gap: 1rem; min-height: 32rem; }
-        @media (max-width: 800px) { .wa { grid-template-columns: 1fr; } }
+        @media (max-width: 800px) {
+            .wa { grid-template-columns: 1fr; min-height: 0; }
+            .wa--open .wa-list, .wa:not(.wa--open) .wa-chat { display: none; }
+            .wa-list, .wa-chat { max-height: none; }
+            .wa-chat { min-height: calc(100vh - 11rem); }
+        }
+        .wa-back { display: none; font-size: .8rem; font-weight: 600; color: var(--primary-600); }
+        @media (max-width: 800px) { .wa-back { display: inline-block; margin-bottom: .15rem; } }
         .wa-list, .wa-chat { background: white; border: 1px solid var(--gray-200); border-radius: .75rem; overflow: hidden; }
         .wa-list { overflow-y: auto; max-height: calc(100vh - 12rem); }
         .wa-item { display: block; width: 100%; text-align: left; padding: .7rem .9rem; border-bottom: 1px solid var(--gray-100); }
@@ -35,7 +42,7 @@
         .dark .wa-compose textarea { background: var(--gray-900); border-color: var(--gray-700); }
     </style>
 
-    <div class="wa" wire:poll.10s>
+    <div class="wa {{ $conversation ? 'wa--open' : '' }}" wire:poll.10s>
         <aside class="wa-list" aria-label="Daftar percakapan">
             @forelse ($conversations as $c)
                 <button type="button" class="wa-item" wire:key="c-{{ $c->id }}" wire:click="open({{ $c->lead_id }})" aria-current="{{ $conversation?->id === $c->id ? 'true' : 'false' }}">
@@ -51,7 +58,8 @@
             @if ($conversation)
                 <div class="wa-head">
                     <div>
-                        <strong>{{ $conversation->lead->name }}</strong>
+                        <button type="button" class="wa-back" wire:click="close">&larr; Semua chat</button>
+                        <br class="wa-back-br"><strong>{{ $conversation->lead->name }}</strong>
                         <div class="p" style="font-size:.75rem;color:var(--gray-500)">{{ $conversation->phone }} · {{ $conversation->lead->stage?->name }}</div>
                     </div>
                     <a class="jl-link" style="font-size:.8rem;font-weight:600" href="{{ $leadUrl($conversation->lead) }}" wire:navigate>Buka lead</a>
@@ -87,7 +95,7 @@
                     @endif
                 </div>
             @else
-                <div class="wa-empty">Pilih percakapan di sebelah kiri.</div>
+                <div class="wa-empty">Pilih percakapan dari daftar.</div>
             @endif
         </section>
     </div>
