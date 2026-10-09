@@ -42,6 +42,7 @@ Urutannya: tampilkan versi lama vs baru dan peringatan bila belum dicoba di stag
 
 ```bash
 sudo -u www-data php artisan down
+sudo -u postgres psql jitu_lead -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO jitu;'
 gunzip -c /var/backups/jitu-lead/db-TANGGAL-XXXX.sql.gz | sudo -u postgres psql jitu_lead
 sudo -u www-data php artisan up
 ```
