@@ -32,3 +32,23 @@ sudo -u www-data php artisan config:cache && sudo systemctl restart jitu-queue
 ```
 
 Tanpa kunci, menu AI tetap bisa diisi tetapi tidak ada balasan yang dibuat. Biaya pemakaian AI ditagihkan ke akun Anthropic pemilik kunci.
+
+## Pendaftaran dengan undangan
+
+Bawaan: pendaftaran akun baru butuh kode undangan. Buat kode di server:
+
+```
+cd /var/www/jitu-lead
+sudo -u www-data php artisan invite:create --uses=1 --days=14 --note="Pak Budi"
+sudo -u www-data php artisan invite:list
+```
+
+Atur di `.env` lalu jalankan `php artisan config:cache`:
+
+```
+REGISTRATION_MODE=invite   # bawaan, wajib kode undangan
+# REGISTRATION_MODE=open   # siapa pun boleh mendaftar
+# REGISTRATION_MODE=closed # halaman daftar ditiadakan
+```
+
+Akun yang sudah ada tidak terpengaruh.

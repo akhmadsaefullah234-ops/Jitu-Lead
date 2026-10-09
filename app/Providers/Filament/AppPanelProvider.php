@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\Auth\Register;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\Tenancy\RegisterAgency;
 use App\Http\Middleware\SetCurrentTenant;
@@ -31,7 +32,7 @@ class AppPanelProvider extends PanelProvider
             ->path('app')
             ->brandName('JITU LEAD')
             ->login()
-            ->registration()
+            ->registration(config('jitu.registration') === 'closed' ? null : Register::class)
             ->passwordReset()
             ->emailVerification()
             ->tenant(Tenant::class, slugAttribute: 'slug')
