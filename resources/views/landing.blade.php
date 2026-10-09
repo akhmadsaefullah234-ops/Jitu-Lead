@@ -15,7 +15,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>JITU LEAD - CRM untuk agen dan agensi properti</title>
     <meta name="description" content="Tangkap lead dari iklan dan WhatsApp, balas lebih cepat dengan AI, dan tindak lanjut otomatis. CRM untuk agen dan agensi properti.">
-    <link rel="icon" href="{{ asset('images/logo.svg') }}">
+    <link rel="icon" href="{{ asset('images/icon.png') }}">
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700,800" rel="stylesheet">
     <style>

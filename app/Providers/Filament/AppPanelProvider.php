@@ -40,7 +40,7 @@ class AppPanelProvider extends PanelProvider
             ->tenantMiddleware([SetCurrentTenant::class], isPersistent: true)
             ->brandLogo(asset('images/logo.svg'))
             ->brandLogoHeight('2.25rem')
-            ->favicon(asset('images/logo.svg'))
+            ->favicon(asset('images/icon.png'))
             ->font('Inter')
             ->darkMode(false)
             ->maxContentWidth('full')
