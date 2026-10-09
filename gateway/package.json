@@ -1,0 +1,16 @@
+{
+  "name": "jitu-whatsapp-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gateway WhatsApp (scan QR) untuk CRM JITU LEAD. Satu sesi per nomor.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@whiskeysockets/baileys": "6.7.24",
+    "pino": "^9.0.0"
+  }
+}
