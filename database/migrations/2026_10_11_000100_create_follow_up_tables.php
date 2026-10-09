@@ -17,10 +17,9 @@ return new class extends Migration
             $table->foreignId('tenant_id')->constrained()->cascadeOnDelete();
             $table->string('name');
             $table->foreignId('stage_id')->nullable()->constrained()->cascadeOnDelete();
-            $table->unsignedSmallInteger('delay_hours');
+            $table->unsignedSmallInteger('delay_days');
+            $table->string('send_time', 5)->default('09:00');
             $table->text('body');
-            $table->unsignedTinyInteger('send_from_hour')->default(8);
-            $table->unsignedTinyInteger('send_until_hour')->default(20);
             $table->boolean('active')->default(true);
             $table->timestamps();
             $table->index(['tenant_id', 'active']);

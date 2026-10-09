@@ -4,12 +4,14 @@ namespace App\Models;
 
 use App\Models\Concerns\BelongsToTenant;
 use App\Support\CurrentTenant;
+use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['name', 'stage_id', 'delay_hours', 'body', 'send_from_hour', 'send_until_hour', 'active'])]
+#[Fillable(['name', 'stage_id', 'delay_days', 'send_time', 'body', 'active'])]
 class FollowUpRule extends Model
 {
     use BelongsToTenant;
@@ -39,9 +41,16 @@ class FollowUpRule extends Model
         return $this->hasMany(FollowUpLog::class);
     }
 
-    /** Whether the given hour (0-23) falls inside the rule's sending hours. */
-    public function allowsHour(int $hour): bool
+    /**
+     * The moment this rule falls due for a lead that entered its stage at the
+     * given time: N calendar days later (in the agency's timezone) at the
+     * rule's sending time, so H+1 at 09:00 means 09:00 the next day.
+     */
+    public function dueAt(CarbonInterface $enteredAt, string $timezone): CarbonImmutable
     {
-        return $hour >= $this->send_from_hour && $hour < $this->send_until_hour;
+        [$hour, $minute] = array_map('intval', explode(':', $this->send_time));
+
+        return CarbonImmutable::instance($enteredAt)->setTimezone($timezone)
+            ->startOfDay()->addDays($this->delay_days)->setTime($hour, $minute);
     }
 }

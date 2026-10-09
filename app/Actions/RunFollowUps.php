@@ -20,15 +20,15 @@ use Illuminate\Support\Collection;
 /**
  * Sends the automatic follow-ups that have come due for one agency.
  *
- * A rule fires once per lead and stage, a given number of hours after the lead
- * entered that stage. It stays quiet when the lead has written back since, when
- * only a paid Meta template could carry the message, or outside the sending
- * hours; those leads are looked at again on the next run.
+ * A rule fires once per lead and stage, H+N days after the lead entered that
+ * stage, at the rule's sending time. It stays quiet when the lead has written
+ * back since or when only a paid Meta template could carry the message; those
+ * leads are looked at again on the next run until the catch-up window closes.
  */
 class RunFollowUps
 {
-    /** Leads whose follow-up is later than this past due are left alone, e.g. after an outage. */
-    public const STALE_AFTER_HOURS = 72;
+    /** A follow-up later than this past its sending time is dropped, e.g. after an outage. */
+    public const CATCH_UP_HOURS = 24;
 
     public function __construct(
         private CurrentTenant $current,
@@ -45,16 +45,12 @@ class RunFollowUps
         return $this->current->run($tenant, function () use ($tenant, $limit) {
             $result = ['sent' => 0, 'failed' => 0, 'skipped' => 0];
             $touched = [];
-            $hour = (int) now($tenant->timezone ?: config('app.timezone'))->format('G');
+            $timezone = $tenant->timezone ?: config('app.timezone');
 
-            $rules = FollowUpRule::query()->where('active', true)->orderBy('delay_hours')->get();
+            $rules = FollowUpRule::query()->where('active', true)->orderBy('delay_days')->get();
 
             foreach ($rules as $rule) {
-                if (! $rule->allowsHour($hour)) {
-                    continue;
-                }
-
-                foreach ($this->due($rule) as $lead) {
+                foreach ($this->due($rule, $timezone) as $lead) {
                     if ($limit <= $result['sent'] + $result['failed']) {
                         return $result;
                     }
@@ -78,23 +74,30 @@ class RunFollowUps
     }
 
     /** @return Collection<int, Lead> */
-    private function due(FollowUpRule $rule)
+    private function due(FollowUpRule $rule, string $timezone)
     {
         $anchor = 'coalesce(leads.stage_entered_at, leads.created_at)';
+        $now = now();
 
         return Lead::query()
             ->open()
             ->whereNotNull('phone')
             ->when($rule->stage_id, fn (Builder $q) => $q->where('stage_id', $rule->stage_id))
-            ->whereRaw("$anchor <= ?", [now()->subHours($rule->delay_hours)])
-            ->whereRaw("$anchor >= ?", [now()->subHours($rule->delay_hours + self::STALE_AFTER_HOURS)])
+            // Loose bounds in SQL; the exact local-time check follows below.
+            ->whereRaw("$anchor <= ?", [$now->copy()->subDays($rule->delay_days - 1)])
+            ->whereRaw("$anchor >= ?", [$now->copy()->subDays($rule->delay_days + 2)])
             ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('follow_up_logs')
                 ->whereColumn('follow_up_logs.lead_id', 'leads.id')
                 ->whereColumn('follow_up_logs.stage_id', 'leads.stage_id')
                 ->where('follow_up_logs.follow_up_rule_id', $rule->getKey()))
             ->with(['owner', 'property'])
             ->orderBy('id')
-            ->get();
+            ->get()
+            ->filter(function (Lead $lead) use ($rule, $timezone, $now) {
+                $dueAt = $rule->dueAt($lead->stageEnteredAt(), $timezone);
+
+                return $dueAt->lessThanOrEqualTo($now) && $dueAt->addHours(self::CATCH_UP_HOURS)->greaterThanOrEqualTo($now);
+            });
     }
 
     /** @return 'sent'|'failed'|'skipped'|null Null means the lead stays queued for a later run. */

@@ -69,15 +69,15 @@ class FollowUpTest extends TestCase
     {
         return $this->inTenant(fn () => FollowUpRule::create($attrs + [
             'name' => 'H+1', 'stage_id' => $this->stage($this->tenant, 'Lead baru')->getKey(),
-            'delay_hours' => 24, 'body' => 'Halo {nama}, saya {agen} dari {agensi}.',
+            'delay_days' => 1, 'send_time' => '09:00', 'body' => 'Halo {nama}, saya {agen} dari {agensi}.',
         ]));
     }
 
-    /** A lead that entered its stage the given number of hours ago. */
-    private function lead(int $hoursAgo, array $attrs = []): Lead
+    /** A lead that entered its stage at the given Jakarta wall-clock time. "Now" in these tests is 12 Oct 10:00. */
+    private function lead(string $enteredAt = '2026-10-11 12:00', array $attrs = []): Lead
     {
         $lead = $this->makeLead($this->tenant, $attrs + ['name' => 'Budi Santoso']);
-        $lead->forceFill(['stage_entered_at' => now()->subHours($hoursAgo)])->save();
+        $lead->forceFill(['stage_entered_at' => Carbon::parse($enteredAt, 'Asia/Jakarta')])->save();
 
         return $lead;
     }
@@ -91,7 +91,7 @@ class FollowUpTest extends TestCase
     {
         $this->gateway();
         $this->rule();
-        $lead = $this->lead(25);
+        $lead = $this->lead();
 
         $this->assertSame(['sent' => 1, 'failed' => 0, 'skipped' => 0], $this->runFollowUps());
         $this->assertSame(['sent' => 0, 'failed' => 0, 'skipped' => 0], $this->runFollowUps(), 'Second run must not resend');
@@ -102,11 +102,11 @@ class FollowUpTest extends TestCase
         $this->assertStringContainsString('Griya Prima', $body);
     }
 
-    public function test_not_sent_before_the_delay(): void
+    public function test_h_plus_one_means_the_next_day_not_24_hours_later(): void
     {
         $this->gateway();
         $this->rule();
-        $this->lead(5);
+        $this->lead('2026-10-12 08:00'); // today: H+1 is tomorrow 09:00
 
         $this->assertSame(0, $this->runFollowUps()['sent']);
     }
@@ -115,20 +115,20 @@ class FollowUpTest extends TestCase
     {
         $this->gateway();
         $this->rule();
-        $this->lead(24 + RunFollowUps::STALE_AFTER_HOURS + 5);
+        $this->lead('2026-10-09 12:00'); // H+1 was 10 Oct 09:00, more than a day ago
 
         $this->assertSame(0, $this->runFollowUps()['sent']);
     }
 
-    public function test_respects_sending_hours_and_sends_later(): void
+    public function test_waits_for_the_chosen_sending_time(): void
     {
         $this->gateway();
-        $this->rule(['send_from_hour' => 11, 'send_until_hour' => 20]);
-        $this->lead(30);
+        $this->rule(['send_time' => '11:00']);
+        $this->lead();
 
         $this->assertSame(0, $this->runFollowUps()['sent']);
 
-        Carbon::setTestNow(Carbon::parse('2026-10-12 12:00:00', 'Asia/Jakarta'));
+        Carbon::setTestNow(Carbon::parse('2026-10-12 11:05:00', 'Asia/Jakarta'));
         $this->assertSame(1, $this->runFollowUps()['sent']);
     }
 
@@ -136,7 +136,7 @@ class FollowUpTest extends TestCase
     {
         $this->gateway();
         $this->rule();
-        $lead = $this->lead(30);
+        $lead = $this->lead();
         $this->inTenant(fn () => WaConversation::create(['lead_id' => $lead->getKey(), 'phone' => $lead->phone, 'last_inbound_at' => now()->subHours(2)]));
 
         $this->assertSame(['sent' => 0, 'failed' => 0, 'skipped' => 1], $this->runFollowUps());
@@ -147,7 +147,7 @@ class FollowUpTest extends TestCase
     {
         $this->gateway();
         $this->rule();
-        $lead = $this->lead(30);
+        $lead = $this->lead();
         $this->inTenant(fn () => app(MoveLeadToStage::class)($lead->fresh(), $this->stage($this->tenant, 'Dihubungi'), $this->adminOf($this->tenant)));
 
         $this->assertSame(0, $this->runFollowUps()['sent']);
@@ -159,7 +159,7 @@ class FollowUpTest extends TestCase
         $this->gateway();
         $this->rule(['stage_id' => null]);
         $this->rule(['name' => 'Mati', 'stage_id' => null, 'active' => false]);
-        $lost = $this->lead(30);
+        $lost = $this->lead();
         $lost->forceFill(['stage_id' => $this->stage($this->tenant, 'Gugur')->getKey()])->save();
 
         $this->assertSame(0, $this->runFollowUps()['sent']);
@@ -168,7 +168,7 @@ class FollowUpTest extends TestCase
     public function test_without_a_free_route_nothing_is_sent_or_logged(): void
     {
         $this->rule();
-        $this->lead(30);
+        $this->lead();
 
         $this->assertSame(['sent' => 0, 'failed' => 0, 'skipped' => 0], $this->runFollowUps());
         $this->assertSame(0, FollowUpLog::withoutGlobalScopes()->count());
@@ -180,9 +180,9 @@ class FollowUpTest extends TestCase
     public function test_one_message_per_lead_per_run(): void
     {
         $this->gateway();
-        $this->rule(['name' => 'A', 'stage_id' => null, 'delay_hours' => 24]);
-        $this->rule(['name' => 'B', 'stage_id' => null, 'delay_hours' => 30]);
-        $this->lead(40);
+        $this->rule(['name' => 'A', 'stage_id' => null]);
+        $this->rule(['name' => 'B', 'stage_id' => null]);
+        $this->lead();
 
         $this->assertSame(1, $this->runFollowUps()['sent']);
     }
@@ -191,7 +191,7 @@ class FollowUpTest extends TestCase
     {
         $this->gateway();
         $this->rule();
-        $this->lead(30);
+        $this->lead();
         $this->gatewayDown = true;
 
         $this->assertSame(1, $this->runFollowUps()['failed']);
@@ -202,8 +202,8 @@ class FollowUpTest extends TestCase
     {
         $this->gateway();
         $this->rule();
-        $this->lead(30);
-        $this->lead(30, ['phone' => '081200000001']);
+        $this->lead();
+        $this->lead('2026-10-11 12:00', ['phone' => '081200000001']);
 
         $this->assertSame(1, app(RunFollowUps::class)($this->tenant, 1)['sent']);
     }
@@ -213,7 +213,7 @@ class FollowUpTest extends TestCase
         $other = $this->makeTenant('rumah-lain');
         $this->gateway();
         $this->rule();
-        $this->lead(30);
+        $this->lead();
 
         $this->assertSame(0, app(RunFollowUps::class)($other)['sent']);
     }
@@ -222,7 +222,7 @@ class FollowUpTest extends TestCase
     {
         $this->gateway();
         $this->rule();
-        $this->lead(30);
+        $this->lead();
 
         $this->artisan('followups:run')->assertSuccessful();
         $this->assertSame(1, FollowUpLog::withoutGlobalScopes()->where('status', 'sent')->count());
@@ -242,8 +242,7 @@ class FollowUpTest extends TestCase
         Livewire::test(ManageFollowUpRules::class)
             ->assertSee('Sapaan H+1')
             ->callAction('create', [
-                'name' => 'Baru', 'delay_hours' => 48, 'body' => 'Halo {nama}',
-                'send_from_hour' => 9, 'send_until_hour' => 18, 'active' => true,
+                'name' => 'Baru', 'delay_days' => 2, 'send_time' => '09:00', 'body' => 'Halo {nama}', 'active' => true,
             ])->assertHasNoActionErrors();
         $this->assertSame(1, FollowUpRule::where('name', 'Baru')->count());
 
@@ -251,12 +250,21 @@ class FollowUpTest extends TestCase
         $this->assertFalse(auth()->user()->can('viewAny', FollowUpRule::class));
     }
 
-    public function test_sending_hours_must_make_sense(): void
+    public function test_due_time_is_calendar_days_later_at_the_chosen_time(): void
+    {
+        $rule = new FollowUpRule(['delay_days' => 1, 'send_time' => '09:00']);
+        $entered = Carbon::parse('2026-10-09 12:00', 'Asia/Jakarta');
+
+        $this->assertSame('2026-10-10 09:00', $rule->dueAt($entered, 'Asia/Jakarta')->format('Y-m-d H:i'));
+        $this->assertSame('2026-10-12 21:30', (new FollowUpRule(['delay_days' => 3, 'send_time' => '21:30']))->dueAt($entered, 'Asia/Jakarta')->format('Y-m-d H:i'));
+    }
+
+    public function test_delay_must_be_a_listed_day(): void
     {
         $this->actingInTenant($this->adminOf($this->tenant), $this->tenant);
 
         Livewire::test(ManageFollowUpRules::class)
-            ->callAction('create', ['name' => 'X', 'delay_hours' => 24, 'body' => 'Hi', 'send_from_hour' => 18, 'send_until_hour' => 9])
-            ->assertHasActionErrors(['send_until_hour']);
+            ->callAction('create', ['name' => 'X', 'delay_days' => 99, 'send_time' => '09:00', 'body' => 'Hi'])
+            ->assertHasActionErrors(['delay_days']);
     }
 }
