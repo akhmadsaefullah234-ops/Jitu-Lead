@@ -8,10 +8,14 @@ use App\Enums\WaChannelType;
 use App\Filament\Resources\WaChannels\Pages\CreateWaChannel;
 use App\Filament\Resources\WaChannels\Pages\EditWaChannel;
 use App\Filament\Resources\WaChannels\Pages\ListWaChannels;
+use App\Filament\Support\NoAutofill;
 use App\Models\WaChannel;
+use App\WhatsApp\GatewayProvider;
 use App\WhatsApp\GatewayUrlGuard;
 use App\WhatsApp\Providers;
 use BackedEnum;
+use chillerlan\QRCode\QRCode;
+use chillerlan\QRCode\QROptions;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -23,10 +27,12 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class WaChannelResource extends Resource
@@ -46,21 +52,23 @@ class WaChannelResource extends Resource
     protected static ?int $navigationSort = 20;
 
     /** Credential fields per type. Secrets are never sent back to the browser. */
-    public const SECRETS = ['access_token', 'app_secret', 'verify_token', 'api_key', 'signing_secret'];
+    public const SECRETS = ['access_token', 'app_secret', 'api_key', 'signing_secret'];
 
     public static function form(Schema $schema): Schema
     {
-        $secret = fn (string $key, string $label) => TextInput::make("cred.$key")->label($label)->password()->revealable()
-            ->required(fn (?WaChannel $record) => $record === null)
-            ->placeholder(fn (?WaChannel $record) => $record ? 'Tersimpan. Kosongkan jika tidak diubah.' : null)
-            ->autocomplete('off');
+        $secret = fn (string $key, string $label, bool|\Closure $required = true) => NoAutofill::secret(TextInput::make("cred.$key")->label($label))
+            ->required(fn (?WaChannel $record, Get $get) => $record === null && value($required, $get))
+            ->placeholder(fn (?WaChannel $record) => $record ? 'Tersimpan. Kosongkan jika tidak diubah.' : null);
+
+        $platformGateway = filled(config('whatsapp.gateway.url'));
+        $ownGateway = fn (Get $get): bool => ! $platformGateway || filled($get('cred.base_url'));
 
         return $schema->components([
             Section::make('Nomor')->columns(2)->schema([
                 Select::make('type')->label('Jenis')->options(WaChannelType::class)->required()->live()
                     ->disabled(fn (?WaChannel $record) => $record !== null)->dehydrated(),
-                TextInput::make('name')->label('Nama nomor')->required()->maxLength(80)->placeholder('Contoh: CS Iklan, Gateway 1'),
-                TextInput::make('phone')->label('Nomor telepon')->maxLength(30),
+                NoAutofill::text(TextInput::make('name'))->label('Nama nomor')->required()->maxLength(80)->placeholder('Contoh: CS Iklan, WA Follow-up'),
+                NoAutofill::text(TextInput::make('phone'))->label('Nomor telepon')->maxLength(30),
                 TextInput::make('position')->label('Urutan pakai')->numeric()->default(0)->minValue(0)
                     ->helperText('Untuk gateway: nomor dengan urutan terkecil dipakai dulu, sisanya cadangan.'),
             ]),
@@ -68,31 +76,44 @@ class WaChannelResource extends Resource
                 Select::make('ai_mode')->label('Siapa yang membalas chat di nomor ini')->options(AiMode::class)->default(AiMode::Off->value)->required()
                     ->helperText('Saya balas sendiri: tanpa AI. AI menyiapkan: agen memutuskan mengirim. AI membalas otomatis: AI langsung membalas bila jawabannya ada di pengetahuan Anda, selain itu chat diserahkan ke agen. Mudah diganti juga di menu AI Asisten > Mode AI.'),
             ]),
+            Section::make('Panduan: menyambungkan WhatsApp Business API resmi')->collapsible()->collapsed(fn (?WaChannel $record) => $record !== null)
+                ->visible(fn (Get $get) => static::typeOf($get('type')) === 'official')
+                ->schema([View::make('filament.guides.official')]),
             Section::make('Akses WhatsApp Business API')->columns(2)
                 ->visible(fn (Get $get) => static::typeOf($get('type')) === 'official')
                 ->schema([
-                    TextInput::make('cred.phone_number_id')->label('Phone number ID')->required(),
+                    NoAutofill::text(TextInput::make('cred.phone_number_id'))->label('Phone number ID')->required()->helperText('Langkah 2 di panduan.'),
                     $secret('access_token', 'Access token'),
                     $secret('app_secret', 'App secret (verifikasi tanda tangan)'),
-                    $secret('verify_token', 'Verify token webhook'),
+                    NoAutofill::text(TextInput::make('cred.verify_token'))->label('Verify token webhook')->required()
+                        ->default(fn () => Str::random(24))->helperText('Sudah dibuatkan otomatis. Salin nilai ini ke kolom Verify token di Meta (langkah 6).'),
                 ]),
-            Section::make('Akses gateway')->columns(2)
+            Section::make('Panduan: menyambungkan lewat scan QR')->collapsible()
+                ->visible(fn (Get $get) => static::typeOf($get('type')) === 'gateway')
+                ->schema([View::make('filament.guides.qr')]),
+            Section::make('Pesan perkenalan')
                 ->visible(fn (Get $get) => static::typeOf($get('type')) === 'gateway')
                 ->schema([
-                    TextInput::make('cred.base_url')->label('Alamat gateway')->required()->url()->placeholder('https://gateway.contoh.com')
-                        ->rules([fn (): \Closure => function (string $attribute, mixed $value, \Closure $fail) {
-                            if ($problem = GatewayUrlGuard::problem((string) $value)) {
-                                $fail($problem);
-                            }
-                        }]),
-                    $secret('api_key', 'API key'),
-                    $secret('signing_secret', 'Signing secret (verifikasi webhook)'),
-                    Textarea::make('intro_template')->label('Pesan perkenalan')->rows(3)->columnSpanFull()
+                    Textarea::make('intro_template')->label('Pesan perkenalan')->rows(3)
                         ->placeholder(WaChannel::DEFAULT_INTRO)
                         ->helperText('Dikirim lebih dulu saat nomor ini pertama kali menulis ke klien. Variabel: {nama} {agen} {agensi} {properti}.'),
                 ]),
-            Section::make('Webhook')->visible(fn (?WaChannel $record) => $record !== null)->schema([
-                Placeholder::make('webhook')->label('Daftarkan alamat ini di Meta atau di gateway')
+            Section::make('Gateway sendiri (lanjutan)')->columns(2)->collapsible()->collapsed($platformGateway)
+                ->description($platformGateway ? 'Abaikan bagian ini bila Anda menyambungkan lewat scan QR. Isi hanya jika Anda punya gateway WhatsApp sendiri.' : 'Isi alamat dan kunci dari gateway WhatsApp Anda.')
+                ->visible(fn (Get $get) => static::typeOf($get('type')) === 'gateway')
+                ->schema([
+                    NoAutofill::text(TextInput::make('cred.base_url'))->label('Alamat gateway')->url()->placeholder('https://gateway.contoh.com')->live(onBlur: true)
+                        ->required(! $platformGateway)
+                        ->rules([fn (): \Closure => function (string $attribute, mixed $value, \Closure $fail) {
+                            if (filled($value) && ($problem = GatewayUrlGuard::problem((string) $value))) {
+                                $fail($problem);
+                            }
+                        }]),
+                    $secret('api_key', 'API key', $ownGateway),
+                    $secret('signing_secret', 'Signing secret (verifikasi webhook)', $ownGateway),
+                ]),
+            Section::make('Webhook')->visible(fn (?WaChannel $record) => $record !== null && ! $record->usesPlatformGateway())->schema([
+                Placeholder::make('webhook')->label('Alamat webhook (untuk Meta atau gateway sendiri)')
                     ->content(fn (?WaChannel $record) => $record?->webhookUrl()),
             ]),
         ]);
@@ -121,9 +142,51 @@ class WaChannelResource extends Resource
                     Notification::make()->title('Belum terhubung')->body($problem)->danger()->send();
                 }
             }),
+            Action::make('pair')->label('Scan QR')->icon(Heroicon::OutlinedQrCode)->color('success')
+                ->visible(fn (WaChannel $record) => $record->type === WaChannelType::Gateway)
+                ->modalHeading('Hubungkan WhatsApp lewat QR')->modalWidth('lg')
+                ->modalSubmitAction(false)->modalCancelActionLabel('Tutup')
+                ->mountUsing(function (WaChannel $record) {
+                    if ($problem = static::gateway($record)->startSession()) {
+                        Notification::make()->title('Belum bisa memulai')->body($problem)->danger()->send();
+                    }
+                })
+                ->modalContent(fn (WaChannel $record) => view('filament.wa-pairing', ['pairing' => static::pairing($record)])),
+            Action::make('logout')->label('Putuskan')->icon(Heroicon::OutlinedXCircle)->color('gray')
+                ->visible(fn (WaChannel $record) => $record->type === WaChannelType::Gateway && $record->status === WaChannelStatus::Connected)
+                ->requiresConfirmation()->modalDescription('WhatsApp di nomor ini akan keluar dari CRM. Anda bisa menyambungkannya lagi dengan scan QR.')
+                ->action(function (WaChannel $record) {
+                    $problem = static::gateway($record)->logout();
+                    $problem ? Notification::make()->title('Gagal memutuskan')->body($problem)->danger()->send() : $record->markDisconnected('Diputuskan dari CRM.');
+                }),
             EditAction::make(),
             DeleteAction::make(),
         ]);
+    }
+
+    private static function gateway(WaChannel $channel): GatewayProvider
+    {
+        return new GatewayProvider($channel);
+    }
+
+    /**
+     * What the QR dialog shows right now. A scanned code flips the number to connected as a side effect.
+     *
+     * @return array{status: string, qr: ?string, error: ?string}
+     */
+    public static function pairing(WaChannel $channel): array
+    {
+        $state = static::gateway($channel)->pairing();
+
+        if ($state['status'] === 'connected') {
+            $channel->markConnected();
+        }
+
+        if (filled($state['qr'])) {
+            $state['qr'] = (new QRCode(new QROptions(['outputType' => QRCode::OUTPUT_MARKUP_SVG, 'scale' => 6, 'addQuietzone' => true])))->render($state['qr']);
+        }
+
+        return $state;
     }
 
     /**
@@ -148,7 +211,7 @@ class WaChannelResource extends Resource
         $type = $data['type'] ?? $existing?->type;
         $type = $type instanceof WaChannelType ? $type->value : $type;
 
-        if ($type === 'gateway' && ($problem = GatewayUrlGuard::problem((string) ($credentials['base_url'] ?? '')))) {
+        if ($type === 'gateway' && filled($credentials['base_url'] ?? null) && ($problem = GatewayUrlGuard::problem((string) ($credentials['base_url'] ?? '')))) {
             throw ValidationException::withMessages(['data.cred.base_url' => $problem]);
         }
 

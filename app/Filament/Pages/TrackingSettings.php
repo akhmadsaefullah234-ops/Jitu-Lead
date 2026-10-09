@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Enums\Role;
+use App\Filament\Support\NoAutofill;
 use App\Models\TrackingSetting;
 use App\Support\CurrentTenant;
 use BackedEnum;
@@ -64,21 +65,21 @@ class TrackingSettings extends Page
                 ->fillForm(fn () => $this->settings()?->only(['meta_pixel_id', 'tiktok_pixel_id', 'google_tag_id', 'google_ads_label', 'cred']) ?? [])
                 ->schema([
                     Section::make('Meta')->columns(2)->schema([
-                        TextInput::make('meta_pixel_id')->label('Pixel ID')->regex('/^\d{6,20}$/')->placeholder('1234567890123456')->validationMessages(['regex' => 'Pixel ID berisi angka saja.']),
-                        TextInput::make('cred.meta_capi_token')->label('Token Conversions API')->password()->revealable()->autocomplete('off')
+                        NoAutofill::text(TextInput::make('meta_pixel_id'))->label('Pixel ID')->regex('/^\d{6,20}$/')->placeholder('1234567890123456')->validationMessages(['regex' => 'Pixel ID berisi angka saja.']),
+                        NoAutofill::secret(TextInput::make('cred.meta_capi_token')->label('Token Conversions API'))
                             ->placeholder(fn () => $this->settings()?->credential('meta_capi_token') ? 'Tersimpan. Kosongkan jika tidak diubah.' : null),
-                        TextInput::make('cred.meta_test_event_code')->label('Kode uji event (opsional)')->maxLength(40)->helperText('Dari Events Manager, tab Test Events. Kosongkan setelah selesai menguji.'),
+                        NoAutofill::text(TextInput::make('cred.meta_test_event_code'))->label('Kode uji event (opsional)')->maxLength(40)->helperText('Dari Events Manager, tab Test Events. Kosongkan setelah selesai menguji.'),
                     ]),
                     Section::make('TikTok')->columns(2)->schema([
-                        TextInput::make('tiktok_pixel_id')->label('Pixel ID')->regex('/^[A-Za-z0-9]{8,40}$/')->validationMessages(['regex' => 'Pixel ID berisi huruf dan angka saja.']),
-                        TextInput::make('cred.tiktok_events_token')->label('Token Events API')->password()->revealable()->autocomplete('off')
+                        NoAutofill::text(TextInput::make('tiktok_pixel_id'))->label('Pixel ID')->regex('/^[A-Za-z0-9]{8,40}$/')->validationMessages(['regex' => 'Pixel ID berisi huruf dan angka saja.']),
+                        NoAutofill::secret(TextInput::make('cred.tiktok_events_token')->label('Token Events API'))
                             ->placeholder(fn () => $this->settings()?->credential('tiktok_events_token') ? 'Tersimpan. Kosongkan jika tidak diubah.' : null),
-                        TextInput::make('cred.tiktok_test_event_code')->label('Kode uji event (opsional)')->maxLength(40),
+                        NoAutofill::text(TextInput::make('cred.tiktok_test_event_code'))->label('Kode uji event (opsional)')->maxLength(40),
                     ]),
                     Section::make('Google')->columns(2)->schema([
-                        TextInput::make('google_tag_id')->label('ID tag')->regex('/^(G|AW|GT)-[A-Za-z0-9]{4,20}$/')->placeholder('G-XXXXXXXXXX atau AW-123456789')
+                        NoAutofill::text(TextInput::make('google_tag_id'))->label('ID tag')->regex('/^(G|AW|GT)-[A-Za-z0-9]{4,20}$/')->placeholder('G-XXXXXXXXXX atau AW-123456789')
                             ->validationMessages(['regex' => 'Awali dengan G-, AW-, atau GT-.']),
-                        TextInput::make('google_ads_label')->label('Label konversi Google Ads (opsional)')->regex('/^[A-Za-z0-9_-]{4,60}$/')
+                        NoAutofill::text(TextInput::make('google_ads_label'))->label('Label konversi Google Ads (opsional)')->regex('/^[A-Za-z0-9_-]{4,60}$/')
                             ->helperText('Hanya dipakai bila ID tag diawali AW-.'),
                     ]),
                 ])

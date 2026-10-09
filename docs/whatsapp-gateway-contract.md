@@ -16,7 +16,11 @@ Cek koneksi. Balasan 200 dengan JSON `{"status": "connected"}`. Status lain (`di
 
 Nomor gateway disambungkan seperti WhatsApp Web. CRM menampilkan QR yang dibuat gateway dan menunggu sampai sesi terhubung.
 
-`POST /session/start` memulai sesi baru. Balasan 200 dengan `{"status": "qr_required"}`.
+`POST /session/start` memulai sesi baru. Body: `{"webhook_url": "<alamat webhook CRM untuk nomor ini>", "signing_secret": "<kunci tanda tangan>"}`. Balasan 200 dengan `{"status": "qr_required"}`.
+
+### Satu gateway untuk banyak agensi
+
+Bila operator memasang `WHATSAPP_GATEWAY_URL`, `WHATSAPP_GATEWAY_API_KEY`, dan `WHATSAPP_GATEWAY_SIGNING_SECRET` di server CRM, agensi cukup membuat nomor dan scan QR tanpa mengisi alamat atau kunci. Setiap permintaan ke gateway membawa header `X-Session-Id: <id unik nomor>`; gateway wajib menyimpan satu sesi WhatsApp per id itu (`/session`, `/session/start`, `/session/qr`, `/session/logout`, `/messages`). Webhook ke CRM ditandatangani dengan signing secret platform.
 
 `GET /session/qr` mengembalikan QR terbaru:
 
