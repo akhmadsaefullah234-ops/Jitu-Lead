@@ -25,7 +25,7 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y ca-certificates curl git unzip lsb-release gnupg software-properties-common nginx postgresql certbot python3-certbot-nginx
+apt-get install -y ca-certificates curl git unzip lsb-release gnupg software-properties-common nginx cron postgresql certbot python3-certbot-nginx
 
 . /etc/os-release
 if [ "$ID" = "ubuntu" ] && ! apt-cache show php8.3-fpm >/dev/null 2>&1; then
@@ -128,6 +128,7 @@ WantedBy=multi-user.target
 UNIT
 systemctl daemon-reload && systemctl enable --now jitu-queue
 echo "* * * * * www-data cd $APP_DIR && php artisan schedule:run >> /dev/null 2>&1" > /etc/cron.d/jitu-lead
+systemctl enable --now cron
 
 # HTTPS (needs the domain's DNS A record to point at this server already)
 if certbot --nginx -d "$DOMAIN" -m "$EMAIL" --agree-tos --no-eff-email --redirect -n; then
