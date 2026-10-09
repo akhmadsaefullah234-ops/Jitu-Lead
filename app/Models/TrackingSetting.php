@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Billing\PlanLimits;
 use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -27,6 +28,12 @@ class TrackingSetting extends Model
     public static function current(): ?self
     {
         return static::query()->first();
+    }
+
+    /** The settings public pages and server events may use: none on plans without the pixel feature. */
+    public static function active(): ?self
+    {
+        return (PlanLimits::current()?->feature('pixels') ?? true) ? static::current() : null;
     }
 
     public function credential(string $key): ?string

@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Billing\PlanLimits;
 use App\Enums\Role;
 use App\Models\LandingPage;
 use App\Models\User;
@@ -36,16 +37,16 @@ class LandingPagePolicy
 
     public function create(User $user): bool
     {
-        return $this->builder($user);
+        return $this->builder($user) && ! PlanLimits::readOnlyNow();
     }
 
     public function update(User $user, LandingPage $page): bool
     {
-        return $this->builder($user) && $this->mine($page);
+        return $this->builder($user) && $this->mine($page) && ! PlanLimits::readOnlyNow();
     }
 
     public function delete(User $user, LandingPage $page): bool
     {
-        return $this->current->roleOf($user) === Role::Admin && $this->mine($page);
+        return $this->current->roleOf($user) === Role::Admin && $this->mine($page) && ! PlanLimits::readOnlyNow();
     }
 }

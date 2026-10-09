@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Billing\PlanLimits;
 use App\Enums\Role;
 use App\Models\User;
 use App\Support\CurrentTenant;
@@ -18,6 +19,12 @@ abstract class AdminOnlyPolicy
     protected function admin(User $user): bool
     {
         return $this->current->roleOf($user) === Role::Admin;
+    }
+
+    /** A read-only subscription can look at everything but change nothing. */
+    protected function writable(): bool
+    {
+        return ! PlanLimits::readOnlyNow();
     }
 
     protected function mine(Model $record): bool
@@ -37,12 +44,12 @@ abstract class AdminOnlyPolicy
 
     public function create(User $user): bool
     {
-        return $this->admin($user);
+        return $this->admin($user) && $this->writable();
     }
 
     public function update(User $user, Model $record): bool
     {
-        return $this->admin($user) && $this->mine($record);
+        return $this->admin($user) && $this->mine($record) && $this->writable();
     }
 
     public function delete(User $user, Model $record): bool

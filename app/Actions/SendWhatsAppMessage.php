@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\Billing\PlanLimits;
 use App\Enums\MessageStatus;
 use App\Models\User;
 use App\Models\WaChannel;
@@ -38,6 +39,10 @@ class SendWhatsAppMessage
      */
     public function __invoke(WaConversation $conversation, User $actor, ?string $text = null, bool $confirmPaid = false, ?WaTemplate $template = null): WaMessage
     {
+        if ($this->current->get() && PlanLimits::for($this->current->get())->readOnly()) {
+            throw new WhatsAppException('Langganan hanya-baca, pesan tidak bisa dikirim. Perpanjang paket di menu Langganan.');
+        }
+
         $decision = $this->routes->decide($conversation);
 
         if (! $decision->canSend()) {

@@ -14,7 +14,7 @@ class RunFollowUpsCommand extends Command
 {
     public function handle(RunFollowUps $run): int
     {
-        Tenant::query()->whereIn('status', ['trial', 'active'])->each(function (Tenant $tenant) use ($run) {
+        Tenant::query()->each(function (Tenant $tenant) use ($run) {
             try {
                 $r = $run($tenant);
             } catch (\Throwable $e) {

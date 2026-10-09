@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Billing\PlanLimits;
 use App\Enums\Role;
 use App\Models\Lead;
 use App\Models\User;
@@ -27,27 +28,27 @@ class LeadPolicy
 
     public function create(User $user): bool
     {
-        return $this->current->roleOf($user) !== null;
+        return $this->current->roleOf($user) !== null && $this->writable();
     }
 
     public function update(User $user, Lead $lead): bool
     {
-        return $this->canWork($user, $lead);
+        return $this->canWork($user, $lead) && $this->writable();
     }
 
     public function reassign(User $user, Lead $lead): bool
     {
-        return $this->inTenant($lead) && ($this->current->roleOf($user)?->seesAllLeads() ?? false);
+        return $this->inTenant($lead) && $this->writable() && ($this->current->roleOf($user)?->seesAllLeads() ?? false);
     }
 
     public function delete(User $user, Lead $lead): bool
     {
-        return $this->inTenant($lead) && $this->current->roleOf($user) === Role::Admin;
+        return $this->inTenant($lead) && $this->writable() && $this->current->roleOf($user) === Role::Admin;
     }
 
     public function deleteAny(User $user): bool
     {
-        return $this->current->roleOf($user) === Role::Admin;
+        return $this->current->roleOf($user) === Role::Admin && $this->writable();
     }
 
     public function restore(User $user, Lead $lead): bool
@@ -68,6 +69,11 @@ class LeadPolicy
     public function forceDeleteAny(User $user): bool
     {
         return $this->deleteAny($user);
+    }
+
+    private function writable(): bool
+    {
+        return ! PlanLimits::readOnlyNow();
     }
 
     private function canWork(User $user, Lead $lead): bool

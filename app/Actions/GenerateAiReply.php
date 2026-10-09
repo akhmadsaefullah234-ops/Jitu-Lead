@@ -5,6 +5,7 @@ namespace App\Actions;
 use App\Ai\AnthropicClient;
 use App\Ai\HandoffRules;
 use App\Ai\KnowledgeBase;
+use App\Billing\PlanLimits;
 use App\Enums\AiMode;
 use App\Enums\MessageStatus;
 use App\Enums\Role;
@@ -66,6 +67,11 @@ class GenerateAiReply
             return $this->handoffTo($inbound, 'Klien meminta bicara dengan agen atau menyebut hal sensitif');
         }
 
+        // The plan's quota is checked before the model is called, so an exhausted agency costs nothing.
+        if ($denied = PlanLimits::for($tenant)->denyAi()) {
+            return PlanLimits::for($tenant)->readOnly() ? null : $this->handoffTo($inbound, $denied);
+        }
+
         try {
             $answer = $this->ai->reply($this->system($tenant->name, $tenant->ai_instructions, $text), $this->history($conversation));
         } catch (Throwable $e) {
@@ -75,13 +81,13 @@ class GenerateAiReply
         }
 
         if ($answer === '' || str_starts_with(strtoupper($answer), self::HANDOFF)) {
-            return $this->handoffTo($inbound, 'Di luar pengetahuan AI, atau jawabannya tidak bisa dipercaya (terpotong atau ditolak)');
+            return $this->handoffTo($inbound, 'Di luar pengetahuan AI, atau jawabannya tidak bisa dipercaya (terpotong atau ditolak)', true);
         }
 
         $answer = mb_substr($answer, 0, SendWhatsAppMessage::MAX_LENGTH);
 
         if ($mode === AiMode::Draft) {
-            return $this->draft($inbound, $answer, AiDraft::PENDING);
+            return $this->draft($inbound, $answer, AiDraft::PENDING, null, true);
         }
 
         return $this->sendAutomatically($inbound, $answer);
@@ -95,14 +101,14 @@ class GenerateAiReply
             ->where('status', AiDraft::SENT)->where('created_at', '>=', now()->subHour())->count();
 
         if ($recent >= self::MAX_AUTO_PER_HOUR) {
-            return $this->draft($inbound, $answer, AiDraft::PENDING, 'Batas balasan otomatis per jam tercapai');
+            return $this->draft($inbound, $answer, AiDraft::PENDING, 'Batas balasan otomatis per jam tercapai', true);
         }
 
         // The answer took a moment to write; an agent may have started on the chat since.
         $conversation->refresh();
 
         if ($conversation->aiPaused()) {
-            return $this->draft($inbound, $answer, AiDraft::PENDING, 'Agen sedang membalas chat ini, AI tidak mengirim sendiri');
+            return $this->draft($inbound, $answer, AiDraft::PENDING, 'Agen sedang membalas chat ini, AI tidak mengirim sendiri', true);
         }
 
         $decision = $this->routes->decide($conversation);
@@ -110,28 +116,28 @@ class GenerateAiReply
         $actor = $this->actor($conversation->lead);
 
         if (! $free || $actor === null) {
-            return $this->draft($inbound, $answer, AiDraft::PENDING, 'Tidak ada jalur gratis untuk membalas otomatis');
+            return $this->draft($inbound, $answer, AiDraft::PENDING, 'Tidak ada jalur gratis untuk membalas otomatis', true);
         }
 
         $message = ($this->send)($conversation, $actor, $answer);
 
         if ($message->status === MessageStatus::Failed) {
-            return $this->draft($inbound, $answer, AiDraft::PENDING, 'Pengiriman otomatis gagal: '.$message->error);
+            return $this->draft($inbound, $answer, AiDraft::PENDING, 'Pengiriman otomatis gagal: '.$message->error, true);
         }
 
         $conversation->lead->activities()->create(['user_id' => null, 'type' => 'ai_reply', 'body' => 'AI membalas chat WhatsApp otomatis', 'meta' => ['message_id' => $message->getKey()]]);
 
-        return $this->draft($inbound, $answer, AiDraft::SENT);
+        return $this->draft($inbound, $answer, AiDraft::SENT, null, true);
     }
 
-    private function handoffTo(WaMessage $inbound, string $reason): AiDraft
+    private function handoffTo(WaMessage $inbound, string $reason, bool $apiCall = false): AiDraft
     {
         $inbound->conversation->lead->activities()->create(['type' => 'ai_handoff', 'body' => 'AI menyerahkan chat ke agen: '.$reason]);
 
-        return $this->draft($inbound, null, AiDraft::HANDOFF, $reason);
+        return $this->draft($inbound, null, AiDraft::HANDOFF, $reason, $apiCall);
     }
 
-    private function draft(WaMessage $inbound, ?string $body, string $status, ?string $reason = null): AiDraft
+    private function draft(WaMessage $inbound, ?string $body, string $status, ?string $reason = null, bool $apiCall = false): AiDraft
     {
         return AiDraft::query()->create([
             'conversation_id' => $inbound->conversation_id,
@@ -139,6 +145,7 @@ class GenerateAiReply
             'body' => $body,
             'status' => $status,
             'reason' => $reason,
+            'api_call' => $apiCall,
         ]);
     }
 

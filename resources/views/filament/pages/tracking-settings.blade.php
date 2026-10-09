@@ -1,4 +1,7 @@
 <x-filament-panels::page>
+    @if ($this->lockedReason())
+        @include('billing.locked', ['reason' => $this->lockedReason()])
+    @else
     <x-filament::section heading="Cara kerja" description="Setiap kali pengunjung mengisi formulir di halaman landing atau formulir web Anda, pixel di browser mengirim event ke platform iklan. Bila token API diisi, server juga mengirim event yang sama sehingga tetap terhitung walau browser memblokir pixel.">
         <ul style="list-style:disc;padding-left:1.25rem;line-height:1.8;font-size:.9rem">
             <li>Data kontak dikirim ke server platform dalam bentuk hash (SHA-256), tidak pernah dalam bentuk asli.</li>
@@ -18,4 +21,5 @@
             </x-filament::section>
         @endforeach
     </div>
+    @endif
 </x-filament-panels::page>

@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\Billing\PlanLimits;
 use App\Enums\MessageStatus;
 use App\Enums\Role;
 use App\Models\FollowUpLog;
@@ -44,6 +45,12 @@ class RunFollowUps
     {
         return $this->current->run($tenant, function () use ($tenant, $limit) {
             $result = ['sent' => 0, 'failed' => 0, 'skipped' => 0];
+
+            // A read-only subscription stops automatic follow-ups.
+            if (PlanLimits::for($tenant)->readOnly()) {
+                return $result;
+            }
+
             $touched = [];
             $timezone = $tenant->timezone ?: config('app.timezone');
 

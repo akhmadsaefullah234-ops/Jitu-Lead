@@ -33,7 +33,7 @@ class LandingPageController extends Controller
             'tenant' => $tenant,
             'settings' => $tenant->formSettings(),
             'endpoint' => $tenant->captureUrl(),
-            'tracking' => TrackingSetting::current(),
+            'tracking' => TrackingSetting::active(),
             'pageId' => null,
         ]));
     }
@@ -56,7 +56,7 @@ class LandingPageController extends Controller
                 'blocks' => $this->blocks($page),
                 'settings' => $tenant->formSettings(),
                 'endpoint' => $tenant->captureUrl(),
-                'tracking' => $preview ? null : TrackingSetting::current(),
+                'tracking' => $preview ? null : TrackingSetting::active(),
                 'preview' => $preview,
             ]);
         });
