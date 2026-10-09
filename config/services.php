@@ -35,6 +35,17 @@ return [
         ],
     ],
 
+    // The AI assistant that drafts or sends WhatsApp replies. Without a key it stays off.
+    'anthropic' => [
+        'key' => env('ANTHROPIC_API_KEY'),
+        'model' => env('ANTHROPIC_MODEL', 'claude-haiku-5-5'),
+        'url' => env('ANTHROPIC_URL', 'https://api.anthropic.com/v1/messages'),
+        // Haiku 5.5 thinks by default and thinking eats max_tokens, so replies are short and unthought.
+        // Leave either blank in .env for a model that rejects it.
+        'thinking' => env('ANTHROPIC_THINKING', 'disabled'),
+        'effort' => env('ANTHROPIC_EFFORT', 'low'),
+    ],
+
     // Server-side ad events (Conversions API and Events API).
     'meta' => [
         'graph_url' => env('META_GRAPH_URL', 'https://graph.facebook.com'),

@@ -60,7 +60,7 @@
                     <div>
                         <button type="button" class="wa-back" wire:click="close">&larr; Semua chat</button>
                         <br class="wa-back-br"><strong>{{ $conversation->lead->name }}</strong>
-                        <div class="p" style="font-size:.75rem;color:var(--gray-500)">{{ $conversation->phone }} · {{ $conversation->lead->stage?->name }}</div>
+                        <div class="p" style="font-size:.75rem;color:var(--gray-500)">{{ $conversation->phone }} · {{ $conversation->lead->stage?->name }}@if ($aiMode) · Pembalas: {{ $aiMode->getLabel() }}@endif</div>
                     </div>
                     <a class="jl-link" style="font-size:.8rem;font-weight:600" href="{{ $leadUrl($conversation->lead) }}" wire:navigate>Buka lead</a>
                 </div>
@@ -84,11 +84,28 @@
                         <div class="wa-empty">Belum ada pesan.</div>
                     @endforelse
                 </div>
+                @if ($aiDraft)
+                    <div class="ai-draft" style="margin:.5rem 0;padding:.6rem .75rem;border:1px solid #fecaca;background:#fef2f2;border-radius:.6rem;font-size:.85rem">
+                        @if ($aiDraft->status === \App\Models\AiDraft::HANDOFF)
+                            <strong>AI menyerahkan chat ini ke Anda.</strong> {{ $aiDraft->reason }}.
+                            <button type="button" wire:click="discardAiDraft({{ $aiDraft->id }})" style="margin-left:.5rem;text-decoration:underline">Tutup</button>
+                        @else
+                            <strong>Saran balasan AI</strong>
+                            @if ($aiDraft->reason) <span style="color:#6b7280">({{ $aiDraft->reason }})</span> @endif
+                            <div style="margin:.35rem 0;white-space:pre-wrap">{{ $aiDraft->body }}</div>
+                            <button type="button" wire:click="useAiDraft({{ $aiDraft->id }})" style="font-weight:600;color:#b91c1c">Pakai saran ini</button>
+                            <button type="button" wire:click="discardAiDraft({{ $aiDraft->id }})" style="margin-left:.75rem;color:#6b7280">Buang</button>
+                        @endif
+                    </div>
+                @endif
+                @if ($aiPausedUntil && $conversation->lead)
+                    <div style="font-size:.78rem;color:#6b7280;margin:.25rem 0">AI dijeda di chat ini sampai {{ $aiPausedUntil->format('H:i:s') }} karena Anda sedang membalas. Setelah itu AI aktif lagi sendiri.</div>
+                @endif
                 <div class="wa-compose">
                     @if ($decision->isPaid())
                         {{ $this->sendPaidTemplateAction }}
                     @elseif ($decision->canSend())
-                        <textarea rows="2" wire:model="draft" placeholder="Tulis pesan" aria-label="Pesan" x-on:keydown.enter.prevent="if (! $event.shiftKey) $wire.send()"></textarea>
+                        <textarea rows="2" wire:model.live.debounce.1500ms="draft" placeholder="Tulis pesan" aria-label="Pesan" x-on:keydown.enter.prevent="if (! $event.shiftKey) $wire.send()"></textarea>
                         <x-filament::button wire:click="send" wire:loading.attr="disabled">Kirim</x-filament::button>
                     @else
                         <span class="wa-empty" style="padding:.3rem">Hubungkan nomor di menu Koneksi WhatsApp.</span>

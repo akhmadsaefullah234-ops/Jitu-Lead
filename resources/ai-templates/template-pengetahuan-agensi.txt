@@ -1,0 +1,49 @@
+TEMPLATE PENGETAHUAN AI - AGENSI PROPERTI
+=========================================
+Cara pakai: ganti isi di dalam kurung siku [ ... ] dengan data agensi Anda, hapus bagian yang tidak perlu,
+lalu simpan sebagai .txt atau salin ke Word (.docx) dan unggah di menu AI Asisten > Pengetahuan AI.
+AI hanya menjawab dari tulisan di sini. Yang tidak tertulis tidak akan dijawab dan chat diserahkan ke agen.
+Tulis fakta apa adanya, satu hal per kalimat, dan jangan masukkan data pribadi klien.
+Pisahkan tiap topik dengan satu baris kosong.
+
+PROFIL AGENSI
+Nama agensi: [Griya Prima Properti]
+Alamat kantor: [Jl. Contoh No. 12, Kota Anda]
+Jam kerja: [Senin-Sabtu 09.00-17.00 WIB]
+Nomor yang boleh dihubungi untuk bicara dengan agen: [0812-xxxx-xxxx]
+Keunggulan agensi: [Berpengalaman 8 tahun, legalitas SHM, bekerja sama dengan bank BTN dan Mandiri]
+
+PROYEK 1: [Cluster Mawar]
+Lokasi: [Jl. Raya Contoh, Kecamatan X, Kota Y, 10 menit dari tol Z]
+Jenis: [Rumah subsidi / rumah komersial / ruko / tanah kavling]
+Legalitas: [SHM, IMB sudah terbit]
+Tipe unit: [Tipe 36/72 - 2 kamar tidur, 1 kamar mandi, listrik 1300 VA]
+Tipe unit lain: [Tipe 45/84 - 3 kamar tidur, 2 kamar mandi, listrik 2200 VA]
+Harga: [Tipe 36/72 mulai Rp 450.000.000, Tipe 45/84 mulai Rp 580.000.000]
+Cara bayar: [Tunai bertahap, cicilan developer, atau KPR]
+Uang muka (DP): [10 persen dari harga, bisa dicicil sampai 6 bulan]
+Biaya lain: [Biaya KPR, BPHTB, dan notaris sekitar 7 persen, belum termasuk dalam harga]
+Fasilitas: [One gate system, taman bermain, masjid, jalan paving 6 meter]
+Fasilitas sekitar: [Sekolah 1 km, pasar 2 km, rumah sakit 3 km]
+Ketersediaan unit: [Tanyakan ke agen untuk stok terbaru]
+Estimasi serah terima: [12 bulan setelah akad]
+
+PROYEK 2: [Nama proyek lain]
+[Tulis dengan susunan yang sama seperti Proyek 1]
+
+KPR DAN PEMBIAYAAN
+Bank rekanan: [BTN, Mandiri, BCA]
+Syarat umum KPR: [KTP, KK, NPWP, slip gaji 3 bulan terakhir, rekening koran 3 bulan, masa kerja minimal 1 tahun]
+Untuk wiraswasta: [Tambahan SIUP/NIB, laporan keuangan, dan rekening koran 6 bulan]
+Catatan: [Persetujuan KPR sepenuhnya keputusan bank, agensi tidak bisa menjamin]
+
+SURVEI LOKASI
+Jadwal survei: [Setiap hari 09.00-16.00 WIB, mohon janji dulu satu hari sebelumnya]
+Titik kumpul: [Kantor pemasaran di depan Cluster Mawar]
+Yang perlu dibawa: [KTP untuk pendataan]
+
+PROMO YANG BERLAKU
+[Gratis biaya notaris untuk booking sebelum 31 Desember 2026. Hapus bagian ini jika tidak ada promo]
+
+HAL YANG TIDAK BOLEH DIJANJIKAN AI
+[Diskon di luar promo, kepastian KPR disetujui, potongan harga khusus. Untuk ini AI akan menyerahkan chat ke agen]

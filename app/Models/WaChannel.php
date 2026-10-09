@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\AiMode;
 use App\Enums\WaChannelStatus;
 use App\Enums\WaChannelType;
 use App\Models\Concerns\BelongsToTenant;
@@ -11,7 +12,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
-#[Fillable(['type', 'name', 'phone', 'status', 'credentials', 'intro_template', 'position', 'last_connected_at', 'last_error'])]
+#[Fillable(['type', 'name', 'phone', 'status', 'credentials', 'intro_template', 'position', 'last_connected_at', 'last_error', 'ai_mode'])]
 #[Hidden(['credentials'])]
 class WaChannel extends Model
 {
@@ -31,6 +32,7 @@ class WaChannel extends Model
         return [
             'type' => WaChannelType::class,
             'status' => WaChannelStatus::class,
+            'ai_mode' => AiMode::class,
             'credentials' => 'encrypted:array',
             'last_connected_at' => 'datetime',
         ];

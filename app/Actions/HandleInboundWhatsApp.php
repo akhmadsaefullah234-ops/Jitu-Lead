@@ -2,7 +2,9 @@
 
 namespace App\Actions;
 
+use App\Enums\AiMode;
 use App\Enums\MessageStatus;
+use App\Jobs\GenerateAiReplyJob;
 use App\Models\Lead;
 use App\Models\LeadSource;
 use App\Models\Stage;
@@ -33,7 +35,7 @@ class HandleInboundWhatsApp
         }
 
         try {
-            return DB::transaction(function () use ($channel, $incoming) {
+            $message = DB::transaction(function () use ($channel, $incoming) {
                 $lead = Lead::query()->where('phone', $incoming->from)->latest('id')->first() ?? $this->createLead($incoming);
 
                 $conversation = WaConversation::query()->firstOrCreate(
@@ -78,8 +80,19 @@ class HandleInboundWhatsApp
 
                 return $message;
             });
+
+            $this->queueAiReply($channel, $message);
+
+            return $message;
         } catch (UniqueConstraintViolationException) {
             return null; // The same delivery arrived twice at once.
+        }
+    }
+
+    private function queueAiReply(WaChannel $channel, WaMessage $message): void
+    {
+        if ($channel->ai_mode !== null && $channel->ai_mode !== AiMode::Off && $message->type === 'text') {
+            GenerateAiReplyJob::dispatch($this->current->id(), $message->getKey());
         }
     }
 
