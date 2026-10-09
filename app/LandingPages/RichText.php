@@ -11,14 +11,15 @@ use Filament\Forms\Components\RichEditor\RichContentRenderer;
 /**
  * The only way user-written formatting reaches a public page. The output is
  * rebuilt from scratch out of a short allow-list (bold, italic, lists,
- * paragraphs, links), so nothing else, and no attribute, can survive.
+ * paragraphs, links; plus h2/h3 where the caller asks for headings), so nothing
+ * else, and no attribute, can survive.
  */
 class RichText
 {
     private const DROP = ['script', 'style', 'iframe', 'object', 'embed', 'svg', 'math', 'template', 'noscript', 'form', 'textarea', 'select', 'button', 'head', 'title'];
 
     /** An array is the editor's own unsaved document; it is turned to HTML first and cleaned like any other. */
-    public static function clean(string|array|null $html): string
+    public static function clean(string|array|null $html, bool $headings = false): string
     {
         if (is_array($html)) {
             $html = RichContentRenderer::make($html)->toHtml();
@@ -38,7 +39,7 @@ class RichText
 
         $body = $doc->getElementsByTagName('body')->item(0);
 
-        return $body ? trim(self::walk($body)) : '';
+        return $body ? trim(self::walk($body, $headings)) : '';
     }
 
     /** Plain text, for meta descriptions. */
@@ -54,7 +55,7 @@ class RichText
         return preg_match('#^(https?://[^\s<>"\']+|mailto:[^\s<>"\']+|tel:[+0-9 ()-]+)$#i', $href) ? $href : null;
     }
 
-    private static function walk(DOMNode $node): string
+    private static function walk(DOMNode $node, bool $headings = false): string
     {
         $out = '';
 
@@ -75,12 +76,13 @@ class RichText
                 continue;
             }
 
-            $inner = self::walk($child);
+            $inner = self::walk($child, $headings);
 
             $out .= match ($tag) {
                 'strong', 'b' => '<strong>'.$inner.'</strong>',
                 'em', 'i' => '<em>'.$inner.'</em>',
                 'p', 'ul', 'ol', 'li' => '<'.$tag.'>'.$inner.'</'.$tag.'>',
+                'h2', 'h3' => $headings ? '<'.$tag.'>'.$inner.'</'.$tag.'>' : '<p><strong>'.$inner.'</strong></p>',
                 'br' => '<br>',
                 'a' => ($href = self::safeHref($child->getAttribute('href')))
                     ? '<a href="'.htmlspecialchars($href, ENT_QUOTES, 'UTF-8').'" rel="noopener nofollow" target="_blank">'.$inner.'</a>'

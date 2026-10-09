@@ -174,7 +174,7 @@
 <footer>
     <div class="wrap">
         <span>&copy; {{ date('Y') }} JITU LEAD</span>
-        <span><a href="{{ url('/harga') }}">Halaman harga</a> · <a href="{{ url('/app/login') }}">Masuk</a></span>
+        <span><a href="{{ url('/harga') }}">Halaman harga</a> · <a href="{{ url('/kebijakan-privasi') }}">Kebijakan Privasi</a> · <a href="{{ url('/syarat-layanan') }}">Syarat Layanan</a> · <a href="{{ url('/app/login') }}">Masuk</a></span>
     </div>
 </footer>
 </body>
