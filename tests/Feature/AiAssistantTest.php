@@ -37,6 +37,8 @@ class AiAssistantTest extends TestCase
 
     private int $n = 0;
 
+    private string $stopReason = 'end_turn';
+
     private string $aiAnswer = 'Harga Cluster Mawar mulai 450 juta, Kak.';
 
     protected function setUp(): void
@@ -47,7 +49,7 @@ class AiAssistantTest extends TestCase
         GatewayUrlGuard::resolveUsing(fn (string $host) => $host === 'gw.example.com' ? ['93.184.216.34'] : []);
 
         Http::fake([
-            'api.anthropic.com/*' => fn () => Http::response(['content' => [['type' => 'text', 'text' => $this->aiAnswer]]]),
+            'api.anthropic.com/*' => fn () => Http::response(['stop_reason' => $this->stopReason, 'content' => [['type' => 'text', 'text' => $this->aiAnswer]]]),
             'gw.example.com/*' => fn () => Http::response(['id' => 'g'.++$this->n]),
         ]);
     }
@@ -123,6 +125,45 @@ class AiAssistantTest extends TestCase
         $this->assertSame(AiDraft::SENT, $this->draftFor($message)->status);
         $out = $this->inTenant(fn () => WaMessage::where('direction', 'out')->latest('id')->first());
         $this->assertSame($this->aiAnswer, $out->body);
+    }
+
+    public function test_the_request_turns_thinking_off_and_leaves_room_for_the_answer(): void
+    {
+        $this->knowledge();
+        $this->inbound($this->gateway(AiMode::Draft), 'Berapa harga cluster mawar?');
+
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'anthropic')
+            && $r['max_tokens'] === 1024
+            && $r['thinking'] === ['type' => 'disabled']
+            && $r['output_config'] === ['effort' => 'low']);
+    }
+
+    public function test_thinking_and_effort_can_be_left_out_for_models_that_reject_them(): void
+    {
+        config(['services.anthropic.thinking' => '', 'services.anthropic.effort' => '']);
+        $this->knowledge();
+        $this->inbound($this->gateway(AiMode::Draft), 'Berapa harga cluster mawar?');
+
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'anthropic') && ! isset($r['thinking']) && ! isset($r['output_config']));
+    }
+
+    public function test_a_cut_off_or_refused_answer_is_never_sent_to_the_client(): void
+    {
+        $this->knowledge();
+        $channel = $this->gateway(AiMode::Auto);
+
+        $this->aiAnswer = 'Harga mulai 450 ju';
+
+        foreach (['max_tokens', 'refusal'] as $i => $reason) {
+            $this->stopReason = $reason;
+
+            $draft = $this->draftFor($this->inbound($channel, "Berapa harga cluster mawar $i?", '62812000000'.$i));
+
+            $this->assertSame(AiDraft::HANDOFF, $draft->status, $reason);
+            $this->assertNull($draft->body);
+        }
+
+        $this->assertSame(0, $this->inTenant(fn () => WaMessage::where('direction', 'out')->count()), 'Nothing reached the client');
     }
 
     public function test_mode_off_or_missing_key_does_nothing(): void

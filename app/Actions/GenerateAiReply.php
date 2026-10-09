@@ -75,7 +75,7 @@ class GenerateAiReply
         }
 
         if ($answer === '' || str_starts_with(strtoupper($answer), self::HANDOFF)) {
-            return $this->handoffTo($inbound, 'Pertanyaan di luar pengetahuan AI');
+            return $this->handoffTo($inbound, 'Di luar pengetahuan AI, atau jawabannya tidak bisa dipercaya (terpotong atau ditolak)');
         }
 
         $answer = mb_substr($answer, 0, SendWhatsAppMessage::MAX_LENGTH);

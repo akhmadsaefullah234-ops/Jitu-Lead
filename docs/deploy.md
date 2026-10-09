@@ -21,6 +21,10 @@ AI Asisten membutuhkan kunci API Anthropic. Tambahkan di `/var/www/jitu-lead/.en
 ANTHROPIC_API_KEY=sk-ant-...
 # opsional, bawaan: claude-haiku-5-5
 ANTHROPIC_MODEL=claude-haiku-5-5
+# opsional, bawaan: thinking mati dan effort low supaya jawaban pendek tidak terpotong.
+# Kosongkan salah satu bila model yang Anda pakai menolaknya.
+ANTHROPIC_THINKING=disabled
+ANTHROPIC_EFFORT=low
 ```
 
 ```

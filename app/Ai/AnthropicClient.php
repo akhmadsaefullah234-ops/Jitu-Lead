@@ -18,21 +18,37 @@ class AnthropicClient
 
     /**
      * @param  list<array{role: 'user'|'assistant', content: string}>  $messages  Must start and end with a user turn.
+     * @return string The answer, or '' when it cannot be trusted: cut off at max_tokens, refused, or empty.
+     *                Callers hand an empty answer to a person rather than send it to a client.
      */
-    public function reply(string $system, array $messages, int $maxTokens = 500): string
+    public function reply(string $system, array $messages, int $maxTokens = 1024): string
     {
-        $response = Http::withHeaders([
-            'x-api-key' => (string) config('services.anthropic.key'),
-            'anthropic-version' => '2023-06-01',
-        ])->timeout(30)->acceptJson()->post(config('services.anthropic.url'), [
+        $body = [
             'model' => config('services.anthropic.model'),
             'max_tokens' => $maxTokens,
             'system' => $system,
             'messages' => $messages,
-        ]);
+        ];
+
+        if (filled($thinking = config('services.anthropic.thinking'))) {
+            $body['thinking'] = ['type' => $thinking];
+        }
+
+        if (filled($effort = config('services.anthropic.effort'))) {
+            $body['output_config'] = ['effort' => $effort];
+        }
+
+        $response = Http::withHeaders([
+            'x-api-key' => (string) config('services.anthropic.key'),
+            'anthropic-version' => '2023-06-01',
+        ])->timeout(30)->acceptJson()->post(config('services.anthropic.url'), $body);
 
         if (! $response->successful()) {
             throw new RuntimeException('AI error '.$response->status());
+        }
+
+        if (in_array($response->json('stop_reason'), ['max_tokens', 'refusal'], true)) {
+            return '';
         }
 
         $text = collect($response->json('content', []))->where('type', 'text')->pluck('text')->implode('');
