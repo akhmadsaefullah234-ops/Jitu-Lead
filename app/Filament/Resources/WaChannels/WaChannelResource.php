@@ -142,7 +142,8 @@ class WaChannelResource extends Resource
                     Notification::make()->title('Belum terhubung')->body($problem)->danger()->send();
                 }
             }),
-            Action::make('pair')->label('Scan QR')->icon(Heroicon::OutlinedQrCode)->color('success')
+            Action::make('pair')->label(fn (WaChannel $record) => $record->status === WaChannelStatus::NeedsRelink ? 'Scan QR ulang' : 'Scan QR')->icon(Heroicon::OutlinedQrCode)
+                ->color(fn (WaChannel $record) => $record->status === WaChannelStatus::NeedsRelink ? 'warning' : 'success')
                 ->visible(fn (WaChannel $record) => $record->type === WaChannelType::Gateway)
                 ->modalHeading('Hubungkan WhatsApp lewat QR')->modalWidth('lg')
                 ->modalSubmitAction(false)->modalCancelActionLabel('Tutup')

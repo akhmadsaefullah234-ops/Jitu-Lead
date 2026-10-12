@@ -66,3 +66,6 @@ jobs:
           DB_HOST: 127.0.0.1
           DB_USERNAME: jitu
           DB_PASSWORD: jitu
+
+      - name: Gateway WhatsApp tests
+        run: cd gateway && npm ci --no-audit --no-fund && npm test

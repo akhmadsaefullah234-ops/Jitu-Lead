@@ -78,6 +78,12 @@ class WaChannel extends Model
         $this->forceFill(['status' => WaChannelStatus::Disconnected, 'last_error' => $reason])->save();
     }
 
+    /** The saved WhatsApp login stopped working; the agency has to scan the QR code again. */
+    public function markNeedsRelink(?string $reason = null): void
+    {
+        $this->forceFill(['status' => WaChannelStatus::NeedsRelink, 'last_error' => $reason ?: 'Sesi WhatsApp rusak, scan QR ulang.'])->save();
+    }
+
     /** A gateway number that uses the platform's own gateway (QR only) instead of agency-entered details. */
     public function usesPlatformGateway(): bool
     {

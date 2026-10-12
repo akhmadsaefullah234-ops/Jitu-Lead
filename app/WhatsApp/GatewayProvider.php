@@ -107,7 +107,7 @@ class GatewayProvider implements WhatsAppProvider
                 break;
 
             case 'session':
-                $session = in_array($request->input('status'), ['connected', 'disconnected', 'qr_required'], true) ? $request->input('status') : null;
+                $session = in_array($request->input('status'), ['connected', 'disconnected', 'qr_required', 'needs_relink'], true) ? $request->input('status') : null;
                 break;
         }
 

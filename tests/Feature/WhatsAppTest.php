@@ -7,6 +7,7 @@ use App\Enums\MessageStatus;
 use App\Enums\Role;
 use App\Enums\WaChannelStatus;
 use App\Enums\WaChannelType;
+use App\Mail\WhatsAppNeedsRelink;
 use App\Models\Lead;
 use App\Models\Tenant;
 use App\Models\WaChannel;
@@ -20,6 +21,7 @@ use App\WhatsApp\RouteSelector;
 use App\WhatsApp\WhatsAppException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 class WhatsAppTest extends TestCase
@@ -273,6 +275,40 @@ class WhatsAppTest extends TestCase
         $this->assertTrue(Lead::where('phone', '+6281299990000')->exists());
         $this->assertFalse(Lead::where('phone', '+6281299990001')->exists());
         $this->assertSame($gw->getKey(), WaConversation::whereHas('lead', fn ($q) => $q->where('phone', '+6281299990000'))->first()->last_inbound_channel_id);
+    }
+
+    public function test_gateway_needs_relink_marks_channel_and_emails_admins_once(): void
+    {
+        Mail::fake();
+        $gw = $this->gateway();
+        $admin = $this->adminOf($this->tenant);
+        app(CurrentTenant::class)->set(null);
+
+        $post = function (array $payload) use ($gw) {
+            $body = json_encode($payload);
+
+            return $this->call('POST', "/webhooks/whatsapp/gateway/{$gw->webhook_token}", [], [], [], $this->transformHeadersToServerVars([
+                'CONTENT_TYPE' => 'application/json',
+                'X-Gateway-Signature' => 'sha256='.hash_hmac('sha256', $body, 'gwsecret'),
+            ]), $body);
+        };
+
+        $post(['event' => 'session', 'status' => 'needs_relink', 'reason' => '3 pesan berturut-turut tidak bisa dibuka'])->assertOk();
+        $post(['event' => 'session', 'status' => 'needs_relink'])->assertOk();
+
+        $channel = WaChannel::query()->withoutGlobalScopes()->find($gw->getKey());
+        $this->assertSame(WaChannelStatus::NeedsRelink, $channel->status);
+        $this->assertSame('Perlu scan ulang', $channel->status->getLabel());
+        $this->assertStringContainsString('scan QR', $channel->last_error);
+
+        Mail::assertSent(WhatsAppNeedsRelink::class, 1);
+        Mail::assertSent(WhatsAppNeedsRelink::class, fn ($m) => $m->hasTo($admin->email) && str_contains($m->render(), 'Scan QR'));
+
+        // after scanning again the number is connected and a later failure mails again
+        $post(['event' => 'session', 'status' => 'connected'])->assertOk();
+        $this->assertSame(WaChannelStatus::Connected, WaChannel::query()->withoutGlobalScopes()->find($gw->getKey())->status);
+        $post(['event' => 'session', 'status' => 'needs_relink'])->assertOk();
+        Mail::assertSent(WhatsAppNeedsRelink::class, 2);
     }
 
     public function test_channels_and_conversations_are_tenant_isolated(): void
