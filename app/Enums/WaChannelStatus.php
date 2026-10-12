@@ -10,6 +10,7 @@ enum WaChannelStatus: string implements HasColor, HasLabel
     case Connected = 'connected';
     case Disconnected = 'disconnected';
     case Error = 'error';
+    case NeedsRelink = 'needs_relink';
 
     public function getLabel(): string
     {
@@ -17,6 +18,7 @@ enum WaChannelStatus: string implements HasColor, HasLabel
             self::Connected => 'Terhubung',
             self::Disconnected => 'Belum terhubung',
             self::Error => 'Bermasalah',
+            self::NeedsRelink => 'Perlu scan ulang',
         };
     }
 
@@ -26,6 +28,7 @@ enum WaChannelStatus: string implements HasColor, HasLabel
             self::Connected => 'success',
             self::Disconnected => 'gray',
             self::Error => 'danger',
+            self::NeedsRelink => 'warning',
         };
     }
 }

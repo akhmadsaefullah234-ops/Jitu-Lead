@@ -20,6 +20,20 @@ Lihat log: `journalctl -u jitu-gateway -f`. Data login WhatsApp ada di `/opt/jit
 | `HOST`, `PORT` | alamat dengar, bawaan `127.0.0.1:3100` |
 | `DATA_DIR` | folder login WhatsApp |
 | `MAX_SESSIONS` | batas jumlah nomor, bawaan 50 |
+| `RELINK_AFTER_FAILS` | jumlah pesan berturut-turut yang tidak bisa dibuka sebelum sesi ditandai perlu scan ulang, bawaan 3 |
+| `LOG_LEVEL` | bawaan `info`; `debug` juga mencatat pesan grup/pesan sendiri yang dilewati |
+
+## Baileys 7, LID, dan kesehatan sesi
+
+Gateway memakai Baileys 7 (mendukung alamat `@lid`). Yang perlu diketahui:
+
+- **Setelah memperbarui dari versi lama, semua nomor harus scan QR ulang.** Gateway menandai login buatan versi lama sebagai `needs_relink` saat start, dan CRM menampilkan "Perlu scan ulang" serta mengirim email ke admin agensi.
+- Nomor HP pengirim diambil dari `remoteJidAlt`/`senderPn`, atau dari pemetaan LID di folder login. Pesan yang nomornya tetap tidak diketahui dicatat (level warn) dan tidak diteruskan.
+- Pesan yang belum bisa dibuka (CIPHERTEXT) ditunggu sampai WhatsApp mengirim ulang (45 detik); kalau tetap gagal, dicatat (warn). Tiga kegagalan berturut-turut tanpa satu pun pesan berhasil membuat sesi `needs_relink`.
+- Setiap pesan pribadi yang tidak diteruskan tercatat di log dengan alasannya (`journalctl -u jitu-gateway | grep "tidak diteruskan"`). Hanya 4 digit terakhir nomor yang dicatat.
+- Berkas login ditulis atomik (berkas sementara lalu rename), dan `creds.json` punya cadangan `creds.json.bak`.
+
+Pasang versi baru: `git pull` lalu `sudo bash gateway/install.sh` (menjalankan `npm ci` dan restart layanan).
 
 ## Pengembangan
 

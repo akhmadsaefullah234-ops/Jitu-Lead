@@ -6,6 +6,8 @@ const { deliver } = require('./webhook');
 
 const ID = /^[A-Za-z0-9_-]{8,128}$/;
 const E164 = /^\+?\d{6,15}$/;
+const MARKER = 'needs_relink';
+const V7 = 'baileys7'; // written once a login has connected under the current library
 
 class SessionError extends Error {
   constructor(message, status = 400) {
@@ -39,6 +41,29 @@ class SessionManager {
     return path.join(this.root, id);
   }
 
+  marker(id) {
+    return path.join(this.dir(id), MARKER);
+  }
+
+  /** A paired login that was never connected by the current library (made by the old gateway), so its keys cannot be trusted. */
+  legacyLogin(id) {
+    if (fs.existsSync(path.join(this.dir(id), V7))) return false;
+
+    try {
+      return JSON.parse(fs.readFileSync(path.join(this.dir(id), 'auth', 'creds.json'), 'utf8')).registered === true;
+    } catch {
+      return false;
+    }
+  }
+
+  writeMeta(id, meta) {
+    const file = path.join(this.dir(id), 'meta.json');
+    const tmp = `${file}.${process.pid}.tmp`;
+
+    fs.writeFileSync(tmp, JSON.stringify(meta), { mode: 0o600 });
+    fs.renameSync(tmp, file);
+  }
+
   restore() {
     for (const id of fs.readdirSync(this.root)) {
       const metaFile = path.join(this.dir(id), 'meta.json');
@@ -46,6 +71,20 @@ class SessionManager {
 
       try {
         const meta = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
+
+        if (fs.existsSync(this.marker(id))) {
+          // Flagged as broken before the restart: wait for the agency to scan again instead of reusing the bad login.
+          this.sessions.set(id, { id, status: 'needs_relink', qr: null, qrAt: 0, conn: null, meta, retries: 0, decryptFails: 0 });
+          continue;
+        }
+
+        if (this.legacyLogin(id)) {
+          const session = { id, status: 'qr_required', qr: null, qrAt: 0, conn: null, meta, retries: 0, decryptFails: 0 };
+          this.sessions.set(id, session);
+          this.needsRelink(session, 'login dibuat oleh versi gateway lama, scan ulang diperlukan');
+          continue;
+        }
+
         this.open(id, meta);
       } catch (err) {
         this.log?.error({ id, err: err.message }, 'sesi tidak bisa dipulihkan');
@@ -75,11 +114,21 @@ class SessionManager {
       throw new SessionError('Kapasitas gateway penuh.', 503);
     }
 
-    const existing = this.get(id);
+    let existing = this.get(id);
     const meta = { webhook_url, signing_secret };
 
     fs.mkdirSync(this.dir(id), { recursive: true });
-    fs.writeFileSync(path.join(this.dir(id), 'meta.json'), JSON.stringify(meta), { mode: 0o600 });
+
+    if (existing?.status === 'needs_relink' || fs.existsSync(this.marker(id))) {
+      // A broken login cannot be repaired: drop it so a fresh QR can be scanned.
+      clearTimeout(existing?.timer);
+      this.sessions.delete(id);
+      existing = undefined;
+      fs.rmSync(path.join(this.dir(id), 'auth'), { recursive: true, force: true });
+      fs.rmSync(this.marker(id), { force: true });
+    }
+
+    this.writeMeta(id, meta);
 
     if (existing) {
       existing.meta = meta;
@@ -90,7 +139,7 @@ class SessionManager {
   }
 
   open(id, meta) {
-    const session = this.get(id) ?? { id, status: 'qr_required', qr: null, qrAt: 0, conn: null, meta, retries: 0 };
+    const session = this.get(id) ?? { id, status: 'qr_required', qr: null, qrAt: 0, conn: null, meta, retries: 0, decryptFails: 0 };
     session.meta = meta;
     session.status = session.status === 'connected' ? 'connected' : 'qr_required';
     this.sessions.set(id, session);
@@ -107,9 +156,23 @@ class SessionManager {
           session.status = 'connected';
           session.qr = null;
           session.retries = 0;
+          try {
+            fs.writeFileSync(path.join(this.dir(id), V7), '1', { mode: 0o600 });
+          } catch (err) {
+            this.log?.warn({ id, err: err.message }, 'penanda versi login gagal ditulis');
+          }
           this.emit(session, { event: 'session', status: 'connected' });
         },
-        onClose: ({ loggedOut }) => this.closed(session, loggedOut),
+        onClose: ({ loggedOut, needsRelink }) => (needsRelink ? this.needsRelink(session, 'WhatsApp menolak login yang tersimpan') : this.closed(session, loggedOut)),
+        onDecryptOk: () => {
+          session.decryptFails = 0;
+        },
+        onDecryptFail: () => {
+          // Several messages in a row that cannot be opened means the saved keys no longer match WhatsApp's.
+          if (++session.decryptFails >= (this.config.relinkAfterFails ?? 3) && session.status !== 'needs_relink') {
+            this.needsRelink(session, `${session.decryptFails} pesan berturut-turut tidak bisa dibuka`);
+          }
+        },
         onMessage: (m) => this.emit(session, { event: 'message', ...m }),
         onStatus: (s) => this.emit(session, { event: 'status', ...s }),
       },
@@ -118,7 +181,35 @@ class SessionManager {
     return session.status;
   }
 
+  /** The login is unusable: stop, remember it across restarts, and tell the CRM so the agency scans again. */
+  needsRelink(session, reason) {
+    if (session.status === 'needs_relink') return;
+
+    this.log?.warn({ id: session.id, reason }, 'sesi WhatsApp tidak sehat, perlu scan ulang');
+    clearTimeout(session.timer);
+    session.status = 'needs_relink';
+    session.qr = null;
+
+    const conn = session.conn;
+    session.conn = null;
+    try {
+      conn?.end?.();
+    } catch {
+      // already closed
+    }
+
+    try {
+      fs.writeFileSync(this.marker(session.id), new Date().toISOString(), { mode: 0o600 });
+    } catch (err) {
+      this.log?.error({ id: session.id, err: err.message }, 'penanda perlu-scan-ulang gagal ditulis');
+    }
+
+    this.emit(session, { event: 'session', status: 'needs_relink', reason });
+  }
+
   closed(session, loggedOut) {
+    if (session.status === 'needs_relink') return;
+
     session.conn = null;
     session.qr = null;
 
@@ -141,6 +232,7 @@ class SessionManager {
 
     if (!s) return { status: 'disconnected' };
     if (s.status === 'connected') return { status: 'connected' };
+    if (s.status === 'needs_relink') return { status: 'needs_relink', qr: null, expires_in: 0 };
 
     return { status: 'qr_required', qr: s.qr, expires_in: s.qr ? Math.max(1, 20 - Math.floor((Date.now() - s.qrAt) / 1000)) : 0 };
   }
@@ -148,6 +240,7 @@ class SessionManager {
   async send(id, to, text) {
     const s = this.get(id);
 
+    if (s?.status === 'needs_relink') throw new SessionError('Sesi WhatsApp perlu scan ulang.', 503);
     if (!s || s.status !== 'connected' || !s.conn) throw new SessionError('Sesi WhatsApp belum terhubung.', 503);
     if (typeof to !== 'string' || !E164.test(to)) throw new SessionError('Nomor tujuan tidak valid.');
     if (typeof text !== 'string' || text.trim() === '' || text.length > 4096) throw new SessionError('Isi pesan kosong atau terlalu panjang.');

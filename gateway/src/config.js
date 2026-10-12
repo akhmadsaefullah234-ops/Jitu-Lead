@@ -16,6 +16,7 @@ function load(env = process.env) {
     dataDir: path.resolve(env.DATA_DIR || './data'),
     maxSessions: Number(env.MAX_SESSIONS || 50),
     webhookTimeoutMs: Number(env.WEBHOOK_TIMEOUT_MS || 10000),
+    relinkAfterFails: Number(env.RELINK_AFTER_FAILS || 3),
     logLevel: env.LOG_LEVEL || 'info',
   };
 }

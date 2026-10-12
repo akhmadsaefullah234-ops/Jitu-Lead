@@ -68,5 +68,7 @@ Nomor baru otomatis menjadi lead dan dibagi ke agen.
 ### Status sesi
 
 ```json
-{ "event": "session", "status": "connected|disconnected|qr_required" }
+{ "event": "session", "status": "connected|disconnected|qr_required|needs_relink", "reason": "opsional" }
 ```
+
+`needs_relink`: login WhatsApp tersimpan rusak (kunci enkripsi tidak cocok lagi, pesan berturut-turut tidak bisa dibuka, atau WhatsApp menolak sesi). Gateway berhenti memakai login itu dan mengingatnya sampai restart. Pesan pelanggan tidak masuk selama status ini. Agensi harus scan QR ulang: `POST /session/start` membuang login lama dan memulai QR baru. CRM menandai nomor "Perlu scan ulang" dan mengirim email ke admin agensi (sekali per kejadian). `GET /session` dan `GET /session/qr` membalas `{"status": "needs_relink"}`; `POST /messages` membalas 503.

@@ -169,7 +169,7 @@ WHATSAPP_GATEWAY_API_KEY=...
 WHATSAPP_GATEWAY_SIGNING_SECRET=...
 ```
 
-Cara termudah (satu VPS): `sudo bash gateway/install.sh` memasang gateway dan mengisi .env otomatis (lihat `gateway/README.md`). Atau isi manual lalu `php artisan config:cache`. Tanpa isian ini, agensi yang memilih "WhatsApp biasa" harus mengisi alamat dan kunci gateway mereka sendiri di bagian lanjutan.
+Cara termudah (satu VPS): `sudo bash gateway/install.sh` (juga untuk memperbarui gateway; setelah pembaruan ke Baileys 7 semua nomor perlu scan QR ulang, lihat `gateway/README.md`) memasang gateway dan mengisi .env otomatis (lihat `gateway/README.md`). Atau isi manual lalu `php artisan config:cache`. Tanpa isian ini, agensi yang memilih "WhatsApp biasa" harus mengisi alamat dan kunci gateway mereka sendiri di bagian lanjutan.
 
 
 ## Paket langganan (tahap 1, pembayaran manual)
