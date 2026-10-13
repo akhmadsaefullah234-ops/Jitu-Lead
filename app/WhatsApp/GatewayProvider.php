@@ -5,7 +5,6 @@ namespace App\WhatsApp;
 use App\Enums\MessageStatus;
 use App\Models\WaChannel;
 use App\Support\PhoneNumber;
-use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -86,7 +85,7 @@ class GatewayProvider implements WhatsAppProvider
                         type: $type,
                         body: $request->input('text'),
                         media: is_array($request->input('media')) ? $request->input('media') : null,
-                        sentAt: CarbonImmutable::createFromTimestamp((int) $request->input('timestamp', time())),
+                        sentAt: InboundMessage::at($request->input('timestamp')),
                         contactName: $request->input('name'),
                     );
                 }

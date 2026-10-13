@@ -23,4 +23,16 @@ final class InboundMessage
         public readonly ?string $contactName = null,
         public readonly ?array $referral = null,
     ) {}
+
+    /**
+     * A provider's epoch timestamp as a moment in the application's timezone.
+     * Carbon::createFromTimestamp() returns UTC, and the database stores the wall
+     * clock of whatever zone the value carries, so it has to be converted first.
+     */
+    public static function at(int|string|null $timestamp): CarbonImmutable
+    {
+        $epoch = (int) $timestamp;
+
+        return CarbonImmutable::createFromTimestamp($epoch > 0 ? $epoch : time())->setTimezone(config('app.timezone'));
+    }
 }

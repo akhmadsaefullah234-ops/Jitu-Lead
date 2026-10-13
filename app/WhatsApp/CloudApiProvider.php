@@ -5,7 +5,6 @@ namespace App\WhatsApp;
 use App\Enums\MessageStatus;
 use App\Models\WaChannel;
 use App\Support\PhoneNumber;
-use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -108,7 +107,7 @@ class CloudApiProvider implements WhatsAppProvider
                         type: $type,
                         body: $this->bodyOf($message, $type),
                         media: $this->mediaOf($message, $type),
-                        sentAt: CarbonImmutable::createFromTimestamp((int) ($message['timestamp'] ?? time())),
+                        sentAt: InboundMessage::at($message['timestamp'] ?? null),
                         contactName: $names[$from] ?? null,
                         referral: is_array($referral) ? array_filter([
                             'source_id' => $referral['source_id'] ?? null,
