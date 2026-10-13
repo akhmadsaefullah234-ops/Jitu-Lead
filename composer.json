@@ -11,6 +11,7 @@
         "filament/filament": "^5.10",
         "laravel/framework": "^13.17",
         "laravel/tinker": "^3.0",
+        "minishlink/web-push": "^11.0",
         "smalot/pdfparser": "^2.12"
     },
     "require-dev": {

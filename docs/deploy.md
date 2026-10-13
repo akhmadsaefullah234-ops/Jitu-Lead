@@ -116,6 +116,18 @@ Uji prosedur ini sekali di staging sebelum Anda membutuhkannya. Data yang masuk 
 
 Langkah database sudah dicoba di mesin pengembangan (dump lalu pulihkan ke database kosong); prosedur lengkap di VPS belum.
 
+## Notifikasi di HP dan PC (push)
+
+Jitu Lead mengirim notifikasi sendiri saat ada lead baru (formulir, landing page, WhatsApp) dan pesan WhatsApp masuk, ke HP maupun PC, walau tab sedang ditutup.
+
+- Kunci VAPID dibuat otomatis oleh `php artisan push:keys` (sudah ada di `install.sh` dan `update.sh`). Perintah ini hanya mengisi kunci sekali dan tidak menimpa yang sudah ada. **Jangan ganti kuncinya**, karena semua perangkat yang sudah aktif harus didaftarkan ulang.
+- Setelah kunci terisi, jalankan `php artisan config:cache` (update.sh sudah melakukannya lewat `optimize`).
+- Wajib HTTPS. Browser tidak mengizinkan push di http biasa.
+- Setiap orang mengaktifkannya di perangkatnya sendiri lewat **Pengaturan → Notifikasi**, lalu bisa mematikan jenis notifikasi yang tidak diinginkan.
+- iPhone/iPad: butuh iOS 16.4 atau lebih baru, dan Jitu Lead harus dipasang dulu lewat Bagikan → **Tambah ke Layar Utama**, baru notifikasi bisa diaktifkan.
+- Android/PC (Chrome, Edge, Firefox): cukup tekan Aktifkan. Boleh juga dipasang sebagai aplikasi lewat menu "Instal".
+- Worker antrean (`queue:work`) harus berjalan, karena notifikasi dikirim lewat antrean.
+
 ## Mengaktifkan AI Asisten
 
 AI Asisten membutuhkan kunci API Anthropic. Tambahkan di `/var/www/jitu-lead/.env` (sesuaikan folder instalasi), lalu muat ulang konfigurasi dan queue worker:

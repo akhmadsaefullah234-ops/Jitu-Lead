@@ -109,6 +109,7 @@ chown -R www-data:www-data "$APP_DIR"
 as_www composer install --no-dev --optimize-autoloader --no-interaction
 as_www php artisan migrate --force
 as_www php artisan filament:assets 2>/dev/null || true
+as_www php artisan push:keys
 as_www php artisan optimize
 
 # --- 4. does it answer? (through the secret link, while visitors still see the notice) ---

@@ -14,6 +14,14 @@ return [
     'support_email' => env('SUPPORT_EMAIL'),
     'support_whatsapp' => env('SUPPORT_WHATSAPP'),
 
+    // Web Push (notifications on phones and computers). Keys come from `php artisan push:keys`; never regenerate
+    // them once people have subscribed, because every device would have to subscribe again.
+    'push' => [
+        'public_key' => env('VAPID_PUBLIC_KEY'),
+        'private_key' => env('VAPID_PRIVATE_KEY'),
+        'subject' => env('VAPID_SUBJECT') ?: env('APP_URL', 'https://localhost'),
+    ],
+
     // Daily backup (php artisan backup:run, scheduled 02:00 WIB). See docs/deploy.md.
     'backup' => [
         // Local copies; each run is a dated folder. Kept this many days.
