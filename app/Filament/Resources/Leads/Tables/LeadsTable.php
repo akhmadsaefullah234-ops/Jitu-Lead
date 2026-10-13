@@ -22,7 +22,10 @@ class LeadsTable
     public static function configure(Table $table): Table
     {
         return $table
-            ->defaultSort('next_action_due_at')
+            // Newest first, so a lead just added by hand, from a form or from WhatsApp is on the first page.
+            // Sorting by "Tenggat" is one click away, and the Pipeline and Tugas pages order by urgency.
+            ->defaultSort('id', 'desc')
+            ->defaultPaginationPageOption(25)
             ->columns([
                 TextColumn::make('name')
                     ->label('Nama')
@@ -66,7 +69,7 @@ class LeadsTable
                     ->label('Masuk')
                     ->since()
                     ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->toggleable(),
             ])
             ->filters([
                 SelectFilter::make('stage')
