@@ -53,7 +53,7 @@ class AppPanelProvider extends PanelProvider
                 'warning' => Color::Amber,
                 'success' => Color::Green,
             ])
-            ->renderHook(PanelsRenderHook::HEAD_END, fn () => view('filament.theme'))
+            ->renderHook(PanelsRenderHook::HEAD_END, fn () => view('filament.theme').view('filament.pwa-head'))
             ->renderHook(PanelsRenderHook::BODY_START, fn () => app()->environment('staging') ? view('filament.staging-banner') : '')
             ->renderHook(PanelsRenderHook::AUTH_REGISTER_FORM_AFTER, fn () => view('filament.legal-links', ['register' => true]))
             ->renderHook(PanelsRenderHook::AUTH_LOGIN_FORM_AFTER, fn () => view('filament.legal-links'))

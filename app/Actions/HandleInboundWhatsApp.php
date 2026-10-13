@@ -15,6 +15,7 @@ use App\Models\Tenant;
 use App\Models\WaChannel;
 use App\Models\WaConversation;
 use App\Models\WaMessage;
+use App\Push\Alerts;
 use App\Support\CurrentTenant;
 use App\WhatsApp\InboundMessage;
 use App\WhatsApp\StatusUpdate;
@@ -40,9 +41,14 @@ class HandleInboundWhatsApp
             return null; // Providers retry deliveries; each message is stored once.
         }
 
+        $lead = null;
+        $isNewLead = false;
+
         try {
-            $message = DB::transaction(function () use ($channel, $incoming) {
-                $lead = Lead::query()->where('phone', $incoming->from)->latest('id')->first() ?? $this->createLead($incoming);
+            $message = DB::transaction(function () use ($channel, $incoming, &$lead, &$isNewLead) {
+                $lead = Lead::query()->where('phone', $incoming->from)->latest('id')->first();
+                $isNewLead = $lead === null;
+                $lead ??= $this->createLead($incoming);
 
                 $conversation = WaConversation::query()->firstOrCreate(
                     ['lead_id' => $lead->getKey()],
@@ -88,10 +94,22 @@ class HandleInboundWhatsApp
             });
 
             $this->queueAiReply($channel, $message);
+            $this->alert($lead, $message, $isNewLead, $incoming);
 
             return $message;
         } catch (UniqueConstraintViolationException) {
             return null; // The same delivery arrived twice at once.
+        }
+    }
+
+    /** A push notification to the people who should see this right away. Never allowed to break receiving the message. */
+    private function alert(Lead $lead, WaMessage $message, bool $isNewLead, InboundMessage $incoming): void
+    {
+        try {
+            $alerts = app(Alerts::class);
+            $isNewLead ? $alerts->newLead($lead, 'WhatsApp', $incoming->body) : $alerts->newMessage($lead, $message);
+        } catch (Throwable $e) {
+            report($e);
         }
     }
 

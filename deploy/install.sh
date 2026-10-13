@@ -92,6 +92,7 @@ grep -q '^APP_KEY=.\+' .env || as_www php artisan key:generate --force
 as_www php artisan migrate --force
 as_www php artisan filament:assets 2>/dev/null || true
 [ -e public/storage ] || [ -L public/storage ] || as_www php artisan storage:link 2>/dev/null || true
+as_www php artisan push:keys
 as_www php artisan optimize
 chmod 640 .env
 

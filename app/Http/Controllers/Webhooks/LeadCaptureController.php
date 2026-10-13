@@ -8,11 +8,13 @@ use App\Jobs\SendConversionEvents;
 use App\Models\LandingPage;
 use App\Models\Tenant;
 use App\Models\TrackingSetting;
+use App\Push\Alerts;
 use App\Support\CurrentTenant;
 use App\Tracking\ConversionPayload;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Throwable;
 
 /**
  * Public endpoint behind the agency's website forms and landing pages. The
@@ -52,7 +54,15 @@ class LeadCaptureController extends Controller
             $source = $page ? 'Landing: '.$page->title : (($data['source'] ?? null) ?: 'Formulir web');
             $campaign = array_filter(array_intersect_key($data, array_flip(self::CAMPAIGN_FIELDS)));
 
-            [, $created] = $register($data, $source, 'form', null, $campaign, $page?->property_id);
+            [$lead, $created] = $register($data, $source, 'form', null, $campaign, $page?->property_id);
+
+            if ($created) {
+                try {
+                    app(Alerts::class)->newLead($lead, $page ? 'landing page' : 'formulir web', $data['note'] ?? null);
+                } catch (Throwable $e) {
+                    report($e);
+                }
+            }
 
             if ($created && filled($data['event_id'] ?? null) && TrackingSetting::active()?->hasAny()) {
                 SendConversionEvents::dispatch($tenant->getKey(), ConversionPayload::make(
