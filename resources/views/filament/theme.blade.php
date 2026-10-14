@@ -44,9 +44,10 @@
     @media (min-width: 1024px) { .fi-main { padding-inline: 2rem; } }
 
     /* ===== Mobile: feels like an app (tab bar, floating add button, sheets, big touch targets) ===== */
-    .jl-tabbar, .jl-fab { display: none; }
+    .jl-tabbar, .jl-fab, .jl-menu-support { display: none; }
     @media (max-width: 1023px) {
-        body { padding-bottom: calc(4.4rem + env(safe-area-inset-bottom)); background: #f9fafb; }
+        html, body { background: #f9fafb; }
+        body { padding-bottom: calc(4.4rem + env(safe-area-inset-bottom)); }
         .fi-main-ctn, .fi-main { background: #f9fafb; }
         .fi-main { padding-inline: .75rem; padding-top: .5rem; }
         .fi-topbar { position: sticky; top: 0; z-index: 20; padding-top: env(safe-area-inset-top); }
@@ -68,10 +69,21 @@
         .jl-fab:active { transform: scale(.94); }
         body:has(.wa--open) .jl-tabbar, body:has(.wa--open) .jl-fab { display: none; }
         body:has(.wa--open) { padding-bottom: 0; }
+        .jl-menu-support { align-items: center; gap: .75rem; width: calc(100% - 1rem); margin: .25rem .5rem 1rem; padding: .7rem .75rem; min-height: 3rem;
+            border-radius: .6rem; color: rgba(255,255,255,.92); font-size: .95rem; font-weight: 500; background: rgba(255,255,255,.12); text-align: left; }
+        .jl-menu-support:active { background: rgba(255,255,255,.22); }
 
-        /* Help bubble sits bottom-left above the tab bar so it never covers the tabs or the add button */
-        .jl-support { left: 1rem !important; right: auto !important; bottom: calc(5rem + env(safe-area-inset-bottom)) !important; }
-        body:has(.wa--open) .jl-support { bottom: 1rem !important; }
+        /* Floating bits (tab bar, add button, help bubble) never sit on top of a drawer or a dialog */
+        body:has(.fi-sidebar-open) .jl-tabbar, body:has(.fi-sidebar-open) .jl-fab,
+        body:has(.fi-modal-open) .jl-tabbar, body:has(.fi-modal-open) .jl-fab { display: none; }
+        /* Room under the content so the last rows and the pager can scroll clear of the add button */
+        body:has(.jl-fab) { padding-bottom: calc(9rem + env(safe-area-inset-bottom)); }
+
+        /* Help lives in the menu on phones; the floating bubble only appears while the chat itself is open */
+        .jl-support:not(.jl-support--open) { display: none !important; }
+        .jl-support--open { left: .5rem !important; right: .5rem !important; bottom: calc(.5rem + env(safe-area-inset-bottom)) !important; z-index: 60 !important; }
+        .jl-support--open > div { width: 100% !important; max-height: 80dvh !important; }
+        .jl-menu-support { display: flex; }
 
         /* Cards instead of boxed tables */
         .fi-section, .fi-ta-ctn, .fi-wi-stats-overview-stat, .fi-wi-chart { border-radius: 1rem; border: 0; box-shadow: 0 1px 3px rgba(17,24,39,.08); }
@@ -86,7 +98,7 @@
         .fi-input-wrp { border-radius: .8rem; }
 
         /* Dialogs rise from the bottom like a sheet */
-        .fi-modal-window-ctn { align-items: flex-end !important; padding: 0 !important; }
+        .fi-modal-window-ctn { align-items: flex-end !important; padding: 0 !important; min-height: 100dvh; }
         .fi-modal-window { width: 100% !important; max-width: 100% !important; margin: 0 !important; border-radius: 1.25rem 1.25rem 0 0 !important;
             max-height: 92vh; padding-bottom: env(safe-area-inset-bottom); }
         .fi-modal-footer-actions { flex-direction: column-reverse; align-items: stretch; }

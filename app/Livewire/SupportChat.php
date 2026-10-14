@@ -8,6 +8,7 @@ use App\Support\CurrentTenant;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
+use Livewire\Attributes\On;
 use Livewire\Component;
 
 /**
@@ -27,6 +28,15 @@ class SupportChat extends Component
     private function thread(): ?SupportThread
     {
         return SupportThread::query()->where('user_id', auth()->id())->latest('id')->first();
+    }
+
+    /** The "Bantuan" item in the phone menu opens the chat. */
+    #[On('open-support')]
+    public function openChat(): void
+    {
+        if (! $this->open) {
+            $this->toggle();
+        }
     }
 
     public function toggle(): void
