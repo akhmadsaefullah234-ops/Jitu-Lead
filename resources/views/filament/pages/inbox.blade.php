@@ -107,6 +107,9 @@
                             <strong>Saran balasan AI</strong>
                             @if ($aiDraft->reason) <span style="color:#6b7280">({{ $aiDraft->reason }})</span> @endif
                             <div style="margin:.35rem 0;white-space:pre-wrap">{{ $aiDraft->body }}</div>
+                            @if ($aiDraft->suggestedAssets()->isNotEmpty())
+                                <div style="margin:.25rem 0;font-size:.8rem;color:#6b7280">Ikut terkirim: {{ $aiDraft->suggestedAssets()->pluck('title')->implode(', ') }}</div>
+                            @endif
                             <button type="button" wire:click="useAiDraft({{ $aiDraft->id }})" style="font-weight:600;color:#b91c1c">Pakai saran ini</button>
                             <button type="button" wire:click="discardAiDraft({{ $aiDraft->id }})" style="margin-left:.75rem;color:#6b7280">Buang</button>
                         @endif

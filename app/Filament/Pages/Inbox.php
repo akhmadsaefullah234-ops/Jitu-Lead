@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Actions\LearnFromReply;
+use App\Actions\SendLibraryItem;
 use App\Actions\SendWhatsAppMessage;
 use App\Enums\MessageStatus;
 use App\Filament\Resources\Leads\LeadResource;
@@ -138,8 +139,27 @@ class Inbox extends Page
         $conversation->pauseAiFor(config('whatsapp.ai_after_send_pause_seconds'));
         $this->markAiDraft($conversation, AiDraft::SENT);
         app(LearnFromReply::class)($conversation, $message);
+        $this->sendSuggestedAttachments($conversation);
         $this->draft = '';
         $this->usedAiDraft = null;
+    }
+
+    /** When the agent used an AI suggestion, the library items the AI picked go out right after the text. */
+    private function sendSuggestedAttachments(WaConversation $conversation): void
+    {
+        $draft = $this->usedAiDraft ? AiDraft::query()->where('conversation_id', $conversation->getKey())->find($this->usedAiDraft) : null;
+
+        foreach ($draft?->suggestedAssets() ?? [] as $asset) {
+            try {
+                $sent = app(SendLibraryItem::class)($conversation->refresh(), auth()->user(), $asset);
+
+                if ($sent->status === MessageStatus::Failed) {
+                    Notification::make()->title('Lampiran "'.$asset->title.'" gagal terkirim')->body($sent->error)->danger()->send();
+                }
+            } catch (WhatsAppException $e) {
+                Notification::make()->title('Lampiran "'.$asset->title.'" tidak terkirim')->body($e->getMessage())->danger()->send();
+            }
+        }
     }
 
     /** Typing in the box means a person is on this chat: the AI waits, and returns on its own once they stop. */
@@ -183,9 +203,7 @@ class Inbox extends Page
             ->modalSubmitActionLabel('Kirim')
             ->schema([
                 Select::make('asset_id')->label('Dari pustaka media')->searchable()->live()
-                    ->options(fn () => MediaFolder::query()->orderBy('position')->with(['assets' => fn ($q) => $q->where('active', true)->orderBy('title')])->get()
-                        ->filter(fn (MediaFolder $f) => $f->assets->isNotEmpty())
-                        ->mapWithKeys(fn (MediaFolder $f) => [$f->name => $f->assets->mapWithKeys(fn (MediaAsset $a) => [$a->getKey() => $a->title.($a->isLink() ? ' (link)' : '')])->all()])->all())
+                    ->options(fn () => MediaFolder::groupedOptions())
                     ->helperText('Kosongkan bila ingin mengunggah file sendiri.'),
                 FileUpload::make('upload')->label('Atau unggah file')->disk('local')->directory('wa-outbox')->visibility('private')
                     ->storeFileNamesIn('upload_name')->maxSize((int) (Library::MAX_BYTES / 1024))
@@ -206,8 +224,7 @@ class Inbox extends Page
 
                     $message = match (true) {
                         $conversation === null => throw new WhatsAppException('Pilih percakapan dulu.'),
-                        $asset?->isLink() => $send($conversation, auth()->user(), trim(($caption ? $caption."\n\n" : '').$asset->linkText())),
-                        $asset !== null => $send->sendFile($conversation, auth()->user(), (string) $asset->path, (string) $asset->original_name, $caption ?? $asset->title),
+                        $asset !== null => app(SendLibraryItem::class)($conversation, auth()->user(), $asset, $caption),
                         is_string($upload) => $send->sendFile($conversation, auth()->user(), $upload, (string) ($data['upload_name'] ?? basename($upload)), $caption),
                         default => throw new WhatsAppException('Pilih item dari pustaka atau unggah file.'),
                     };
