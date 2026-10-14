@@ -30,6 +30,35 @@ class CloudApiProvider implements WhatsAppProvider
         ]);
     }
 
+    public function sendMedia(string $to, string $type, string $mime, string $filename, string $bytes, ?string $caption = null): SendResult
+    {
+        if (blank($this->channel->credential('phone_number_id')) || blank($this->channel->credential('access_token'))) {
+            return SendResult::failed('Nomor resmi belum dikonfigurasi.', true);
+        }
+
+        // Meta takes the file first and hands back an id, which the message then refers to.
+        try {
+            $upload = $this->http()->timeout(60)->attach('file', $bytes, $filename, ['Content-Type' => $mime])
+                ->post($this->baseUrl().'/'.$this->channel->credential('phone_number_id').'/media', ['messaging_product' => 'whatsapp', 'type' => $mime]);
+        } catch (Throwable $e) {
+            return SendResult::failed('Tidak bisa menghubungi Meta: '.$e->getMessage(), true);
+        }
+
+        if (! $upload->successful() || blank($upload->json('id'))) {
+            return SendResult::failed($this->errorFrom($upload->json(), $upload->status()), SendResult::statusIsChannelProblem($upload->status()));
+        }
+
+        $media = array_filter(['id' => $upload->json('id'), 'caption' => $caption, 'filename' => $type === 'document' ? $filename : null], fn ($v) => $v !== null && $v !== '');
+
+        return $this->post([
+            'messaging_product' => 'whatsapp',
+            'recipient_type' => 'individual',
+            'to' => $this->digits($to),
+            'type' => $type,
+            $type => $media,
+        ]);
+    }
+
     public function sendTemplate(string $to, string $name, string $language, array $parameters = []): SendResult
     {
         $template = ['name' => $name, 'language' => ['code' => $language]];

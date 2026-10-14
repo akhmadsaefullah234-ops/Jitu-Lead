@@ -6,8 +6,12 @@ use App\Actions\LearnFromReply;
 use App\Actions\SendWhatsAppMessage;
 use App\Enums\MessageStatus;
 use App\Filament\Resources\Leads\LeadResource;
+use App\Filament\Resources\MediaAssets\MediaAssetResource;
+use App\Media\Library;
 use App\Models\AiDraft;
 use App\Models\Lead;
+use App\Models\MediaAsset;
+use App\Models\MediaFolder;
 use App\Models\WaConversation;
 use App\Models\WaTemplate;
 use App\WhatsApp\RouteDecision;
@@ -15,10 +19,13 @@ use App\WhatsApp\RouteSelector;
 use App\WhatsApp\WhatsAppException;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Url;
 
 /**
@@ -164,6 +171,65 @@ class Inbox extends Page
         AiDraft::query()->where('conversation_id', $conversation->getKey())
             ->whereIn('status', [AiDraft::PENDING, AiDraft::HANDOFF])
             ->update(['status' => $status]);
+    }
+
+    /** A picture or file from the media library or straight from the device, or a saved link. */
+    public function sendAttachmentAction(): Action
+    {
+        return Action::make('sendAttachment')
+            ->label('Lampiran')->icon(Heroicon::OutlinedPaperClip)->color('gray')
+            ->modalHeading('Kirim lampiran')
+            ->modalDescription('Pilih dari pustaka media (price list, foto rumah, denah, link Maps), atau unggah file baru.')
+            ->modalSubmitActionLabel('Kirim')
+            ->schema([
+                Select::make('asset_id')->label('Dari pustaka media')->searchable()->live()
+                    ->options(fn () => MediaFolder::query()->orderBy('position')->with(['assets' => fn ($q) => $q->where('active', true)->orderBy('title')])->get()
+                        ->filter(fn (MediaFolder $f) => $f->assets->isNotEmpty())
+                        ->mapWithKeys(fn (MediaFolder $f) => [$f->name => $f->assets->mapWithKeys(fn (MediaAsset $a) => [$a->getKey() => $a->title.($a->isLink() ? ' (link)' : '')])->all()])->all())
+                    ->helperText('Kosongkan bila ingin mengunggah file sendiri.'),
+                FileUpload::make('upload')->label('Atau unggah file')->disk('local')->directory('wa-outbox')->visibility('private')
+                    ->storeFileNamesIn('upload_name')->maxSize((int) (Library::MAX_BYTES / 1024))
+                    ->rules([fn (): \Closure => MediaAssetResource::fileRule()])->downloadable(false)->openable(false)
+                    ->visible(fn ($get) => blank($get('asset_id')))->required(fn ($get) => blank($get('asset_id')))
+                    ->helperText('JPG, PNG, PDF, Word, Excel, PowerPoint, CSV, atau TXT. Maksimal 10 MB.'),
+                Textarea::make('caption')->label('Keterangan (opsional)')->rows(2)->maxLength(1024),
+            ])
+            ->visible(fn () => ($d = $this->decision()) && $d->canSend() && ! $d->isPaid())
+            ->action(function (array $data) {
+                $conversation = $this->current();
+                $asset = filled($data['asset_id'] ?? null) ? MediaAsset::query()->where('active', true)->find($data['asset_id']) : null;
+                $upload = $data['upload'] ?? null;
+
+                try {
+                    $send = app(SendWhatsAppMessage::class);
+                    $caption = filled($data['caption'] ?? null) ? $data['caption'] : null;
+
+                    $message = match (true) {
+                        $conversation === null => throw new WhatsAppException('Pilih percakapan dulu.'),
+                        $asset?->isLink() => $send($conversation, auth()->user(), trim(($caption ? $caption."\n\n" : '').$asset->linkText())),
+                        $asset !== null => $send->sendFile($conversation, auth()->user(), (string) $asset->path, (string) $asset->original_name, $caption ?? $asset->title),
+                        is_string($upload) => $send->sendFile($conversation, auth()->user(), $upload, (string) ($data['upload_name'] ?? basename($upload)), $caption),
+                        default => throw new WhatsAppException('Pilih item dari pustaka atau unggah file.'),
+                    };
+                } catch (WhatsAppException $e) {
+                    Notification::make()->title($e->getMessage())->danger()->send();
+
+                    return;
+                } finally {
+                    if (is_string($upload) && $upload !== '') {
+                        Storage::disk('local')->delete($upload);
+                    }
+                }
+
+                if ($message->status === MessageStatus::Failed) {
+                    Notification::make()->title('Lampiran gagal terkirim')->body($message->error)->danger()->send();
+
+                    return;
+                }
+
+                $conversation->pauseAiFor(config('whatsapp.ai_after_send_pause_seconds'));
+                $this->markAiDraft($conversation, AiDraft::SENT);
+            });
     }
 
     /** Only reachable when the free windows are closed and no gateway is connected. */

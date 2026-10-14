@@ -71,9 +71,11 @@ function createServer({ config, sessions }) {
           return reply(200, { status: 'disconnected' });
 
         case 'POST /messages': {
-          const body = await readJson(req);
-          if ((body.type ?? 'text') !== 'text') return reply(400, { error: 'Hanya pesan teks yang didukung.' });
-          return reply(200, { id: await sessions.send(id, body.to, body.text) });
+          const body = await readJson(req, 24 * 1024 * 1024);
+          const type = body.type ?? 'text';
+          if (type === 'text') return reply(200, { id: await sessions.send(id, body.to, body.text) });
+          if (type === 'image' || type === 'document') return reply(200, { id: await sessions.sendMedia(id, body.to, { type, caption: body.text, ...body.media }) });
+          return reply(400, { error: 'Jenis pesan tidak didukung.' });
         }
 
         default:

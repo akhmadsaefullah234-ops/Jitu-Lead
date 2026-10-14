@@ -6,6 +6,7 @@ const { deliver } = require('./webhook');
 
 const ID = /^[A-Za-z0-9_-]{8,128}$/;
 const E164 = /^\+?\d{6,15}$/;
+const MAX_SEND_BYTES = 16 * 1024 * 1024; // WhatsApp's own limit for files is about 16 MB
 const MARKER = 'needs_relink';
 const V7 = 'baileys7'; // written once a login has connected under the current library
 
@@ -246,6 +247,25 @@ class SessionManager {
     if (typeof text !== 'string' || text.trim() === '' || text.length > 4096) throw new SessionError('Isi pesan kosong atau terlalu panjang.');
 
     return s.conn.send(to.replace(/^\+/, '') + '@s.whatsapp.net', text);
+  }
+
+  /** Sends a picture or a file. `media`: { type: 'image'|'document', caption?, mime_type, filename?, data (base64) }. */
+  async sendMedia(id, to, media) {
+    const s = this.get(id);
+
+    if (s?.status === 'needs_relink') throw new SessionError('Sesi WhatsApp perlu scan ulang.', 503);
+    if (!s || s.status !== 'connected' || !s.conn) throw new SessionError('Sesi WhatsApp belum terhubung.', 503);
+    if (typeof to !== 'string' || !E164.test(to)) throw new SessionError('Nomor tujuan tidak valid.');
+    if (typeof media.data !== 'string' || typeof media.mime_type !== 'string' || !/^[\w.+-]+\/[\w.+-]+$/.test(media.mime_type)) throw new SessionError('Data file tidak valid.');
+    if (media.caption != null && (typeof media.caption !== 'string' || media.caption.length > 1024)) throw new SessionError('Keterangan terlalu panjang.');
+
+    const buffer = Buffer.from(media.data, 'base64');
+    if (buffer.length === 0) throw new SessionError('File kosong.');
+    if (buffer.length > MAX_SEND_BYTES) throw new SessionError('File lebih dari 16 MB.', 413);
+
+    return s.conn.sendMedia(to.replace(/^\+/, '') + '@s.whatsapp.net', {
+      type: media.type, buffer, mimetype: media.mime_type, filename: String(media.filename ?? 'file').slice(0, 120), caption: media.caption || undefined,
+    });
   }
 
   async logout(id) {

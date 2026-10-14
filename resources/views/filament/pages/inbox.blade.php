@@ -79,6 +79,9 @@
                                     <div class="b">[Gambar sedang dimuat…]</div>
                                 @endif
                                 @if (filled($m->body))<div class="b" style="margin-top:.25rem">{{ $m->body }}</div>@endif
+                            @elseif ($m->type === 'document' && isset($m->media['path']))
+                                <a class="b" href="{{ route('wa.media', $m->id) }}" target="_blank" rel="noopener" style="display:block;font-weight:600;text-decoration:underline">&#128206; {{ $m->media['filename'] ?? 'Dokumen' }}</a>
+                                @if (filled($m->body))<div class="b" style="margin-top:.25rem">{{ $m->body }}</div>@endif
                             @else
                                 <div class="b">{{ $m->body ?? '['.$m->type.']' }}</div>
                             @endif
@@ -117,6 +120,7 @@
                         {{ $this->sendPaidTemplateAction }}
                     @elseif ($decision->canSend())
                         <textarea rows="2" wire:model.live.debounce.1500ms="draft" placeholder="Tulis pesan" aria-label="Pesan" x-on:keydown.enter.prevent="if (! $event.shiftKey) $wire.send()"></textarea>
+                        {{ $this->sendAttachmentAction }}
                         <x-filament::button wire:click="send" wire:loading.attr="disabled">Kirim</x-filament::button>
                     @else
                         <span class="wa-empty" style="padding:.3rem">Hubungkan nomor di menu Koneksi WhatsApp.</span>

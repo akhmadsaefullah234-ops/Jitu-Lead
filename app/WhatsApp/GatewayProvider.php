@@ -27,6 +27,14 @@ class GatewayProvider implements WhatsAppProvider
         return $this->post('/messages', ['to' => $to, 'type' => 'text', 'text' => $text]);
     }
 
+    public function sendMedia(string $to, string $type, string $mime, string $filename, string $bytes, ?string $caption = null): SendResult
+    {
+        return $this->post('/messages', [
+            'to' => $to, 'type' => $type, 'text' => $caption,
+            'media' => ['mime_type' => $mime, 'filename' => $filename, 'data' => base64_encode($bytes)],
+        ], timeout: 60);
+    }
+
     public function sendTemplate(string $to, string $name, string $language, array $parameters = []): SendResult
     {
         return SendResult::failed('Gateway tidak mendukung template. Gunakan nomor resmi.');
@@ -177,14 +185,14 @@ class GatewayProvider implements WhatsAppProvider
         return $response->successful() ? null : "Gateway menjawab HTTP {$response->status()}.";
     }
 
-    private function post(string $path, array $payload): SendResult
+    private function post(string $path, array $payload, ?int $timeout = null): SendResult
     {
         if ($problem = $this->configurationProblem()) {
             return SendResult::failed($problem, true);
         }
 
         try {
-            $response = $this->http()->post($this->url($path), $payload);
+            $response = $this->http()->timeout($timeout ?? config('whatsapp.timeout'))->post($this->url($path), $payload);
         } catch (Throwable $e) {
             return SendResult::failed('Tidak bisa menghubungi gateway: '.$e->getMessage(), true);
         }

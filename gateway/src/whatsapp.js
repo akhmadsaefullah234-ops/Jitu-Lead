@@ -271,6 +271,16 @@ function connector({ log, decryptWaitMs = 45000, lookupRetryMs = 3000, loadLib =
 
         return sent.key.id;
       },
+      async sendMedia(jid, { type, buffer, mimetype, filename, caption }) {
+        const content = type === 'image' ? { image: buffer, mimetype, caption } : { document: buffer, mimetype, fileName: filename, caption };
+        const sent = await sock.sendMessage(jid, content);
+        if (sent?.message) {
+          sentCache.set(sent.key.id, sent.message);
+          if (sentCache.size > 500) sentCache.delete(sentCache.keys().next().value);
+        }
+
+        return sent.key.id;
+      },
       async logout() {
         closed = true;
         clearPending();
