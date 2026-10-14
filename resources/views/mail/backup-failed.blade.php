@@ -1,6 +1,6 @@
 Backup harian JITU LEAD pada {{ $when }} GAGAL.
 
-{{ $message }}
+{{ $errorMessage }}
 
 Langkah:
 {{ $steps }}

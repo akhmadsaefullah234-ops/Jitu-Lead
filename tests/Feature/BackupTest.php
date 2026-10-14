@@ -153,6 +153,16 @@ class BackupTest extends TestCase
         Mail::assertSent(BackupFailed::class, fn ($m) => $m->hasTo('bantuan@example.com'));
     }
 
+    public function test_the_failure_email_renders_with_the_error_text(): void
+    {
+        $run = BackupRun::create(['status' => BackupRun::FAILED, 'started_at' => now(), 'message' => 'pg_dump gagal', 'steps' => [['label' => 'Database', 'status' => 'gagal', 'note' => null]]]);
+
+        $html = (new BackupFailed($run))->render();
+
+        $this->assertStringContainsString('pg_dump gagal', $html);
+        $this->assertStringContainsString('Database: gagal', $html);
+    }
+
     public function test_a_failed_off_server_copy_counts_as_failure(): void
     {
         Mail::fake();

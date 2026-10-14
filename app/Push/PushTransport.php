@@ -3,9 +3,11 @@
 namespace App\Push;
 
 use App\Models\PushSubscription;
+use GuzzleHttp\Client;
 use Illuminate\Support\Collection;
 use Minishlink\WebPush\Subscription;
 use Minishlink\WebPush\WebPush;
+use Psr\Http\Client\ClientInterface;
 
 /**
  * Delivers one notification to many devices through the browsers' push services.
@@ -54,7 +56,7 @@ class PushTransport
             'subject' => config('jitu.push.subject'),
             'publicKey' => config('jitu.push.public_key'),
             'privateKey' => config('jitu.push.private_key'),
-        ]], ['TTL' => 3600, 'urgency' => 'high'], 10);
+        ]], ['TTL' => 3600, 'urgency' => 'high'], $this->httpClient(), logger: app('log'));
 
         $byEndpoint = [];
         $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -84,5 +86,11 @@ class PushTransport
         }
 
         return collect($byEndpoint)->mapWithKeys(fn ($v) => [$v[0] => $v[1]])->all();
+    }
+
+    /** Push services answer fast; a slow or redirecting one must not hold the queue worker. */
+    protected function httpClient(): ClientInterface
+    {
+        return new Client(['timeout' => 10, 'connect_timeout' => 5, 'allow_redirects' => false, 'http_errors' => false]);
     }
 }

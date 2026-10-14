@@ -20,7 +20,7 @@ class BackupFailed extends Mailable
     {
         return new Content(text: 'mail.backup-failed', with: [
             'when' => $this->run->started_at->timezone(config('app.timezone'))->format('d M Y H:i'),
-            'message' => $this->run->message,
+            'errorMessage' => $this->run->message,
             'steps' => collect($this->run->steps)->map(fn ($s) => "- {$s['label']}: {$s['status']}".($s['note'] ? " ({$s['note']})" : ''))->implode("\n"),
             'url' => url('/admin/backup-runs'),
         ]);
