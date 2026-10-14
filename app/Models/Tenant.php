@@ -115,6 +115,11 @@ class Tenant extends Model
         return $this->hasMany(LostReason::class);
     }
 
+    public function mediaFolders(): HasMany
+    {
+        return $this->hasMany(MediaFolder::class)->orderBy('position');
+    }
+
     public function followUpRules(): HasMany
     {
         return $this->hasMany(FollowUpRule::class);

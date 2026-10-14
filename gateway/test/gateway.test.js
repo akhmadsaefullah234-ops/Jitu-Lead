@@ -22,7 +22,7 @@ async function boot() {
   const connector = ({ authDir, handlers }) => {
     fs.mkdirSync(authDir, { recursive: true });
     const sent = [];
-    const conn = { handlers, sent, loggedOut: false, send: async (jid, text) => (sent.push({ jid, text }), 'wamid.' + sent.length), logout: async () => { conn.loggedOut = true; }, end() {} };
+    const conn = { handlers, sent, loggedOut: false, sendMedia: async (jid, m) => (sent.push({ jid, media: m }), 'wamid.m' + sent.length), send: async (jid, text) => (sent.push({ jid, text }), 'wamid.' + sent.length), logout: async () => { conn.loggedOut = true; }, end() {} };
     sockets.push(conn);
     return conn;
   };
@@ -141,6 +141,26 @@ test('webhook ditandatangani HMAC-SHA256 dan tidak diulang untuk penolakan tetap
   assert.equal(tries, 3);
 });
 
+test('kirim gambar dan dokumen lewat POST /messages; data rusak, jenis asing, dan ukuran berlebih ditolak', async () => {
+  const g = await boot();
+  await g.call('POST', '/session/start', HOOK);
+  g.sockets[0].handlers.onOpen();
+  const data = Buffer.from('PDFDATA').toString('base64');
+
+  const doc = await g.call('POST', '/messages', { to: '+6281234567890', type: 'document', text: 'Price list', media: { mime_type: 'application/pdf', filename: 'harga.pdf', data } });
+  assert.equal(doc.status, 200);
+  assert.equal(doc.body.id, 'wamid.m1');
+  assert.deepEqual(g.sockets[0].sent[0].media, { type: 'document', buffer: Buffer.from('PDFDATA'), mimetype: 'application/pdf', filename: 'harga.pdf', caption: 'Price list' });
+  assert.equal(g.sockets[0].sent[0].jid, '6281234567890@s.whatsapp.net');
+
+  assert.equal((await g.call('POST', '/messages', { to: '+6281234567890', type: 'image', media: { mime_type: 'image/png', data } })).status, 200);
+  assert.equal((await g.call('POST', '/messages', { to: '+6281234567890', type: 'video', media: { mime_type: 'video/mp4', data } })).status, 400);
+  assert.equal((await g.call('POST', '/messages', { to: '+6281234567890', type: 'image', media: { mime_type: 'bukan mime', data } })).status, 400);
+  assert.equal((await g.call('POST', '/messages', { to: '+6281234567890', type: 'image', media: { mime_type: 'image/png', data: '' } })).status, 400);
+  assert.equal((await g.call('POST', '/messages', { to: 'abc', type: 'image', media: { mime_type: 'image/png', data } })).status, 400);
+  g.close();
+});
+
 test('toInbound melewatkan grup dan pesan sendiri', () => {
   const base = { key: { id: 'a', remoteJid: '6281@s.whatsapp.net' }, message: { conversation: 'hi' }, pushName: 'Siti', messageTimestamp: 1790000001 };
   assert.equal(toInbound(base).from, '6281');
@@ -215,6 +235,15 @@ test('connector: gambar diunduh dan dikirim ke CRM; gagal atau terlalu besar tid
   assert.deepEqual(by.bad.media, { mime_type: 'image/png', error: 'download_failed' });
   assert.deepEqual(by.big.media, { mime_type: 'image/png', error: 'too_large' });
   assert.ok(f.logs.some((l) => l.level === 'warn' && l.id === 'bad' && /gagal diunduh/.test(l.text)));
+});
+
+test('connector: sendMedia mengirim gambar dengan keterangan dan dokumen dengan nama file', async () => {
+  const f = await fakeConnector();
+  const buffer = Buffer.from('x');
+  const imageId = await f.conn.sendMedia('6281234567890@s.whatsapp.net', { type: 'image', buffer, mimetype: 'image/jpeg', filename: 'a.jpg', caption: 'Fasad' });
+  const docId = await f.conn.sendMedia('6281234567890@s.whatsapp.net', { type: 'document', buffer, mimetype: 'application/pdf', filename: 'harga.pdf', caption: undefined });
+  assert.equal(imageId, 'out0');
+  assert.equal(docId, 'out1');
 });
 
 test('connector: CIPHERTEXT menunggu retry; bila terbaca, diteruskan; bila tidak, dicatat dan dihitung gagal', async () => {

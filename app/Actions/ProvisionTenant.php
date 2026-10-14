@@ -6,6 +6,7 @@ use App\Ai\Defaults;
 use App\Enums\Role;
 use App\Enums\StageRequirement;
 use App\Enums\StageType;
+use App\Media\Library;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Support\CurrentTenant;
@@ -97,6 +98,10 @@ class ProvisionTenant
                         'body' => $body,
                         'active' => false,
                     ]);
+                }
+
+                foreach (Library::FOLDERS as $position => $folder) {
+                    $tenant->mediaFolders()->create(['name' => $folder, 'position' => $position + 1]);
                 }
 
                 foreach (self::SOURCES as [$sourceName, $type]) {

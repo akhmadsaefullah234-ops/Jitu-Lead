@@ -14,6 +14,13 @@ interface WhatsAppProvider
     public function sendText(string $to, string $text): SendResult;
 
     /**
+     * A picture (`image`) or file (`document`) with an optional caption. Only allowed inside a chat window; never a template.
+     *
+     * @param  string  $bytes  The file content.
+     */
+    public function sendMedia(string $to, string $type, string $mime, string $filename, string $bytes, ?string $caption = null): SendResult;
+
+    /**
      * @param  array<int, string>  $parameters  Positional template body parameters.
      */
     public function sendTemplate(string $to, string $name, string $language, array $parameters = []): SendResult;

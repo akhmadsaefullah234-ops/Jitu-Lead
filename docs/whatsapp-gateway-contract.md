@@ -38,6 +38,15 @@ CRM memanggil endpoint ini tiap beberapa detik selama dialog terbuka, dan mengam
 { "to": "+6281234567890", "type": "text", "text": "Isi pesan" }
 ```
 
+Gambar dan file:
+
+```json
+{ "to": "+6281234567890", "type": "image", "text": "keterangan (opsional)",
+  "media": { "mime_type": "image/jpeg", "filename": "fasad.jpg", "data": "<base64>" } }
+```
+
+`type` bisa `image` atau `document` (PDF, Word, Excel, dll). Batas 16 MB per file; isi permintaan hingga 24 MB. File kosong atau `mime_type` tidak valid dijawab 400, file terlalu besar 413.
+
 Nomor tujuan dalam format E.164 dengan awalan +. Balasan 2xx dengan `{"id": "<id pesan di gateway>"}`. Balasan lain: `{"error": "alasan"}`. Kode 401, 403, atau 5xx menandai nomor bermasalah dan CRM mencoba nomor gateway cadangan.
 
 ## Gateway memanggil CRM
