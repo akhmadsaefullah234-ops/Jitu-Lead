@@ -11,6 +11,7 @@
 
     $here = rtrim(url()->current(), '/');
     $onLeadList = $here === rtrim(LeadResource::getUrl('index'), '/');
+    $supportUnread = (bool) \App\Models\SupportThread::query()->where('user_id', auth()->id())->latest('id')->first()?->user_unread;
     $badge = Inbox::canAccess() ? Inbox::getNavigationBadge() : null;
 @endphp
 <nav class="jl-tabbar" aria-label="Menu utama">
@@ -25,7 +26,7 @@
         </a>
     @endforeach
     <button type="button" class="jl-tab" x-data x-on:click="$store.sidebar.open()" aria-label="Buka semua menu">
-        <span class="jl-tab-icon"><x-filament::icon icon="heroicon-o-bars-3" class="h-6 w-6" /></span>
+        <span class="jl-tab-icon"><x-filament::icon icon="heroicon-o-bars-3" class="h-6 w-6" />@if ($supportUnread)<span class="jl-tab-badge" style="min-width:.7rem;height:.7rem;padding:0"></span>@endif</span>
         <span>Menu</span>
     </button>
 </nav>

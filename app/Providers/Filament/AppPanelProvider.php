@@ -58,6 +58,7 @@ class AppPanelProvider extends PanelProvider
             ->renderHook(PanelsRenderHook::AUTH_REGISTER_FORM_AFTER, fn () => view('filament.legal-links', ['register' => true]))
             ->renderHook(PanelsRenderHook::AUTH_LOGIN_FORM_AFTER, fn () => view('filament.legal-links'))
             ->renderHook(PanelsRenderHook::USER_MENU_BEFORE, fn () => Filament::getTenant() ? view('filament.plan-badge') : '')
+            ->renderHook(PanelsRenderHook::SIDEBAR_NAV_END, fn () => Filament::getTenant() && auth()->check() ? view('filament.support-menu-item') : '')
             ->renderHook(PanelsRenderHook::BODY_END, fn () => Filament::getTenant() && auth()->check() ? view('filament.mobile-nav') : '')
             ->renderHook(PanelsRenderHook::BODY_END, fn () => Filament::getTenant() && auth()->check() ? Blade::render('@livewire(\\App\\Livewire\\PlanPopup::class) @livewire(\\App\\Livewire\\SupportChat::class)') : '')
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
