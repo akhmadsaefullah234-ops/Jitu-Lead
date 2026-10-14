@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Actions\DemoData;
 use App\Enums\Role;
+use App\Filament\Widgets\BannerSlider;
 use App\Filament\Widgets\GettingStarted;
 use App\Filament\Widgets\LeadsBySource;
 use App\Filament\Widgets\LeadsByStage;
@@ -31,7 +32,7 @@ class Dashboard extends BaseDashboard
 
     public function getWidgets(): array
     {
-        return [GettingStarted::class, SalesStats::class, LeadsByStage::class, LeadsBySource::class, OverdueTasks::class, RecentLeads::class];
+        return [BannerSlider::class, GettingStarted::class, SalesStats::class, LeadsByStage::class, LeadsBySource::class, OverdueTasks::class, RecentLeads::class];
     }
 
     private function isAdmin(): bool
