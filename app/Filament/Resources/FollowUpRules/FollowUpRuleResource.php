@@ -4,6 +4,7 @@ namespace App\Filament\Resources\FollowUpRules;
 
 use App\Filament\Resources\FollowUpRules\Pages\ManageFollowUpRules;
 use App\Models\FollowUpRule;
+use App\Models\MediaFolder;
 use App\Models\Stage;
 use App\WhatsApp\TemplateRenderer;
 use BackedEnum;
@@ -54,6 +55,9 @@ class FollowUpRuleResource extends Resource
                 ->helperText('Contoh: lead masuk 9 Oktober pukul 12:00 dengan aturan H+1 jam 09:00, pesan terkirim 10 Oktober pukul 09:00.'),
             Textarea::make('body')->label('Isi pesan')->required()->rows(5)->maxLength(1000)
                 ->helperText("Variabel yang bisa dipakai: $placeholders"),
+            Select::make('media_asset_id')->label('Lampiran dari pustaka media (opsional)')->searchable()
+                ->options(fn () => MediaFolder::groupedOptions())
+                ->helperText('Dikirim tepat setelah pesan di atas, misalnya price list atau foto rumah. Tidak terkirim bila jalur chat belum terbuka.'),
             Toggle::make('active')->label('Aktif')->default(true),
         ]);
     }

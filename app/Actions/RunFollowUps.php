@@ -15,6 +15,7 @@ use App\Support\CurrentTenant;
 use App\WhatsApp\RouteKind;
 use App\WhatsApp\RouteSelector;
 use App\WhatsApp\TemplateRenderer;
+use App\WhatsApp\WhatsAppException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
@@ -36,6 +37,7 @@ class RunFollowUps
         private SendWhatsAppMessage $send,
         private RouteSelector $routes,
         private TemplateRenderer $renderer,
+        private SendLibraryItem $sendItem,
     ) {}
 
     /**
@@ -131,9 +133,29 @@ class RunFollowUps
         $text = $this->renderer->render($rule->body, $lead, $actor, $tenant->name)['text'];
         $message = ($this->send)($conversation, $actor, $text);
 
-        return $message->status === MessageStatus::Failed
-            ? $this->log($rule, $lead, 'failed', (string) $message->error)
-            : $this->log($rule, $lead, 'sent', $rule->name);
+        if ($message->status === MessageStatus::Failed) {
+            return $this->log($rule, $lead, 'failed', (string) $message->error);
+        }
+
+        return $this->log($rule, $lead, 'sent', $rule->name.$this->attach($rule, $conversation, $actor));
+    }
+
+    /** The rule's library item follows the text. A problem with it never undoes the message already sent. */
+    private function attach(FollowUpRule $rule, WaConversation $conversation, User $actor): string
+    {
+        $asset = $rule->media_asset_id ? $rule->mediaAsset()->where('active', true)->first() : null;
+
+        if ($asset === null) {
+            return '';
+        }
+
+        try {
+            $sent = ($this->sendItem)($conversation->refresh(), $actor, $asset);
+        } catch (WhatsAppException $e) {
+            return ' (lampiran gagal: '.$e->getMessage().')';
+        }
+
+        return $sent->status === MessageStatus::Failed ? ' (lampiran gagal: '.$sent->error.')' : ' + '.$asset->title;
     }
 
     private function actorFor(Tenant $tenant, Lead $lead): ?User

@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['name', 'stage_id', 'delay_days', 'send_time', 'body', 'active'])]
+#[Fillable(['name', 'stage_id', 'delay_days', 'send_time', 'body', 'active', 'media_asset_id'])]
 class FollowUpRule extends Model
 {
     use BelongsToTenant;
@@ -24,11 +24,21 @@ class FollowUpRule extends Model
     protected static function booted(): void
     {
         static::saving(function (FollowUpRule $rule) {
+            if ($rule->media_asset_id !== null && $rule->isDirty('media_asset_id')
+                && ! MediaAsset::withoutGlobalScopes()->whereKey($rule->media_asset_id)->where('tenant_id', $rule->tenant_id ?? app(CurrentTenant::class)->id())->exists()) {
+                throw new \LogicException('Rule attachment must belong to the rule\'s tenant.');
+            }
+
             if ($rule->stage_id !== null && $rule->isDirty('stage_id')
                 && ! Stage::withoutGlobalScopes()->whereKey($rule->stage_id)->where('tenant_id', $rule->tenant_id ?? app(CurrentTenant::class)->id())->exists()) {
                 throw new \LogicException('Rule stage must belong to the rule\'s tenant.');
             }
         });
+    }
+
+    public function mediaAsset(): BelongsTo
+    {
+        return $this->belongsTo(MediaAsset::class);
     }
 
     public function stage(): BelongsTo
