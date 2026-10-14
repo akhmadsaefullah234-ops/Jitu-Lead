@@ -4,6 +4,7 @@ namespace App\Privacy;
 
 use App\Models\Tenant;
 use App\Models\User;
+use App\WhatsApp\MediaStore;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -35,6 +36,7 @@ class TenantEraser
         });
 
         Storage::disk('public')->deleteDirectory("landing/$id");
+        MediaStore::deleteTenantFiles($id);
         Log::info('Agensi dihapus oleh adminnya', ['tenant_id' => $id, 'actor_id' => $actor->getKey(), 'members_removed' => $removed]);
 
         return ['members_removed' => $removed];

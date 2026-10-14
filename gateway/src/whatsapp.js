@@ -98,9 +98,13 @@ function toInbound(msg) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function connector({ log, decryptWaitMs = 45000, lookupRetryMs = 3000, loadLib = loadBaileys }) {
+// Pictures bigger than this are not sent to the CRM (the chat still shows that a picture arrived).
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+function connector({ log, decryptWaitMs = 45000, lookupRetryMs = 3000, loadLib = loadBaileys, download = null, maxImageBytes = MAX_IMAGE_BYTES }) {
   return ({ authDir, handlers }) => {
     let sock;
+    let fetchMedia = null;
     let closed = false;
     const pending = new Map(); // message id -> timer, for undecryptable messages awaiting WhatsApp's retry
     const sentCache = new Map(); // recent outgoing messages, which WhatsApp may ask us to resend
@@ -122,6 +126,33 @@ function connector({ log, decryptWaitMs = 45000, lookupRetryMs = 3000, loadLib =
       }
 
       return null;
+    }
+
+    /** Downloads and decrypts a picture so the CRM can show it. A failure only costs the picture, never the message. */
+    async function withMedia(msg, inbound) {
+      if (inbound.type !== 'image' || !fetchMedia) return inbound;
+
+      const info = msg.message?.imageMessage ?? {};
+      const mime = info.mimetype || 'image/jpeg';
+      const size = Number(info.fileLength?.toNumber ? info.fileLength.toNumber() : info.fileLength) || 0;
+
+      if (size > maxImageBytes) {
+        log.info({ id: msg.key?.id, bytes: size }, 'gambar terlalu besar, tidak dikirim ke CRM');
+
+        return { ...inbound, media: { mime_type: mime, error: 'too_large' } };
+      }
+
+      try {
+        const buffer = await fetchMedia(msg);
+
+        if (buffer.length > maxImageBytes) return { ...inbound, media: { mime_type: mime, error: 'too_large' } };
+
+        return { ...inbound, media: { mime_type: mime, data: buffer.toString('base64') } };
+      } catch (err) {
+        log.warn({ id: msg.key?.id, err: err.message }, 'gambar gagal diunduh dari WhatsApp');
+
+        return { ...inbound, media: { mime_type: mime, error: 'download_failed' } };
+      }
     }
 
     function skipped(msg, reason, quiet) {
@@ -168,13 +199,13 @@ function connector({ log, decryptWaitMs = 45000, lookupRetryMs = 3000, loadLib =
           const phone = await phoneForLid(c.lid);
           if (phone) {
             handlers.onDecryptOk?.();
-            handlers.onMessage(build(msg, phone));
+            handlers.onMessage(await withMedia(msg, build(msg, phone)));
           } else {
             log.warn({ id, chat: masked(c.lid) }, 'pesan tidak diteruskan ke CRM: nomor HP pengirim tidak diketahui (LID tanpa pemetaan)');
           }
         } else {
           handlers.onDecryptOk?.();
-          handlers.onMessage(c.inbound);
+          handlers.onMessage(await withMedia(msg, c.inbound));
         }
       }
     }
@@ -187,6 +218,7 @@ function connector({ log, decryptWaitMs = 45000, lookupRetryMs = 3000, loadLib =
       const { state, saveCreds } = await useAtomicAuthState(authDir, baileys);
       const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: undefined }));
       const baileysLog = log.child({ module: 'baileys' }, { level: 'warn' });
+      fetchMedia = download ?? ((m) => baileys.downloadMediaMessage(m, 'buffer', {}, { logger: baileysLog, reuploadRequest: sock.updateMediaMessage }));
 
       sock = makeWASocket({
         version,

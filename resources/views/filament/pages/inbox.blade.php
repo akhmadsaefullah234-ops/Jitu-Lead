@@ -70,7 +70,18 @@
                 <div class="wa-msgs" x-data x-init="$el.scrollTop = $el.scrollHeight" x-on:livewire:updated.window="$el.scrollTop = $el.scrollHeight">
                     @forelse ($conversation->messages as $m)
                         <div wire:key="m-{{ $m->id }}" class="wa-m {{ $m->direction === 'out' ? 'out' : '' }} {{ $m->channel && ! $m->channel->isOfficial() ? 'gw' : '' }} {{ $m->status === \App\Enums\MessageStatus::Failed ? 'failed' : '' }}">
-                            <div class="b">{{ $m->body ?? '['.$m->type.']' }}</div>
+                            @if ($m->type === 'image')
+                                @if (isset($m->media['path']))
+                                    <a href="{{ route('wa.media', $m->id) }}" target="_blank" rel="noopener"><img src="{{ route('wa.media', $m->id) }}" alt="Gambar dari chat" loading="lazy" style="display:block;max-width:100%;max-height:18rem;border-radius:.5rem"></a>
+                                @elseif (isset($m->media['error']))
+                                    <div class="b">[Gambar tidak bisa ditampilkan{{ ($m->media['error'] ?? '') === 'too_large' ? ': ukurannya terlalu besar' : '' }}]</div>
+                                @else
+                                    <div class="b">[Gambar sedang dimuat…]</div>
+                                @endif
+                                @if (filled($m->body))<div class="b" style="margin-top:.25rem">{{ $m->body }}</div>@endif
+                            @else
+                                <div class="b">{{ $m->body ?? '['.$m->type.']' }}</div>
+                            @endif
                             <div class="meta">
                                 {{ $m->sent_at?->format('d M H:i') }}
                                 @if ($m->channel) · {{ $m->channel->name }}@endif

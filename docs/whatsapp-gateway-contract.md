@@ -59,6 +59,15 @@ Permintaan tanpa tanda tangan yang benar ditolak (401). CRM menyimpan setiap `id
 
 Nomor baru otomatis menjadi lead dan dibagi ke agen.
 
+Gambar: `type` bernilai `image`, `text` berisi keterangan gambar, dan gambarnya dikirim di dalam webhook:
+
+```json
+{ "event": "message", "id": "m124", "from": "6281234567890", "type": "image", "text": "keterangan",
+  "media": { "mime_type": "image/jpeg", "data": "<base64>" } }
+```
+
+Batas 5 MB. Bila gambar gagal diunduh atau terlalu besar, kirim `media` tanpa `data` tetapi dengan `"error": "download_failed"` atau `"too_large"`; pesannya tetap masuk. CRM memeriksa isi file sebenarnya (hanya JPEG, PNG, WebP, GIF) dan menyimpannya di disk privat, bukan di database.
+
 ### Status pesan keluar
 
 ```json

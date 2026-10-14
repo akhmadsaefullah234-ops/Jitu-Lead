@@ -6,6 +6,7 @@ use App\Enums\AiMode;
 use App\Enums\MessageStatus;
 use App\Enums\Role;
 use App\Enums\WaChannelStatus;
+use App\Jobs\FetchWhatsAppMedia;
 use App\Jobs\GenerateAiReplyJob;
 use App\Mail\WhatsAppNeedsRelink;
 use App\Models\Lead;
@@ -18,6 +19,7 @@ use App\Models\WaMessage;
 use App\Push\Alerts;
 use App\Support\CurrentTenant;
 use App\WhatsApp\InboundMessage;
+use App\WhatsApp\MediaStore;
 use App\WhatsApp\StatusUpdate;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -44,8 +46,18 @@ class HandleInboundWhatsApp
         $lead = null;
         $isNewLead = false;
 
+        // A gateway sends the picture itself inside the webhook; it is kept as a file, never in the database.
+        $media = $incoming->media;
+        $imageBytes = null;
+
+        if ($incoming->type === 'image' && is_array($media) && isset($media['data'])) {
+            $imageBytes = base64_decode((string) $media['data'], true) ?: null;
+        }
+
+        unset($media['data']);
+
         try {
-            $message = DB::transaction(function () use ($channel, $incoming, &$lead, &$isNewLead) {
+            $message = DB::transaction(function () use ($channel, $incoming, $media, &$lead, &$isNewLead) {
                 $lead = Lead::query()->where('phone', $incoming->from)->latest('id')->first();
                 $isNewLead = $lead === null;
                 $lead ??= $this->createLead($incoming);
@@ -60,7 +72,7 @@ class HandleInboundWhatsApp
                     'direction' => 'in',
                     'type' => $incoming->type,
                     'body' => $incoming->body,
-                    'media' => $incoming->media,
+                    'media' => $media === [] ? null : $media,
                     'status' => MessageStatus::Delivered,
                     'external_id' => $incoming->externalId,
                     'sent_at' => $incoming->sentAt,
@@ -93,12 +105,26 @@ class HandleInboundWhatsApp
                 return $message;
             });
 
+            $this->keepImage($message, $imageBytes);
             $this->queueAiReply($channel, $message);
             $this->alert($lead, $message, $isNewLead, $incoming);
 
             return $message;
         } catch (UniqueConstraintViolationException) {
             return null; // The same delivery arrived twice at once.
+        }
+    }
+
+    private function keepImage(WaMessage $message, ?string $bytes): void
+    {
+        try {
+            if ($bytes !== null) {
+                app(MediaStore::class)->storeImage($message, $bytes);
+            } elseif ($message->type === 'image' && isset($message->media['id'])) {
+                FetchWhatsAppMedia::dispatch($this->current->id(), $message->getKey());
+            }
+        } catch (Throwable $e) {
+            report($e); // A picture that cannot be kept never costs the message.
         }
     }
 

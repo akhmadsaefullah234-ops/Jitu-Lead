@@ -139,6 +139,28 @@ class CloudApiProvider implements WhatsAppProvider
         return ['messages' => $messages, 'statuses' => $statuses, 'session' => null];
     }
 
+    /** The bytes of a media file the customer sent, or null when Meta no longer has it or the download failed. */
+    public function downloadMedia(string $mediaId): ?string
+    {
+        try {
+            $meta = $this->http()->get($this->baseUrl().'/'.rawurlencode($mediaId));
+            $url = (string) $meta->json('url');
+
+            // The address comes from Meta's reply; only Meta's own https hosts are followed.
+            $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+
+            if (! $meta->successful() || ! str_starts_with($url, 'https://') || ! preg_match('/(^|\.)(facebook\.com|fbsbx\.com|fbcdn\.net|whatsapp\.net|whatsapp\.com)$/', $host)) {
+                return null;
+            }
+
+            $file = $this->http()->withOptions(['allow_redirects' => false])->get($url);
+
+            return $file->successful() ? $file->body() : null;
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
     private function post(array $payload): SendResult
     {
         if (blank($this->channel->credential('phone_number_id')) || blank($this->channel->credential('access_token'))) {
