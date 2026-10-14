@@ -45,7 +45,7 @@ class User extends Authenticatable implements FilamentUser, HasTenants, MustVeri
     {
         return $this->belongsToMany(Tenant::class)
             ->using(Membership::class)
-            ->withPivot(['role', 'status'])
+            ->withPivot(['role', 'status', 'takes_leads', 'lead_share'])
             ->withTimestamps();
     }
 

@@ -42,6 +42,23 @@ class Alerts
         ]);
     }
 
+    /** Tells the new owner that a lead was handed to them. */
+    public function leadMoved(Lead $lead): void
+    {
+        $tenant = $this->current->get();
+
+        if ($tenant === null || $lead->owner_id === null) {
+            return;
+        }
+
+        $this->send($this->recipients($tenant, $lead, withAdmins: false), 'notify_leads', [
+            'title' => 'Lead dipindahkan ke Anda',
+            'body' => collect([$lead->name, $lead->phone])->filter()->implode(' · '),
+            'url' => LeadResource::getUrl('edit', ['record' => $lead], tenant: $tenant),
+            'tag' => 'lead-'.$lead->getKey(),
+        ]);
+    }
+
     public function newMessage(Lead $lead, WaMessage $message): void
     {
         $tenant = $this->current->get();

@@ -8,9 +8,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
-#[Fillable(['name', 'slug', 'plan', 'status', 'timezone', 'trial_ends_at', 'ai_instructions', 'ai_handoff_keywords'])]
+#[Fillable(['name', 'slug', 'plan', 'status', 'timezone', 'trial_ends_at', 'ai_instructions', 'ai_handoff_keywords', 'lead_reassign_mode', 'lead_reassign_minutes', 'lead_reassign_max'])]
 class Tenant extends Model
 {
     protected $hidden = ['capture_token'];
@@ -81,7 +82,7 @@ class Tenant extends Model
     {
         return $this->belongsToMany(User::class)
             ->using(Membership::class)
-            ->withPivot(['role', 'status'])
+            ->withPivot(['role', 'status', 'takes_leads', 'lead_share'])
             ->withTimestamps();
     }
 
@@ -93,6 +94,37 @@ class Tenant extends Model
     public function agents(): BelongsToMany
     {
         return $this->activeUsers()->wherePivot('role', Role::Agent->value);
+    }
+
+    /**
+     * Members who are given new leads: agents unless switched off, and an admin or team leader
+     * who was switched on (the main agent can work leads too).
+     *
+     * @return Collection<int, User>
+     */
+    public function leadRecipients(): Collection
+    {
+        return $this->activeUsers()->get()->filter(function (User $user) {
+            $takes = $user->pivot->takes_leads;
+
+            return $takes === null ? $user->pivot->role === Role::Agent : (bool) $takes;
+        })->values();
+    }
+
+    public function leadReassignMode(): string
+    {
+        return $this->lead_reassign_mode ?: 'manual';
+    }
+
+    /** Minutes an owner may leave a new lead without any reaction. */
+    public function leadWaitMinutes(): int
+    {
+        return (int) ($this->lead_reassign_minutes ?: 30);
+    }
+
+    public function leadMaxMoves(): int
+    {
+        return (int) ($this->lead_reassign_max ?: 2);
     }
 
     public function stages(): HasMany
