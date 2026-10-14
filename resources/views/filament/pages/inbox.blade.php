@@ -5,7 +5,8 @@
             .wa { grid-template-columns: 1fr; min-height: 0; }
             .wa--open .wa-list, .wa:not(.wa--open) .wa-chat { display: none; }
             .wa-list, .wa-chat { max-height: none; }
-            .wa-chat { min-height: calc(100vh - 11rem); }
+            .wa-chat { min-height: calc(100vh - 7rem); min-height: calc(100dvh - 7rem); }
+            .wa-compose { padding-bottom: calc(.7rem + env(safe-area-inset-bottom)); }
         }
         .wa-back { display: none; font-size: .8rem; font-weight: 600; color: var(--primary-600); }
         @media (max-width: 800px) { .wa-back { display: inline-block; margin-bottom: .15rem; } }

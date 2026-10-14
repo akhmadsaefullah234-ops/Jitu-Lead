@@ -1,4 +1,4 @@
-<div wire:poll.{{ $open ? '5s' : '30s' }} style="position:fixed;right:1rem;bottom:1rem;z-index:50;font-family:inherit">
+<div class="jl-support" wire:poll.{{ $open ? '5s' : '30s' }} style="position:fixed;right:1rem;bottom:1rem;z-index:50;font-family:inherit">
     @if ($open)
         <div style="width:min(22rem,calc(100vw - 2rem));background:#fff;border:1px solid #e5e7eb;border-radius:1rem;box-shadow:0 20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:min(32rem,calc(100vh - 6rem))">
             <div style="background:#dc2626;color:#fff;padding:.8rem 1rem;border-radius:1rem 1rem 0 0;display:flex;justify-content:space-between;align-items:center">
