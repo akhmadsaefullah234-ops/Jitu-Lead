@@ -15,6 +15,7 @@ use App\Models\MediaAsset;
 use App\Models\MediaFolder;
 use App\Models\WaConversation;
 use App\Models\WaTemplate;
+use App\Support\CurrentTenant;
 use App\WhatsApp\RouteDecision;
 use App\WhatsApp\RouteSelector;
 use App\WhatsApp\WhatsAppException;
@@ -104,7 +105,8 @@ class Inbox extends Page
         $decision = $conversation ? app(RouteSelector::class)->decide($conversation) : null;
 
         return [
-            'conversations' => static::visibleConversations()->with('lead:id,name,phone')->orderByDesc('last_message_at')->limit(100)->get(),
+            'seesAll' => app(CurrentTenant::class)->roleOf(auth()->user())?->seesAllLeads() ?? false,
+            'conversations' => static::visibleConversations()->with(['lead:id,name,phone,owner_id', 'lead.owner:id,name'])->orderByDesc('last_message_at')->limit(100)->get(),
             'conversation' => $conversation?->load(['lead.stage', 'lead.owner', 'messages.channel']),
             'decision' => $decision,
             'aiMode' => $conversation?->lastInboundChannel?->ai_mode,

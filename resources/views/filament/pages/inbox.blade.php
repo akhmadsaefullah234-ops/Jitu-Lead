@@ -48,6 +48,7 @@
                 <button type="button" class="wa-item" wire:key="c-{{ $c->id }}" wire:click="open({{ $c->lead_id }})" aria-current="{{ $conversation?->id === $c->id ? 'true' : 'false' }}">
                     <div class="n"><span>{{ $c->lead->name }}</span>@if ($c->unread_count)<span class="wa-badge">{{ $c->unread_count }}</span>@endif</div>
                     <div class="p">{{ $c->lead->phone }} · {{ $c->last_message_at?->diffForHumans() }}</div>
+                    @if ($seesAll && $c->lead->owner)<div class="p">Agen: {{ $c->lead->owner->name }}</div>@endif
                 </button>
             @empty
                 <div class="wa-empty">Belum ada percakapan. Buka chat dari kartu lead, atau tunggu pesan masuk.</div>

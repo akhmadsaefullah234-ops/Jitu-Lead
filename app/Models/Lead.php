@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\Interest;
 use App\Enums\Need;
 use App\Enums\PaymentMethod;
+use App\Enums\StageType;
 use App\Models\Concerns\BelongsToTenant;
 use App\Support\CurrentTenant;
 use App\Support\PhoneNumber;
@@ -56,6 +57,11 @@ class Lead extends Model
                 && ! Membership::query()->where('tenant_id', $tenantId)->where('user_id', $lead->owner_id)->exists()) {
                 throw new LogicException("Lead owner must be a member of the lead's tenant.");
             }
+
+            // The clock for "no response yet" starts whenever someone new is given the lead.
+            if ($lead->isDirty('owner_id') && ! $lead->isDirty('assigned_at')) {
+                $lead->assigned_at = $lead->owner_id === null ? null : now();
+            }
         });
     }
 
@@ -68,6 +74,7 @@ class Lead extends Model
             'next_action_due_at' => 'datetime',
             'survey_at' => 'datetime',
             'stage_entered_at' => 'datetime',
+            'assigned_at' => 'datetime',
             'custom_fields' => 'array',
         ];
     }
@@ -85,6 +92,23 @@ class Lead extends Model
     public function stage(): BelongsTo
     {
         return $this->belongsTo(Stage::class);
+    }
+
+    /**
+     * Open leads whose owner has not reacted for the given minutes since getting them: no message, note
+     * or stage move by the owner, and no AI reply either. Only leads that were given to someone count.
+     */
+    public function scopeUnattended(Builder $query, int $minutes): void
+    {
+        $query->whereNotNull('owner_id')
+            ->whereNull('deleted_at')
+            ->where('assigned_at', '<=', now()->subMinutes($minutes))
+            ->whereHas('stage', fn (Builder $q) => $q->where('type', StageType::Open->value))
+            ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('lead_activities as la')
+                ->whereColumn('la.lead_id', 'leads.id')
+                ->whereColumn('la.created_at', '>=', 'leads.assigned_at')
+                ->where('la.type', '!=', 'reassigned')
+                ->where(fn ($w) => $w->whereColumn('la.user_id', 'leads.owner_id')->orWhere('la.type', 'ai_reply')));
     }
 
     public function owner(): BelongsTo
