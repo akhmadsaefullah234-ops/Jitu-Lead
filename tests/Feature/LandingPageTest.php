@@ -15,7 +15,7 @@ class LandingPageTest extends TestCase
         foreach (config('plans.plans') as $plan) {
             $this->assertStringContainsString($plan['name'], $html);
         }
-        $this->assertStringContainsString('79.000', $html);
+        $this->assertStringContainsString('99.000', $html);
         $this->assertStringContainsString(url('/app/register'), $html);
         $this->assertStringContainsString(url('/app/login'), $html);
     }

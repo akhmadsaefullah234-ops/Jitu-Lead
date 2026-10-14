@@ -106,7 +106,7 @@ class SuperAdminTest extends TestCase
         $this->assertSame(1, $s['trial']);
         $this->assertSame(1, $s['trial_ended']);
         $this->assertSame(2, $s['active']);
-        $this->assertSame(199000 + (int) round(790000 / 12), $s['mrr']);
+        $this->assertSame(199000 + (int) round(990000 / 12), $s['mrr']);
         $this->assertSame(4, $s['new_7d']);
         $this->assertSame(1, array_sum(array_slice(PlatformStats::signupsPerDay(30), -1)) > 0 ? 1 : 0);
         $this->assertNotNull($trial);
@@ -177,7 +177,7 @@ class SuperAdminTest extends TestCase
         $tenant = $this->makeTenant();
         $req = SubscriptionRequest::create(['tenant_id' => $tenant->getKey(), 'plan' => 'tim', 'billing_cycle' => 'yearly', 'amount' => 1990000]);
         $other = $this->makeTenant('other-co');
-        $rej = SubscriptionRequest::create(['tenant_id' => $other->getKey(), 'plan' => 'mandiri', 'billing_cycle' => 'monthly', 'amount' => 79000]);
+        $rej = SubscriptionRequest::create(['tenant_id' => $other->getKey(), 'plan' => 'mandiri', 'billing_cycle' => 'monthly', 'amount' => 99000]);
         $this->owner();
 
         Livewire::test(ListSubscriptionRequests::class)->callTableAction('approve', $req)->callTableAction('reject', $rej);

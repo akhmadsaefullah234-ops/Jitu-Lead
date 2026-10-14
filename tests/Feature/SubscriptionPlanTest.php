@@ -123,7 +123,7 @@ class SubscriptionPlanTest extends TestCase
     {
         $plans = config('plans.plans');
 
-        $this->assertSame([79000, 790000], [$plans['mandiri']['price']['monthly'], $plans['mandiri']['price']['yearly']]);
+        $this->assertSame([99000, 990000], [$plans['mandiri']['price']['monthly'], $plans['mandiri']['price']['yearly']]);
         $this->assertSame([199000, 1990000], [$plans['tim']['price']['monthly'], $plans['tim']['price']['yearly']]);
         $this->assertSame([449000, 4490000], [$plans['agensi']['price']['monthly'], $plans['agensi']['price']['yearly']]);
         $this->assertSame(['users' => 1, 'leads' => 300, 'wa' => 1, 'ai' => 300, 'followups' => 2, 'landing_pages' => 1], $plans['mandiri']['limits']);

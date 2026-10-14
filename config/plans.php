@@ -21,7 +21,7 @@ return [
             'name' => 'Agen Mandiri',
             'tagline' => 'Untuk agen yang bekerja sendiri',
             'popular' => false,
-            'price' => ['monthly' => 79000, 'yearly' => 790000],
+            'price' => ['monthly' => 99000, 'yearly' => 990000],
             'limits' => ['users' => 1, 'leads' => 300, 'wa' => 1, 'ai' => 300, 'followups' => 2, 'landing_pages' => 1],
             'features' => ['pixels' => false, 'reports' => false],
         ],
