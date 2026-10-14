@@ -37,6 +37,12 @@ class ImportLeads extends Page
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('template')->label('Unduh template')->icon(Heroicon::OutlinedArrowDownTray)->color('gray')
+                ->action(fn () => response()->streamDownload(
+                    fn () => print (self::templateCsv()),
+                    'template-impor-lead.csv',
+                    ['Content-Type' => 'text/csv; charset=UTF-8'],
+                )),
             Action::make('import')->label('Unggah file CSV')->icon(Heroicon::OutlinedArrowUpTray)
                 ->modalSubmitActionLabel('Impor')
                 ->schema([
@@ -69,6 +75,12 @@ class ImportLeads extends Page
                     Notification::make()->title('Impor selesai')->body($body)->success()->persistent()->send();
                 }),
         ];
+    }
+
+    /** Header row only, semicolon-separated with a BOM so Excel (Indonesian locale) opens it in separate columns. */
+    public static function templateCsv(): string
+    {
+        return "\xEF\xBB\xBFnama;telepon;email;catatan\r\n";
     }
 
     private function canPickOwner(): bool

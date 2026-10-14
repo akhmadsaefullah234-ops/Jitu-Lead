@@ -199,6 +199,18 @@ class SettingsImportCaptureTest extends TestCase
         $this->assertSame(2, $this->inTenant(fn () => Lead::where('owner_id', $agent->getKey())->count()));
     }
 
+    public function test_the_template_downloads_and_is_accepted_by_the_importer(): void
+    {
+        $this->actingInTenant($this->tenant->users()->firstOrFail(), $this->tenant);
+
+        Livewire::test(ImportLeads::class)->callAction('template')->assertFileDownloaded('template-impor-lead.csv', ImportLeads::templateCsv());
+
+        $path = $this->csv(ImportLeads::templateCsv()."Budi;081234567890;budi@contoh.com;Cari rumah\r\n");
+        $result = $this->inTenant(fn () => app(ImportLeadsFromCsv::class)($path, 'Template'));
+
+        $this->assertSame(['created' => 1, 'duplicates' => 0, 'invalid' => []], $result);
+    }
+
     public function test_import_page_is_open_to_agents(): void
     {
         $this->actingInTenant($this->member($this->tenant, Role::Agent), $this->tenant);
