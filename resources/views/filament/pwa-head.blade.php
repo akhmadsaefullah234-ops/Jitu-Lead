@@ -7,3 +7,5 @@
 @auth
     <script>if ('serviceWorker' in navigator) window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); });</script>
 @endauth
+<script>(function () { var m = document.querySelector('meta[name="viewport"]'); if (m && m.content.indexOf('viewport-fit') < 0) m.content += ', viewport-fit=cover'; })();</script>
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
