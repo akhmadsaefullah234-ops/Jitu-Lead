@@ -201,6 +201,22 @@ test('connector: pesan @lid diteruskan dengan nomor HP, riwayat (append) dan gru
   assert.equal(f.events.oks, 1);
 });
 
+test('connector: gambar diunduh dan dikirim ke CRM; gagal atau terlalu besar tidak menjatuhkan pesannya', async () => {
+  const image = (id, extra = {}) => msgFrom({ key: { id }, message: { imageMessage: { mimetype: 'image/png', caption: 'rumahnya', ...extra } } });
+  const f = await fakeConnector({ download: async (m) => { if (m.key.id === 'bad') throw new Error('mmg gone'); return Buffer.from('PNGDATA'); }, maxImageBytes: 100 });
+
+  f.sock.ev.emit('messages.upsert', { type: 'notify', messages: [image('ok'), image('bad'), image('big', { fileLength: 5000 })] });
+  await new Promise((r) => setTimeout(r, 40));
+
+  const by = Object.fromEntries(f.events.messages.map((m) => [m.id, m]));
+  assert.equal(by.ok.type, 'image');
+  assert.equal(by.ok.text, 'rumahnya');
+  assert.deepEqual(by.ok.media, { mime_type: 'image/png', data: Buffer.from('PNGDATA').toString('base64') });
+  assert.deepEqual(by.bad.media, { mime_type: 'image/png', error: 'download_failed' });
+  assert.deepEqual(by.big.media, { mime_type: 'image/png', error: 'too_large' });
+  assert.ok(f.logs.some((l) => l.level === 'warn' && l.id === 'bad' && /gagal diunduh/.test(l.text)));
+});
+
 test('connector: CIPHERTEXT menunggu retry; bila terbaca, diteruskan; bila tidak, dicatat dan dihitung gagal', async () => {
   const f = await fakeConnector();
   const cipher = (id) => ({ key: { id, remoteJid: '1234567890@lid', remoteJidAlt: '6281234567890@s.whatsapp.net' }, messageStubType: 2, messageStubParameters: ['No matching sessions found for message'] });

@@ -12,6 +12,9 @@ return [
     // and loopback addresses and plain HTTP unless explicitly allowed (local dev).
     'allow_private_gateway_hosts' => (bool) env('WHATSAPP_ALLOW_PRIVATE_GATEWAY_HOSTS', false),
 
+    // Pictures customers send are kept on the server (private disk) so agents can see them in the Inbox.
+    'max_image_bytes' => 5 * 1024 * 1024,
+
     // Optional gateway run by the platform operator. When set, agencies connect a number by scanning
     // a QR code and never see an address or key. Without it, agencies enter their own gateway details.
     'gateway' => [
