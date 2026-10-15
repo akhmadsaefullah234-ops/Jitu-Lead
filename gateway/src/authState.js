@@ -11,12 +11,15 @@ const path = require('node:path');
  * either the old or the new file, never half of one. creds.json also keeps a
  * `.bak` of the last good copy.
  *
+ * Files are 0640 and folders 0750 so the CRM backup (www-data, in group jitu-gw)
+ * can read them; nobody else can.
+ *
  * `lib` is the loaded Baileys module (it is ESM, so the caller imports it).
  */
 async function useAtomicAuthState(folder, lib) {
   const { BufferJSON, initAuthCreds, proto } = lib;
 
-  await fsp.mkdir(folder, { recursive: true, mode: 0o700 });
+  await fsp.mkdir(folder, { recursive: true, mode: 0o750 });
 
   // Temp files left behind by a crash are garbage; the real files are intact.
   for (const name of fs.readdirSync(folder)) {
@@ -40,7 +43,7 @@ async function useAtomicAuthState(folder, lib) {
     const tmp = `${target}.${process.pid}.${Date.now()}.tmp`;
     const json = JSON.stringify(data, BufferJSON.replacer);
 
-    const handle = await fsp.open(tmp, 'w', 0o600);
+    const handle = await fsp.open(tmp, 'w', 0o640);
     try {
       await handle.writeFile(json);
       await handle.sync();

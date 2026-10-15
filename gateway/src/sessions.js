@@ -61,7 +61,7 @@ class SessionManager {
     const file = path.join(this.dir(id), 'meta.json');
     const tmp = `${file}.${process.pid}.tmp`;
 
-    fs.writeFileSync(tmp, JSON.stringify(meta), { mode: 0o600 });
+    fs.writeFileSync(tmp, JSON.stringify(meta), { mode: 0o640 });
     fs.renameSync(tmp, file);
   }
 
@@ -158,7 +158,7 @@ class SessionManager {
           session.qr = null;
           session.retries = 0;
           try {
-            fs.writeFileSync(path.join(this.dir(id), V7), '1', { mode: 0o600 });
+            fs.writeFileSync(path.join(this.dir(id), V7), '1', { mode: 0o640 });
           } catch (err) {
             this.log?.warn({ id, err: err.message }, 'penanda versi login gagal ditulis');
           }
@@ -200,7 +200,7 @@ class SessionManager {
     }
 
     try {
-      fs.writeFileSync(this.marker(session.id), new Date().toISOString(), { mode: 0o600 });
+      fs.writeFileSync(this.marker(session.id), new Date().toISOString(), { mode: 0o640 });
     } catch (err) {
       this.log?.error({ id: session.id, err: err.message }, 'penanda perlu-scan-ulang gagal ditulis');
     }

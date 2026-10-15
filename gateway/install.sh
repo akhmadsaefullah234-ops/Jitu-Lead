@@ -23,6 +23,17 @@ mkdir -p "$APP_DIR/data"
 (cd "$APP_DIR" && npm ci --omit=dev --omit=optional --no-audit --no-fund)
 chown -R jitu-gw:jitu-gw "$APP_DIR"
 
+# Backup CRM (www-data) perlu membaca sesi WhatsApp: pakai grup jitu-gw, hanya baca.
+. "$SRC_DIR/permissions.sh"
+normalize_data_perms "$APP_DIR/data" jitu-gw
+if id www-data >/dev/null 2>&1 && ! id -nG www-data | tr ' ' '\n' | grep -qx jitu-gw; then
+  usermod -aG jitu-gw www-data
+  # Proses yang sudah berjalan belum melihat grup baru; pekerja php-fpm baru akan melihatnya.
+  for unit in $(systemctl list-units --type=service --no-legend --plain 'php*-fpm.service' 2>/dev/null | awk '{print $1}'); do
+    systemctl reload "$unit" 2>/dev/null || true
+  done
+fi
+
 if [ ! -f "$ENV_FILE" ]; then
   umask 077
   cat > "$ENV_FILE" <<ENV
@@ -43,6 +54,7 @@ Wants=network-online.target
 
 [Service]
 User=jitu-gw
+UMask=0027
 WorkingDirectory=$APP_DIR
 EnvironmentFile=$ENV_FILE
 ExecStart=$(command -v node) src/index.js

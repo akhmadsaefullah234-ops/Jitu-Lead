@@ -89,12 +89,7 @@ RCLONE_CONFIG_OFFSITE_ENDPOINT=https://s3.us-west-004.backblazeb2.com
 
 Google Drive memakai `RCLONE_CONFIG_OFFSITE_TYPE=drive` dan token OAuth dari `rclone config` di komputer Anda (lihat dokumentasi rclone). Lalu `php artisan config:cache`. Pakai folder/bucket khusus: salinan lebih dari 30 hari (`BACKUP_REMOTE_KEEP_DAYS`) di folder itu dihapus otomatis. Kunci jangan diberi izin hapus-semua bila penyedia mendukung izin terbatas.
 
-**Sesi WhatsApp gateway.** Folder itu milik pengguna `jitu-gw`. Beri aplikasi hak baca agar ikut tercadang (tanpa ini langkahnya berstatus peringatan):
-
-```
-sudo setfacl -R -m u:www-data:rX /opt/jitu-gateway/data
-sudo setfacl -R -d -m u:www-data:rX /opt/jitu-gateway/data
-```
+**Sesi WhatsApp gateway.** Folder itu milik pengguna `jitu-gw`. `sudo bash gateway/install.sh` memasukkan `www-data` ke grup `jitu-gw` dan mengatur folder `2750` serta berkas `0640` (hanya baca untuk grup, tertutup untuk lainnya), jadi backup ikut mengambilnya tanpa pengaturan tambahan. Gateway yang berjalan memakai `UMask=0027`, jadi berkas baru ikut aturan yang sama. Aman dijalankan ulang di server lama. Bila sebelumnya Anda memasang `setfacl` atau cron `setfacl` sebagai jalan pintas, hapus: skrip ini membersihkan ACL-nya, dan cron itu tidak diperlukan lagi.
 
 **Coba sekarang:** `sudo -u www-data php artisan backup:run` (cek hasilnya di /admin → Backup).
 

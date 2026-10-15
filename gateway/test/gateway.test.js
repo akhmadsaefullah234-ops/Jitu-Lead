@@ -355,7 +355,7 @@ test('auth state atomik: tulis lewat berkas sementara, sisa .tmp dibuang, creds 
   await a.state.keys.set({ session: { '6281.0': { k: Buffer.from('rahasia') } }, 'lid-mapping': { '6281': '1234@lid' } });
   assert.ok(fs.existsSync(path.join(dir, 'creds.json')));
   assert.equal(fs.readdirSync(dir).some((f) => f.endsWith('.tmp')), false);
-  assert.equal(fs.statSync(path.join(dir, 'creds.json')).mode & 0o777, 0o600);
+  assert.equal(fs.statSync(path.join(dir, 'creds.json')).mode & 0o777, 0o640);
 
   await a.saveCreds();
   assert.ok(fs.existsSync(path.join(dir, 'creds.json.bak')));
@@ -408,4 +408,39 @@ test('login lama (dibuat gateway sebelum Baileys 7) ditandai perlu scan ulang sa
   again.restore();
   assert.notEqual(again.status(SID), 'needs_relink');
   g.close();
+});
+
+test('berkas sesi bisa dibaca grup (0640) agar backup CRM bisa membacanya, tidak terbuka untuk orang lain', async () => {
+  const g = await boot();
+  await g.call('POST', '/session/start', HOOK);
+  g.sockets[0].handlers.onOpen();
+
+  try {
+    const dir = path.join(g.dataDir, 'sessions', SID);
+    for (const file of ['meta.json', 'baileys7']) {
+      const mode = fs.statSync(path.join(dir, file)).mode & 0o777;
+      assert.equal(mode & 0o040, 0o040, `${file} harus bisa dibaca grup`);
+      assert.equal(mode & 0o007, 0, `${file} tidak boleh terbuka untuk orang lain`);
+    }
+  } finally {
+    g.close();
+  }
+});
+
+test('permissions.sh: folder 2750, berkas 0640 (termasuk yang lama 0600), ACL dibersihkan', () => {
+  const { execFileSync } = require('node:child_process');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gw-perm-'));
+  const auth = path.join(root, 'sessions', SID, 'auth');
+  fs.mkdirSync(auth, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(path.join(auth, 'creds.json'), '{}', { mode: 0o600 });
+  fs.writeFileSync(path.join(root, 'sessions', SID, 'meta.json'), '{}', { mode: 0o600 });
+  const group = execFileSync('id', ['-gn']).toString().trim();
+
+  execFileSync('bash', ['-c', 'source "$1"; normalize_data_perms "$2" "$3"', '_', path.join(__dirname, '..', 'permissions.sh'), root, group]);
+
+  const mode = (p) => fs.statSync(p).mode & 0o7777;
+  assert.equal(mode(root), 0o2750);
+  assert.equal(mode(auth), 0o2750);
+  assert.equal(mode(path.join(auth, 'creds.json')), 0o640);
+  assert.equal(mode(path.join(root, 'sessions', SID, 'meta.json')), 0o640);
 });

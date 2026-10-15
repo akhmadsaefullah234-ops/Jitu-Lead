@@ -10,7 +10,7 @@ sudo bash gateway/install.sh
 
 Skrip memasang gateway sebagai layanan `jitu-gateway`, membuat API key, dan mengisi `WHATSAPP_GATEWAY_URL`, `WHATSAPP_GATEWAY_API_KEY`, `WHATSAPP_GATEWAY_SIGNING_SECRET` di `.env` CRM. Gateway hanya mendengarkan `127.0.0.1`, jadi tidak terbuka ke internet. Syarat: Node.js 20 atau lebih baru.
 
-Lihat log: `journalctl -u jitu-gateway -f`. Data login WhatsApp ada di `/opt/jitu-gateway/data` (cadangkan folder ini; menghapusnya memutus semua nomor).
+Lihat log: `journalctl -u jitu-gateway -f`. Data login WhatsApp ada di `/opt/jitu-gateway/data` (cadangkan folder ini; menghapusnya memutus semua nomor). Backup CRM membacanya lewat grup `jitu-gw` (folder `2750`, berkas `0640`); `install.sh` mengaturnya, termasuk di server yang sudah terpasang.
 
 ## Variabel
 
