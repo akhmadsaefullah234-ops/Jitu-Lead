@@ -3,6 +3,7 @@
 namespace App\Filament\Pages\Tenancy;
 
 use App\Actions\ProvisionTenant;
+use App\Support\OwnerAlerts;
 use Filament\Forms\Components\TextInput;
 use Filament\Pages\Tenancy\RegisterTenant;
 use Filament\Schemas\Schema;
@@ -39,6 +40,10 @@ class RegisterAgency extends RegisterTenant
 
     protected function handleRegistration(array $data): Model
     {
-        return app(ProvisionTenant::class)($data['name'], $data['slug'], auth()->user());
+        $tenant = app(ProvisionTenant::class)($data['name'], $data['slug'], auth()->user());
+
+        OwnerAlerts::newAgency($tenant, auth()->user());
+
+        return $tenant;
     }
 }

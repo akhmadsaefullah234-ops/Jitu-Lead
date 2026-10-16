@@ -14,6 +14,9 @@ return [
     'support_email' => env('SUPPORT_EMAIL'),
     'support_whatsapp' => env('SUPPORT_WHATSAPP'),
 
+    // Tells the platform owner (email to SUPPORT_EMAIL and push to super admins) about each new agency and plan request. Set to false if it gets too busy.
+    'notify_signups' => (bool) env('NOTIFY_SIGNUPS', true),
+
     // Web Push (notifications on phones and computers). Keys come from `php artisan push:keys`; never regenerate
     // them once people have subscribed, because every device would have to subscribe again.
     'push' => [

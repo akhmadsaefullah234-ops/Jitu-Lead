@@ -5,6 +5,7 @@ namespace App\Billing;
 use App\Models\SubscriptionRequest;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Support\OwnerAlerts;
 
 /** An agency admin asking for a plan; the platform owner activates it once the transfer is confirmed. */
 class PlanRequests
@@ -21,9 +22,13 @@ class PlanRequests
         SubscriptionRequest::query()->where('tenant_id', $tenant->getKey())->where('status', SubscriptionRequest::PENDING)
             ->update(['status' => SubscriptionRequest::CANCELLED, 'handled_at' => now()]);
 
-        return SubscriptionRequest::create([
+        $request = SubscriptionRequest::create([
             'tenant_id' => $tenant->getKey(), 'requested_by' => $user->getKey(), 'plan' => $plan,
             'billing_cycle' => $cycle, 'amount' => $price,
         ]);
+
+        OwnerAlerts::planRequested($request);
+
+        return $request;
     }
 }
