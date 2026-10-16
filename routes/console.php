@@ -11,4 +11,6 @@ Artisan::command('inspire', function () {
 Schedule::command('followups:run')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('leads:reassign')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('plan:check')->dailyAt('01:00')->withoutOverlapping();
+// After plan:check, so trials that just ended are already read-only.
+Schedule::command('trial-emails:send')->dailyAt('09:00')->timezone('Asia/Jakarta')->withoutOverlapping();
 Schedule::command('backup:run')->dailyAt('02:00')->timezone('Asia/Jakarta')->withoutOverlapping();

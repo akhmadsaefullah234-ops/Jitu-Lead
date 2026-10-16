@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\Role;
+use App\Support\PhoneNumber;
 use Database\Factories\UserFactory;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Models\Contracts\HasTenants;
@@ -33,7 +34,16 @@ class User extends Authenticatable implements FilamentUser, HasTenants, MustVeri
             'is_super_admin' => 'boolean',
             'notify_leads' => 'boolean',
             'notify_messages' => 'boolean',
+            'contact_consent_at' => 'datetime',
+            'whatsapp_prompt_dismissed_at' => 'datetime',
+            'trial_emails_unsubscribed_at' => 'datetime',
         ];
+    }
+
+    /** Stores a WhatsApp number as 62812..., or null when it is not an Indonesian mobile number. */
+    public function setWhatsapp(?string $number): void
+    {
+        $this->whatsapp = PhoneNumber::whatsapp($number);
     }
 
     public function pushSubscriptions(): HasMany

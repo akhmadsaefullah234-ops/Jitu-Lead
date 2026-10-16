@@ -18,7 +18,8 @@ return Application::configure(basePath: dirname(__DIR__))
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // One-click unsubscribe from mail apps carries no CSRF token; the signed URL is the proof.
+        $middleware->preventRequestForgery(except: ['email/berhenti/*']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         // A wrong or expired email verification link gets a page that explains it, not a bare 403.

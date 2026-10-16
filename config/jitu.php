@@ -17,6 +17,10 @@ return [
     // Tells the platform owner (email to SUPPORT_EMAIL and push to super admins) about each new agency and plan request. Set to false if it gets too busy.
     'notify_signups' => (bool) env('NOTIFY_SIGNUPS', true),
 
+    // Slug of the platform owner's own agency. Every new agency that agreed to be contacted becomes a lead there
+    // (stage Trial, then Berlangganan or Tidak lanjut), so the owner's follow-up rules can reach it on WhatsApp.
+    'platform_sales_tenant' => env('PLATFORM_SALES_TENANT'),
+
     // Web Push (notifications on phones and computers). Keys come from `php artisan push:keys`; never regenerate
     // them once people have subscribed, because every device would have to subscribe again.
     'push' => [

@@ -28,7 +28,8 @@ return [
                 ]],
                 ['Data yang kami simpan', [
                     ['ul', [
-                        'Akun pengguna: nama, alamat email, kata sandi (disimpan dalam bentuk hash, bukan teks asli), peran dalam agensi, dan waktu pendaftaran.',
+                        'Akun pengguna: nama, alamat email, nomor WhatsApp, kata sandi (disimpan dalam bentuk hash, bukan teks asli), peran dalam agensi, dan waktu pendaftaran.',
+                        'Persetujuan dihubungi: apakah Anda bersedia dihubungi lewat WhatsApp atau email tentang akun dan penawaran {aplikasi}, beserta waktu persetujuan itu diberikan, dan waktu Anda berhenti menerima email masa percobaan.',
                         'Data agensi: nama agensi, pengaturan, paket langganan, dan riwayat permintaan paket.',
                         'Kontak lead: nama, nomor telepon, email, kebutuhan properti, anggaran, lokasi yang diminati, jadwal survei, catatan agen, tahap penjualan, dan riwayat aktivitasnya.',
                         'Percakapan WhatsApp: isi pesan, lampiran, waktu, dan status pengiriman antara agensi dan lead.',
@@ -42,10 +43,21 @@ return [
                         'Menjalankan layanan: masuk ke akun, mengelola lead, mengirim dan menerima pesan WhatsApp, mengatur tindak lanjut otomatis.',
                         'Membantu menyusun draf balasan dengan AI bila fitur itu diaktifkan oleh agensi.',
                         'Mengirim email layanan: verifikasi akun, atur ulang kata sandi, pengingat masa percobaan dan langganan.',
+                        'Menghubungi admin agensi tentang akunnya dan penawaran {aplikasi}, hanya bila admin tersebut menyetujuinya, sebagaimana dijelaskan di bagian berikut.',
                         'Menagih langganan dan menanggapi permintaan bantuan.',
                         'Menjaga keamanan, mencegah penyalahgunaan, dan membuat cadangan data.',
                     ]],
                     ['p', 'Kami tidak menjual data pribadi dan tidak memakai data lead sebuah agensi untuk kepentingan agensi lain.'],
+                ]],
+                ['Nomor WhatsApp, email masa percobaan, dan cara berhenti', [
+                    ['p', 'Saat mendaftar kami meminta nomor WhatsApp Anda. Nomor itu dipakai untuk informasi penting tentang akun (misalnya masa percobaan atau pembayaran) dan untuk membantu Anda memakai {aplikasi}.'],
+                    ['p', 'Bila Anda mencentang persetujuan "Saya bersedia dihubungi via WhatsApp/email tentang akun dan penawaran {aplikasi}", nama, email, nomor WhatsApp, nama agensi, paket, dan tanggal berakhirnya masa percobaan Anda dicatat sebagai calon pelanggan di CRM tim {aplikasi}. Tim kami dapat mengirim pesan WhatsApp tentang akun dan penawaran paket; pesan itu berhenti sendiri setelah agensi Anda berlangganan.'],
+                    ['p', 'Selama dan sesudah masa percobaan, admin agensi yang emailnya terverifikasi menerima beberapa email berseri: tips memulai, ringkasan pemakaian, pengingat sebelum masa percobaan berakhir, dan penawaran setelahnya. Email ini berhenti sendiri setelah agensi membayar.'],
+                    ['ul', [
+                        'Berhenti menerima email masa percobaan: klik tautan "Berhenti menerima email ini" di bagian bawah email mana pun. Email penting tentang akun, seperti verifikasi dan atur ulang kata sandi, tetap dikirim.',
+                        'Berhenti menerima pesan WhatsApp: balas pesan kami dan minta berhenti, atau hubungi {kontak}. Kami akan menghentikan pesan penawaran dan mencatat penarikan persetujuan Anda.',
+                        'Menarik persetujuan tidak memengaruhi akun atau layanan Anda.',
+                    ]],
                 ]],
                 ['Dengan siapa data dibagikan', [
                     ['p', 'Data hanya diberikan kepada pihak yang diperlukan untuk menjalankan layanan:'],

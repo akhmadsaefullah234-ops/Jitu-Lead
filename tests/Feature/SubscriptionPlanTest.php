@@ -365,6 +365,8 @@ class SubscriptionPlanTest extends TestCase
 
     public function test_daily_check_moves_trial_to_past_due_then_read_only_and_reminds_once(): void
     {
+        // With the trial email series off, trials get the single "segera berakhir" reminder as before.
+        config(['trial_emails.enabled' => false]);
         Mail::fake();
         $sub = $this->tenant->currentSubscription();
         $sub->update(['trial_ends_at' => now()->addDays(2)]);

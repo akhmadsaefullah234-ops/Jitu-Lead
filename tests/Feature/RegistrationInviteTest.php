@@ -24,7 +24,7 @@ class RegistrationInviteTest extends TestCase
 
     private function form(array $extra = []): array
     {
-        return $extra + ['name' => 'Budi', 'email' => 'budi@example.com', 'password' => 'rahasia-123-ok', 'passwordConfirmation' => 'rahasia-123-ok'];
+        return $extra + ['name' => 'Budi', 'email' => 'budi@example.com', 'whatsapp' => '0812 3456 7890', 'password' => 'rahasia-123-ok', 'passwordConfirmation' => 'rahasia-123-ok'];
     }
 
     private function register(array $extra = [], bool $freshLimiter = true)

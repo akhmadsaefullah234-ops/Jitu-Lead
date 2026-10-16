@@ -3,6 +3,7 @@
 namespace App\Filament\Pages\Tenancy;
 
 use App\Actions\ProvisionTenant;
+use App\Retention\PlatformLeads;
 use App\Support\OwnerAlerts;
 use Filament\Forms\Components\TextInput;
 use Filament\Pages\Tenancy\RegisterTenant;
@@ -43,6 +44,7 @@ class RegisterAgency extends RegisterTenant
         $tenant = app(ProvisionTenant::class)($data['name'], $data['slug'], auth()->user());
 
         OwnerAlerts::newAgency($tenant, auth()->user());
+        app(PlatformLeads::class)->capture($tenant, auth()->user());
 
         return $tenant;
     }
