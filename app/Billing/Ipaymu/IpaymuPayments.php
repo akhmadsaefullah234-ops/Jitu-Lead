@@ -105,23 +105,30 @@ class IpaymuPayments
             return 'mismatch';
         }
 
-        $status = match ((int) ($data['Status'] ?? 0)) {
-            1, 6 => IpaymuPayment::PAID,
+        // iPaymu transaction status codes (docs.ipaymu.com, check transaction). 7 = escrow: the buyer has paid, iPaymu holds the money.
+        $code = is_numeric($data['Status'] ?? null) ? (int) $data['Status'] : null;
+        $status = match ($code) {
+            1, 6, 7 => IpaymuPayment::PAID,
             -2 => IpaymuPayment::EXPIRED,
             2, 3, 4, 5 => IpaymuPayment::FAILED,
             default => IpaymuPayment::PENDING,
         };
+
+        if ($code === null || ! in_array($code, [-2, 0, 1, 2, 3, 4, 5, 6, 7], true)) {
+            Log::warning('iPaymu callback: kode status tidak dikenal, dianggap menunggu', ['trx_id' => $trxId, 'reference_id' => $reference, 'status_api' => $data['Status'] ?? null, 'status_desc' => $data['StatusDesc'] ?? null]);
+        }
 
         $total = (int) round((float) ($data['Amount'] ?? $price));
         $fee = self::money($data['Fee'] ?? $payload['fee'] ?? null);
         $money = [
             'total_paid' => $total, 'fee' => $fee,
             'paid_off' => self::money($payload['paid_off'] ?? null) ?? ($fee !== null ? $total - $fee : null),
+            'is_escrow' => $code === 7 || filter_var($payload['is_escrow'] ?? false, FILTER_VALIDATE_BOOLEAN),
         ];
 
         $result = $this->apply($payment->getKey(), $status, $trxId, (string) ($payload['via'] ?? $payload['channel'] ?? ''), $money);
 
-        Log::info('iPaymu callback diproses', ['trx_id' => $trxId, 'reference_id' => $reference, 'status_api' => $data['Status'] ?? null, 'hasil' => $result]);
+        Log::info('iPaymu callback diproses', ['trx_id' => $trxId, 'reference_id' => $reference, 'status_api' => $data['Status'] ?? null, 'escrow' => $money['is_escrow'], 'hasil' => $result]);
 
         return $result;
     }

@@ -45,7 +45,7 @@ class IpaymuPaymentResource extends Resource
                 TextColumn::make('fee')->label('Biaya')->money('IDR', locale: 'id')->placeholder('-'),
                 TextColumn::make('paid_off')->label('Diterima')->money('IDR', locale: 'id')->placeholder('-'),
                 TextColumn::make('status')->label('Status')->badge()
-                    ->formatStateUsing(fn ($state) => IpaymuPayment::LABELS[$state] ?? $state)
+                    ->formatStateUsing(fn ($state, IpaymuPayment $record) => $record->label())
                     ->color(fn ($state) => ['pending' => 'warning', 'paid' => 'success', 'failed' => 'danger'][$state] ?? 'gray'),
                 TextColumn::make('trx_id')->label('ID transaksi')->placeholder('-')->searchable()->copyable(),
                 TextColumn::make('reference_id')->label('Referensi')->searchable(),

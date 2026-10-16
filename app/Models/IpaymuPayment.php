@@ -22,7 +22,7 @@ class IpaymuPayment extends Model
 
     protected function casts(): array
     {
-        return ['expires_at' => 'datetime', 'paid_at' => 'datetime', 'last_callback_at' => 'datetime'];
+        return ['is_escrow' => 'boolean', 'expires_at' => 'datetime', 'paid_at' => 'datetime', 'last_callback_at' => 'datetime'];
     }
 
     public function request(): BelongsTo
@@ -43,6 +43,6 @@ class IpaymuPayment extends Model
 
     public function label(): string
     {
-        return self::LABELS[$this->status] ?? $this->status;
+        return (self::LABELS[$this->status] ?? $this->status).($this->status === self::PAID && $this->is_escrow ? ' (escrow)' : '');
     }
 }
