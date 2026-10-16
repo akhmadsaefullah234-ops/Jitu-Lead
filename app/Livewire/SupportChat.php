@@ -5,6 +5,7 @@ namespace App\Livewire;
 use App\Mail\SupportMessageReceived;
 use App\Models\SupportThread;
 use App\Support\CurrentTenant;
+use App\Support\PhoneNumber;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
@@ -99,7 +100,7 @@ class SupportChat extends Component
             'thread' => $thread,
             'messages' => $this->open && $thread ? $thread->messages()->get() : collect(),
             'unread' => ! $this->open && $thread?->user_unread,
-            'whatsapp' => preg_replace('/\D/', '', (string) config('jitu.support_whatsapp')),
+            'whatsapp' => PhoneNumber::whatsapp(config('jitu.support_whatsapp')) ?? preg_replace('/\D/', '', (string) config('jitu.support_whatsapp')),
         ]);
     }
 }

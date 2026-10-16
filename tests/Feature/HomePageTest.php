@@ -94,10 +94,12 @@ class HomePageTest extends TestCase
     public function test_the_whatsapp_link_shows_only_when_a_contact_is_set(): void
     {
         config(['jitu.billing_contact' => null]);
-        $this->get('/')->assertDontSee('wa.me', false);
+        $this->get('/')->assertDontSee('Tanya dulu lewat WhatsApp');
 
-        config(['jitu.billing_contact' => '+62 812-3456-7890']);
-        $this->get('/')->assertSee('https://wa.me/6281234567890', false)->assertSee('Tanya dulu lewat WhatsApp');
+        foreach (['+62 812-3456-7890', '08123456789'] as $typed) {
+            config(['jitu.billing_contact' => $typed]);
+            $this->get('/')->assertSee('href="https://wa.me/628123456789', false)->assertSee('Tanya dulu lewat WhatsApp');
+        }
     }
 
     public function test_internal_links_use_the_app_address_and_legal_pages_are_linked(): void
@@ -118,18 +120,18 @@ class HomePageTest extends TestCase
 
     public function test_each_contact_field_can_be_hidden_and_the_section_goes_when_none_is_shown(): void
     {
-        PlatformSetting::write('contact', ['email' => 'a@b.co', 'phone' => '0811', 'address' => 'Jl. Contoh 1', 'show_email' => true, 'show_phone' => false, 'show_address' => false]);
+        PlatformSetting::write('contact', ['email' => 'a@b.co', 'phone' => '0811', 'address' => 'Jl. Contoh 1', 'show_email' => true, 'show_phone' => false, 'address_display' => 'hidden']);
 
         $this->get('/')->assertOk()->assertSee('a@b.co')->assertDontSee('0811')->assertDontSee('Jl. Contoh 1');
 
-        PlatformSetting::write('contact', ['email' => 'a@b.co', 'phone' => '0811', 'address' => 'Jl. Contoh 1', 'show_email' => false, 'show_phone' => false, 'show_address' => false]);
+        PlatformSetting::write('contact', ['email' => 'a@b.co', 'phone' => '0811', 'address' => 'Jl. Contoh 1', 'show_email' => false, 'show_phone' => false, 'address_display' => 'hidden']);
 
         $this->get('/')->assertOk()->assertDontSee('id="kontak"', false)->assertDontSee('href="#kontak"', false)->assertDontSee('a@b.co');
     }
 
     public function test_contact_text_is_escaped(): void
     {
-        PlatformSetting::write('contact', ['email' => null, 'phone' => null, 'address' => '<script>alert(1)</script>', 'show_email' => true, 'show_phone' => true, 'show_address' => true]);
+        PlatformSetting::write('contact', ['email' => null, 'phone' => null, 'address' => '<script>alert(1)</script>', 'show_email' => true, 'show_phone' => true, 'address_display' => 'full']);
 
         $this->get('/')->assertOk()->assertDontSee('<script>alert(1)</script>', false)->assertSee('&lt;script&gt;alert(1)&lt;/script&gt;', false);
     }
@@ -142,7 +144,7 @@ class HomePageTest extends TestCase
         $this->actingAs($owner);
 
         Livewire::test(ContactSettings::class)
-            ->assertFormSet(['email' => 'akhmadsaefullah234@gmail.com', 'show_address' => true])
+            ->assertFormSet(['email' => 'akhmadsaefullah234@gmail.com', 'address_display' => 'full'])
             ->fillForm(['email' => 'halo@contoh.id', 'phone' => '+62 812-0000-1111', 'address' => 'Jl. Baru 9, Bekasi', 'show_phone' => false])
             ->call('save')->assertHasNoFormErrors();
 
@@ -158,7 +160,7 @@ class HomePageTest extends TestCase
 
     public function test_phone_links_get_the_country_code(): void
     {
-        $show = ['email' => null, 'address' => null, 'show_email' => true, 'show_phone' => true, 'show_address' => true];
+        $show = ['email' => null, 'address' => null, 'show_email' => true, 'show_phone' => true, 'address_display' => 'full'];
 
         foreach (['082113345882' => '6282113345882', '+62 812-0000-1111' => '6281200001111', '6281234567890' => '6281234567890'] as $typed => $digits) {
             PlatformSetting::write('contact', ['phone' => $typed] + $show);

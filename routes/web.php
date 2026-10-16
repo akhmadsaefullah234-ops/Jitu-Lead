@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\WhatsAppMediaController;
 use App\Legal\LegalDocs;
+use App\Marketing\Faq;
 use App\Models\PlatformSetting;
 use Illuminate\Support\Facades\Route;
 
@@ -11,9 +12,15 @@ Route::get('/', fn () => view('landing', [
     'limitLabels' => config('plans.limit_labels'), 'featureLabels' => config('plans.feature_labels'), 'trialDays' => config('plans.trial_days'),
     'testimonials' => config('landing.testimonials', []),
     'ownerContact' => PlatformSetting::publicContact(),
+    'faq' => Faq::items(),
 ]))->name('home');
 
-// Privacy policy and terms of service (text in config/legal.php, editable in /admin).
+// Public information pages, in the same style as the legal pages: questions and answers (the same list as the front page) and the business contact.
+Route::get('faq', fn () => view('legal.faq', ['faq' => Faq::items()]))->middleware('throttle:public-pages')->name('faq');
+Route::get('kontak', fn () => view('legal.contact', ['company' => config('legal.company'), 'contact' => PlatformSetting::fullContact()]))
+    ->middleware('throttle:public-pages')->name('contact');
+
+// Privacy policy, terms of service and refund policy (text in config/legal.php, editable in /admin).
 Route::get('{slug}', fn (string $slug) => view('legal.show', ['doc' => LegalDocs::get($slug)]))
     ->whereIn('slug', LegalDocs::SLUGS)->middleware('throttle:public-pages')->name('legal');
 
