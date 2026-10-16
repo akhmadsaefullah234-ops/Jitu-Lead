@@ -10,7 +10,7 @@ use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Mail\Mailables\Headers;
 
 /**
- * One email of the trial series, already filled in for one admin. Queued, and carries plain values so it needs
+ * One email of the trial series or of a promo campaign, already filled in for one person. Queued, and carries plain values so it needs
  * no database when it is sent. Every one has a personal "stop these emails" link, also as a one-click header.
  */
 class TrialEmail extends Mailable implements ShouldQueue
@@ -24,11 +24,12 @@ class TrialEmail extends Mailable implements ShouldQueue
         public string $unsubscribeUrl,
         public string $fromAddress,
         public string $fromName,
+        public string $reason = 'Anda menerima email ini sebagai admin agensi yang sedang mencoba JITU LEAD.',
     ) {}
 
     public function envelope(): Envelope
     {
-        return new Envelope(from: new Address($this->fromAddress, $this->fromName), subject: $this->subjectLine, tags: ['trial-'.$this->step]);
+        return new Envelope(from: new Address($this->fromAddress, $this->fromName), subject: $this->subjectLine, tags: [str_starts_with($this->step, 'campaign-') ? $this->step : 'trial-'.$this->step]);
     }
 
     public function headers(): Headers
@@ -46,6 +47,7 @@ class TrialEmail extends Mailable implements ShouldQueue
             'button' => $this->button,
             'url' => $this->url,
             'unsubscribeUrl' => $this->unsubscribeUrl,
+            'reason' => $this->reason,
         ]);
     }
 }

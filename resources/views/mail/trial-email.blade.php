@@ -8,6 +8,6 @@
 @endif
 
 <x-slot:subcopy>
-Anda menerima email ini sebagai admin agensi yang sedang mencoba JITU LEAD. [Berhenti menerima email ini]({{ $unsubscribeUrl }})
+{{ $reason }} [Berhenti menerima email ini]({{ $unsubscribeUrl }})
 </x-slot:subcopy>
 </x-mail::message>

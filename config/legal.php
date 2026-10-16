@@ -53,8 +53,9 @@ return [
                     ['p', 'Saat mendaftar kami meminta nomor WhatsApp Anda. Nomor itu dipakai untuk informasi penting tentang akun (misalnya masa percobaan atau pembayaran) dan untuk membantu Anda memakai {aplikasi}.'],
                     ['p', 'Bila Anda mencentang persetujuan "Saya bersedia dihubungi via WhatsApp/email tentang akun dan penawaran {aplikasi}", nama, email, nomor WhatsApp, nama agensi, paket, dan tanggal berakhirnya masa percobaan Anda dicatat sebagai calon pelanggan di CRM tim {aplikasi}. Tim kami dapat mengirim pesan WhatsApp tentang akun dan penawaran paket; pesan itu berhenti sendiri setelah agensi Anda berlangganan.'],
                     ['p', 'Selama dan sesudah masa percobaan, admin agensi yang emailnya terverifikasi menerima beberapa email berseri: tips memulai, ringkasan pemakaian, pengingat sebelum masa percobaan berakhir, dan penawaran setelahnya. Email ini berhenti sendiri setelah agensi membayar.'],
+                    ['p', 'Bila Anda menyetujui dihubungi, sesekali kami juga mengirim email penawaran {aplikasi}. Email itu hanya dikirim ke yang menyetujui dan emailnya terverifikasi.'],
                     ['ul', [
-                        'Berhenti menerima email masa percobaan: klik tautan "Berhenti menerima email ini" di bagian bawah email mana pun. Email penting tentang akun, seperti verifikasi dan atur ulang kata sandi, tetap dikirim.',
+                        'Berhenti menerima email masa percobaan dan email penawaran: klik tautan "Berhenti menerima email ini" di bagian bawah email mana pun. Email penting tentang akun, seperti verifikasi dan atur ulang kata sandi, tetap dikirim.',
                         'Berhenti menerima pesan WhatsApp: balas pesan kami dan minta berhenti, atau hubungi {kontak}. Kami akan menghentikan pesan penawaran dan mencatat penarikan persetujuan Anda.',
                         'Menarik persetujuan tidak memengaruhi akun atau layanan Anda.',
                     ]],
