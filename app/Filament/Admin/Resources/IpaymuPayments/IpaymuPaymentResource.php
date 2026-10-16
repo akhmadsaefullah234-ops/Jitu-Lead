@@ -40,7 +40,10 @@ class IpaymuPaymentResource extends Resource
                 TextColumn::make('tenant.name')->label('Agensi')->searchable(),
                 TextColumn::make('request.plan')->label('Paket')->formatStateUsing(fn ($state) => config("plans.plans.$state.name", $state)),
                 TextColumn::make('request.billing_cycle')->label('Siklus')->formatStateUsing(fn ($state) => $state === 'yearly' ? 'Tahunan' : 'Bulanan'),
-                TextColumn::make('amount')->label('Nominal')->money('IDR', locale: 'id'),
+                TextColumn::make('amount')->label('Harga paket')->money('IDR', locale: 'id'),
+                TextColumn::make('total_paid')->label('Dibayar pembeli')->money('IDR', locale: 'id')->placeholder('-'),
+                TextColumn::make('fee')->label('Biaya')->money('IDR', locale: 'id')->placeholder('-'),
+                TextColumn::make('paid_off')->label('Diterima')->money('IDR', locale: 'id')->placeholder('-'),
                 TextColumn::make('status')->label('Status')->badge()
                     ->formatStateUsing(fn ($state) => IpaymuPayment::LABELS[$state] ?? $state)
                     ->color(fn ($state) => ['pending' => 'warning', 'paid' => 'success', 'failed' => 'danger'][$state] ?? 'gray'),

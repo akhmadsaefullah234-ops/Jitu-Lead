@@ -393,6 +393,75 @@ class IpaymuTest extends TestCase
         Mail::assertQueued(PaymentReceived::class, fn (PaymentReceived $m) => str_contains($m->details['Catatan'], 'pembayaran ganda'));
     }
 
+    /** The sandbox callback as iPaymu really sent it: the buyer carried the fee (199.000 + 3.582 = 202.582). */
+    private function buyerFeePayload(): array
+    {
+        return $this->payload(['amount' => '202582', 'total' => '202582', 'sub_total' => '199000', 'fee' => '4975', 'paid_off' => '197607', 'via' => 'qris', 'trx_id' => '241491']);
+    }
+
+    public function test_a_payment_where_the_buyer_carries_the_fee_activates_the_plan(): void
+    {
+        $this->fakeIpaymu(['TransactionId' => 241491, 'Amount' => 202582, 'SubTotal' => 199000, 'Fee' => 4975]);
+        $payment = $this->startPayment();
+
+        $this->notify($this->buyerFeePayload())->assertOk();
+
+        $this->assertSame('tim', $this->tenant->currentSubscription()->refresh()->plan);
+        $payment->refresh();
+        $this->assertSame([IpaymuPayment::PAID, 199000, 202582, 4975, 197607], [$payment->status, (int) $payment->amount, $payment->total_paid, $payment->fee, $payment->paid_off]);
+        Mail::assertQueued(PaymentReceived::class, 1);
+    }
+
+    public function test_a_payment_where_the_merchant_carries_the_fee_still_matches(): void
+    {
+        $this->fakeIpaymu(['Amount' => 199000, 'SubTotal' => 199000, 'Fee' => 4975]);
+        $payment = $this->startPayment();
+
+        $this->notify($this->payload(['fee' => '4975', 'paid_off' => '194025']))->assertOk();
+
+        $payment->refresh();
+        $this->assertSame([IpaymuPayment::PAID, 199000, 4975, 194025], [$payment->status, $payment->total_paid, $payment->fee, $payment->paid_off]);
+    }
+
+    public function test_without_a_sub_total_the_buyer_fee_is_taken_off_the_amount(): void
+    {
+        $this->fakeIpaymu(['Amount' => 202582, 'BuyerFee' => 3582]);
+        $this->startPayment();
+
+        $this->notify($this->buyerFeePayload())->assertOk();
+
+        $this->assertSame(IpaymuPayment::PAID, IpaymuPayment::first()->status);
+    }
+
+    public function test_a_wrong_sub_total_is_rejected_even_when_the_amount_looks_right(): void
+    {
+        $this->fakeIpaymu(['Amount' => 199000, 'SubTotal' => 150000]);
+        $this->startPayment();
+
+        $this->notify($this->payload())->assertStatus(422);
+
+        $this->assertSame(IpaymuPayment::PENDING, IpaymuPayment::first()->status);
+        $this->assertNotSame('tim', $this->tenant->currentSubscription()->refresh()->plan);
+    }
+
+    public function test_the_buyer_fee_does_not_loosen_the_reference_check(): void
+    {
+        $this->fakeIpaymu(['Amount' => 202582, 'SubTotal' => 199000, 'ReferenceId' => '999']);
+        $this->startPayment();
+
+        $this->notify($this->buyerFeePayload())->assertStatus(422);
+        $this->assertSame(IpaymuPayment::PENDING, IpaymuPayment::first()->status);
+    }
+
+    public function test_the_buyer_fee_does_not_loosen_the_session_check(): void
+    {
+        $this->fakeIpaymu(['Amount' => 202582, 'SubTotal' => 199000, 'SessionId' => 'OTHER']);
+        $this->startPayment();
+
+        $this->notify($this->buyerFeePayload())->assertStatus(422);
+        $this->assertSame(IpaymuPayment::PENDING, IpaymuPayment::first()->status);
+    }
+
     // --- screens ---
 
     public function test_the_subscription_page_shows_the_payment_status(): void
@@ -418,7 +487,7 @@ class IpaymuTest extends TestCase
         Filament::setCurrentPanel(Filament::getPanel('admin'));
 
         Livewire::test(ListIpaymuPayments::class)->assertOk()
-            ->assertSee('Griya Prima')->assertSee('Berhasil')->assertSee('777')->assertSee('199.000');
+            ->assertSee('Griya Prima')->assertSee('Berhasil')->assertSee('777')->assertSee('199.000')->assertSee('Dibayar pembeli');
 
         $this->actingAs(User::factory()->create())->get('/admin/ipaymu-payments')->assertForbidden();
     }

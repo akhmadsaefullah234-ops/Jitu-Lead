@@ -92,13 +92,14 @@ class IpaymuPayments
         }
 
         $sameReference = (string) ($data['ReferenceId'] ?? '') === $payment->reference_id;
-        $sameAmount = (int) round((float) ($data['Amount'] ?? -1)) === (int) $payment->amount;
+        $price = self::price($data);
+        $sameAmount = $price === (int) $payment->amount;
         $sameSession = blank($data['SessionId'] ?? null) || blank($payment->session_id) || strcasecmp((string) $data['SessionId'], $payment->session_id) === 0;
 
         if (! $sameReference || ! $sameAmount || ! $sameSession) {
             Log::warning('iPaymu callback ditolak: data tidak cocok', [
                 'trx_id' => $trxId, 'reference_id' => $reference, 'api_reference' => $data['ReferenceId'] ?? null,
-                'amount_expected' => $payment->amount, 'amount_api' => $data['Amount'] ?? null,
+                'amount_expected' => $payment->amount, 'price_api' => $price, 'amount_api' => $data['Amount'] ?? null, 'sub_total_api' => $data['SubTotal'] ?? null,
             ]);
 
             return 'mismatch';
@@ -111,21 +112,53 @@ class IpaymuPayments
             default => IpaymuPayment::PENDING,
         };
 
-        $result = $this->apply($payment->getKey(), $status, $trxId, (string) ($payload['via'] ?? $payload['channel'] ?? ''));
+        $total = (int) round((float) ($data['Amount'] ?? $price));
+        $fee = self::money($data['Fee'] ?? $payload['fee'] ?? null);
+        $money = [
+            'total_paid' => $total, 'fee' => $fee,
+            'paid_off' => self::money($payload['paid_off'] ?? null) ?? ($fee !== null ? $total - $fee : null),
+        ];
+
+        $result = $this->apply($payment->getKey(), $status, $trxId, (string) ($payload['via'] ?? $payload['channel'] ?? ''), $money);
 
         Log::info('iPaymu callback diproses', ['trx_id' => $trxId, 'reference_id' => $reference, 'status_api' => $data['Status'] ?? null, 'hasil' => $result]);
 
         return $result;
     }
 
+    /**
+     * The price of the plan as iPaymu saw it, without the fee a buyer may have been charged on top.
+     * "Amount" is what the buyer paid (price + buyer fee), so it only matches the request when the merchant bears the fee.
+     * SubTotal is the price itself; without it, the buyer fee fields are taken off Amount.
+     */
+    private static function price(array $data): int
+    {
+        if (self::money($data['SubTotal'] ?? null) !== null) {
+            return self::money($data['SubTotal']);
+        }
+
+        $amount = self::money($data['Amount'] ?? null);
+
+        return $amount === null ? -1 : $amount - (self::money($data['BuyerFee'] ?? $data['AdditionalFee'] ?? null) ?? 0);
+    }
+
+    private static function money(mixed $value): ?int
+    {
+        return is_numeric($value) ? (int) round((float) $value) : null;
+    }
+
     /** Applies a verified status. A payment that is already paid never changes and never activates the plan twice. */
-    private function apply(int $paymentId, string $status, string $trxId, string $channel): string
+    private function apply(int $paymentId, string $status, string $trxId, string $channel, array $money): string
     {
         $paidNow = null;
 
-        $result = DB::transaction(function () use ($paymentId, $status, $trxId, $channel, &$paidNow) {
+        $result = DB::transaction(function () use ($paymentId, $status, $trxId, $channel, $money, &$paidNow) {
             $payment = IpaymuPayment::query()->lockForUpdate()->findOrFail($paymentId);
             $payment->forceFill(['trx_id' => $trxId, 'last_callback_at' => now()] + ($channel !== '' ? ['channel' => $channel] : []));
+
+            if ($payment->status !== IpaymuPayment::PAID) {
+                $payment->forceFill($money);
+            }
 
             if ($payment->status === IpaymuPayment::PAID) {
                 $payment->save();
