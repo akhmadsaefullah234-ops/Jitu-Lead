@@ -11,6 +11,7 @@ use App\Filament\Widgets\LeadsByStage;
 use App\Filament\Widgets\OverdueTasks;
 use App\Filament\Widgets\RecentLeads;
 use App\Filament\Widgets\SalesStats;
+use App\Filament\Widgets\WhatsAppPrompt;
 use App\Support\CurrentTenant;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -32,7 +33,7 @@ class Dashboard extends BaseDashboard
 
     public function getWidgets(): array
     {
-        return [BannerSlider::class, GettingStarted::class, SalesStats::class, LeadsByStage::class, LeadsBySource::class, OverdueTasks::class, RecentLeads::class];
+        return [WhatsAppPrompt::class, BannerSlider::class, GettingStarted::class, SalesStats::class, LeadsByStage::class, LeadsBySource::class, OverdueTasks::class, RecentLeads::class];
     }
 
     private function isAdmin(): bool

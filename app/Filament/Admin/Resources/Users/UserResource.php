@@ -42,6 +42,12 @@ class UserResource extends Resource
             ->columns([
                 TextColumn::make('name')->label('Nama')->searchable(),
                 TextColumn::make('email')->searchable()->copyable(),
+                TextColumn::make('whatsapp')->label('WhatsApp')->searchable()->copyable()->placeholder('-')
+                    ->url(fn (User $u) => $u->whatsapp ? 'https://wa.me/'.$u->whatsapp : null, shouldOpenInNewTab: true),
+                TextColumn::make('contact_consent_at')->label('Setuju dihubungi')->dateTime('d M Y H:i')->placeholder('Tidak')->sortable(),
+                IconColumn::make('trial_emails_unsubscribed_at')->label('Email percobaan')->boolean()
+                    ->state(fn (User $u) => $u->trial_emails_unsubscribed_at === null)->tooltip(fn (User $u) => $u->trial_emails_unsubscribed_at ? 'Berhenti berlangganan '.$u->trial_emails_unsubscribed_at->format('d M Y') : 'Menerima')
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('tenants')->label('Agensi')->state(fn (User $u) => $u->tenants->pluck('name')->implode(', '))->placeholder('-'),
                 IconColumn::make('email_verified_at')->label('Email terverifikasi')->boolean()->state(fn (User $u) => $u->email_verified_at !== null),
                 IconColumn::make('is_super_admin')->label('Super admin')->boolean(),

@@ -7,6 +7,8 @@ use App\Mail\SubscriptionEnding;
 use App\Models\Subscription;
 use App\Models\SubscriptionRequest;
 use App\Models\Tenant;
+use App\Retention\PlatformLeads;
+use App\Retention\TrialEmailSettings;
 use Illuminate\Support\Facades\Mail;
 
 /** Changes to an agency's subscription made by the platform owner or the daily check. */
@@ -34,7 +36,10 @@ class Subscriptions
         SubscriptionRequest::query()->where('tenant_id', $tenant->getKey())->where('status', SubscriptionRequest::PENDING)
             ->update(['status' => SubscriptionRequest::APPROVED, 'handled_at' => now()]);
 
-        return $sub->refresh();
+        $sub->refresh();
+        app(PlatformLeads::class)->sync($tenant);
+
+        return $sub;
     }
 
     public function addAddon(Tenant $tenant, string $kind, int $qty): Subscription
@@ -49,6 +54,8 @@ class Subscriptions
     /**
      * Daily pass: expired trials and periods become past_due (with a grace
      * period), then read_only; and a reminder email goes out before the end.
+     * Trials get their reminders from the trial email series instead
+     * (trial-emails:send), unless the owner switched those reminders off.
      *
      * @return array{past_due: int, read_only: int, reminded: int}
      */
@@ -57,8 +64,9 @@ class Subscriptions
         $result = ['past_due' => 0, 'read_only' => 0, 'reminded' => 0];
         $grace = (int) config('plans.grace_days');
         $remind = (int) config('plans.reminder_days');
+        $seriesRemindsTrials = TrialEmailSettings::coversEndingReminders();
 
-        Subscription::query()->with('tenant')->get()->each(function (Subscription $sub) use (&$result, $grace, $remind) {
+        Subscription::query()->with('tenant')->get()->each(function (Subscription $sub) use (&$result, $grace, $remind, $seriesRemindsTrials) {
             if ($sub->tenant === null) {
                 return;
             }
@@ -75,9 +83,14 @@ class Subscriptions
                 $result['read_only']++;
             }
 
+            if ($sub->tenant->sales_lead_id !== null) {
+                app(PlatformLeads::class)->sync($sub->tenant);
+            }
+
             $end = $sub->endsAt();
 
             if (in_array($sub->status, [Subscription::TRIAL, Subscription::ACTIVE], true) && $end !== null
+                && ! ($sub->status === Subscription::TRIAL && $seriesRemindsTrials)
                 && $end->isFuture() && $end->lte(now()->addDays($remind))
                 && ($sub->reminder_sent_for === null || ! $sub->reminder_sent_for->equalTo($end))) {
                 $this->remind($sub);

@@ -3,10 +3,12 @@
 namespace App\Filament\Admin\Resources\Tenants;
 
 use App\Billing\Subscriptions;
+use App\Enums\Role;
 use App\Filament\Admin\Resources\Tenants\Pages\ListTenants;
 use App\Models\Lead;
 use App\Models\Subscription;
 use App\Models\Tenant;
+use App\Retention\PlatformLeads;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -41,7 +43,7 @@ class TenantResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn ($query) => $query->with('subscription')->withCount('users'))
+            ->modifyQueryUsing(fn ($query) => $query->with(['subscription', 'users'])->withCount('users'))
             ->defaultSort('created_at', 'desc')
             ->columns([
                 TextColumn::make('name')->label('Agensi')->searchable()->description(fn (Tenant $t) => $t->slug),
@@ -52,6 +54,10 @@ class TenantResource extends Resource
                     }),
                 TextColumn::make('ends')->label('Berakhir')
                     ->state(fn (Tenant $t) => $t->currentSubscription()->endsAt())->dateTime('d M Y')->placeholder('-'),
+                TextColumn::make('whatsapp')->label('WhatsApp admin')
+                    ->state(fn (Tenant $t) => $t->users->filter(fn ($u) => $u->pivot->role === Role::Admin && filled($u->whatsapp))->pluck('whatsapp')->unique()->implode(', ') ?: null)
+                    ->url(fn (Tenant $t) => ($n = $t->users->first(fn ($u) => $u->pivot->role === Role::Admin && filled($u->whatsapp))?->whatsapp) ? 'https://wa.me/'.$n : null, shouldOpenInNewTab: true)
+                    ->placeholder('-'),
                 TextColumn::make('users_count')->label('Pengguna'),
                 TextColumn::make('leads')->label('Lead')->state(fn (Tenant $t) => Lead::query()->withoutGlobalScopes()->where('tenant_id', $t->getKey())->count()),
                 TextColumn::make('created_at')->label('Daftar')->dateTime('d M Y')->sortable(),
@@ -88,6 +94,7 @@ class TenantResource extends Resource
                             $sub = $record->currentSubscription();
                             $from = $sub->trial_ends_at?->isFuture() ? $sub->trial_ends_at : now();
                             $sub->update(['status' => Subscription::TRIAL, 'trial_ends_at' => $from->copy()->addDays((int) $data['days']), 'grace_ends_at' => null, 'reminder_sent_for' => null]);
+                            app(PlatformLeads::class)->sync($record);
                             Notification::make()->title('Uji coba diperpanjang')->success()->send();
                         }),
                     Action::make('addon')->label('Tambah add-on')->icon(Heroicon::OutlinedPlusCircle)
