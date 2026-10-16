@@ -18,6 +18,7 @@
     $yearMonths = collect($plans)->map(fn ($p) => round($p['price']['yearly'] / $p['price']['monthly']))->unique();
     $yearMonths = $yearMonths->count() === 1 && $yearMonths->first() < 12 ? (int) $yearMonths->first() : null;
     $graceDays = config('plans.grace_days');
+    $ownerContact = $ownerContact ?? [];
     $initials = fn (string $name) => mb_strtoupper(collect(preg_split('/\s+/', trim(preg_replace('/[^\p{L}\s]/u', '', $name))))->filter()->take(2)->map(fn ($w) => mb_substr($w, 0, 1))->implode(''));
 @endphp
 <!doctype html>
@@ -298,6 +299,13 @@ section.s.alt { background: var(--bg-soft); }
 .faq details[open] summary::after { content: "−"; }
 .faq details p { color: var(--muted); padding-bottom: 1rem; font-size: .95rem; max-width: 42rem; }
 
+/* Kontak */
+.kontak { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); max-width: 56rem; }
+.kontak .k { background: var(--surface); border: 1px solid var(--line); border-radius: 1rem; padding: 1.2rem 1.3rem; min-width: 0; }
+.kontak .k span { display: block; font-family: var(--f-mono); font-size: .75rem; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-bottom: .35rem; }
+.kontak .k a, .kontak .k address { font-style: normal; font-weight: 600; overflow-wrap: anywhere; text-decoration: none; }
+.kontak .k a:hover { text-decoration: underline; }
+
 /* CTA akhir */
 .final { background: var(--red); color: #fff; padding-block: 4rem; text-align: center; }
 .final h2 { font-size: clamp(1.8rem, 4vw, 2.6rem); line-height: 1.1; max-width: 34rem; margin: 0 auto .8rem; }
@@ -327,6 +335,7 @@ footer a:hover { color: var(--ink); }
       @if ($testimonials->isNotEmpty())<a href="#testimoni">Testimoni</a>@endif
       <a href="#harga">Harga</a>
       <a href="#tanya">Tanya jawab</a>
+      @if ($ownerContact !== [])<a href="#kontak">Kontak</a>@endif
     </nav>
     <div class="top-cta">
       <a class="btn ghost sm login" href="{{ $login }}">Masuk</a>
@@ -660,6 +669,19 @@ footer a:hover { color: var(--ink); }
   </div>
 </section>
 
+@if ($ownerContact !== [])
+<section class="s" id="kontak">
+  <div class="wrap">
+    <div class="s-head"><span class="eyebrow">Kontak</span><h2>Hubungi kami</h2></div>
+    <div class="kontak">
+      @isset($ownerContact['email'])<div class="k"><span>Email</span><a href="mailto:{{ $ownerContact['email'] }}">{{ $ownerContact['email'] }}</a></div>@endisset
+      @isset($ownerContact['phone'])<div class="k"><span>Telepon / WhatsApp</span><a href="tel:+{{ $ownerContact['phone_digits'] }}">{{ $ownerContact['phone'] }}</a></div>@endisset
+      @isset($ownerContact['address'])<div class="k"><span>Alamat usaha</span><address>{{ $ownerContact['address'] }}</address></div>@endisset
+    </div>
+  </div>
+</section>
+@endif
+
 <section class="final">
   <div class="wrap">
     <h2>Mulai balas lead lebih cepat dari pesaing Anda</h2>
@@ -679,6 +701,7 @@ footer a:hover { color: var(--ink); }
     <nav aria-label="Tautan bawah">
       <a href="{{ url('/kebijakan-privasi') }}">Kebijakan Privasi</a>
       <a href="{{ url('/syarat-layanan') }}">Syarat Layanan</a>
+      @if ($ownerContact !== [])<a href="#kontak">Kontak</a>@endif
       <a href="{{ $login }}">Masuk</a>
     </nav>
   </div>

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\WhatsAppMediaController;
 use App\Legal\LegalDocs;
+use App\Models\PlatformSetting;
 use Illuminate\Support\Facades\Route;
 
 // Front page, read from the same config/plans.php as /harga and the Langganan screen.
@@ -9,6 +10,7 @@ Route::get('/', fn () => view('landing', [
     'plans' => config('plans.plans'), 'addons' => config('plans.addons'),
     'limitLabels' => config('plans.limit_labels'), 'featureLabels' => config('plans.feature_labels'), 'trialDays' => config('plans.trial_days'),
     'testimonials' => config('landing.testimonials', []),
+    'ownerContact' => PlatformSetting::publicContact(),
 ]))->name('home');
 
 // Privacy policy and terms of service (text in config/legal.php, editable in /admin).
