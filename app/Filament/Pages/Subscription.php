@@ -2,9 +2,11 @@
 
 namespace App\Filament\Pages;
 
+use App\Billing\Ipaymu\IpaymuPayments;
 use App\Billing\PlanLimits;
 use App\Billing\PlanRequests;
 use App\Enums\Role;
+use App\Models\IpaymuPayment;
 use App\Models\SubscriptionRequest;
 use App\Support\CurrentTenant;
 use BackedEnum;
@@ -14,7 +16,7 @@ use Filament\Support\Icons\Heroicon;
 
 /**
  * The agency admin's view of the plan: what is used against each limit, the
- * three plans, and a request button. Payment is a manual transfer for now.
+ * three plans, and a request button. Payment is by iPaymu (when configured) or a manual transfer.
  */
 class Subscription extends Page
 {
@@ -60,6 +62,39 @@ class Subscription extends Page
         Notification::make()->title('Permintaan paket dibuat')->body('Ikuti instruksi transfer di halaman ini. Paket aktif setelah pembayaran kami konfirmasi.')->success()->send();
     }
 
+    /** The newest payment of the pending request, or of the last request when none is pending (so a just-paid one shows). */
+    public function latestPayment(): ?IpaymuPayment
+    {
+        $tenantId = app(CurrentTenant::class)->id();
+        $request = $this->pending() ?? SubscriptionRequest::query()->where('tenant_id', $tenantId)->has('payments')->latest('id')->first();
+
+        return $request?->payments()->latest('id')->first();
+    }
+
+    /** Opens (or reuses) the iPaymu payment page for the pending request. */
+    public function pay()
+    {
+        abort_unless(static::canAccess(), 403);
+
+        $request = $this->pending();
+        $payments = app(IpaymuPayments::class);
+
+        if (! $request || ! $payments->enabled()) {
+            return;
+        }
+
+        try {
+            $payment = $payments->start($request, auth()->user());
+        } catch (\Throwable $e) {
+            report($e);
+            Notification::make()->title('Pembayaran otomatis belum bisa dibuka')->body('Coba lagi sebentar lagi, atau pakai transfer manual di bawah.')->danger()->send();
+
+            return;
+        }
+
+        return redirect()->away($payment->payment_url);
+    }
+
     public function cancelRequest(): void
     {
         abort_unless(static::canAccess(), 403);
@@ -85,6 +120,8 @@ class Subscription extends Page
             'limitLabels' => config('plans.limit_labels'),
             'featureLabels' => config('plans.feature_labels'),
             'pending' => $this->pending(),
+            'payment' => $this->latestPayment(),
+            'ipaymuOn' => app(IpaymuPayments::class)->enabled(),
             'bankInfo' => config('jitu.billing_bank_info'),
             'contact' => config('jitu.billing_contact'),
         ];

@@ -2,11 +2,14 @@
 
 namespace App\Support;
 
+use App\Filament\Admin\Resources\IpaymuPayments\IpaymuPaymentResource;
 use App\Filament\Admin\Resources\SubscriptionRequests\SubscriptionRequestResource;
 use App\Filament\Admin\Resources\Tenants\TenantResource;
 use App\Jobs\SendPushAlert;
 use App\Mail\NewAgencyRegistered;
+use App\Mail\PaymentReceived;
 use App\Mail\SubscriptionRequested;
+use App\Models\IpaymuPayment;
 use App\Models\SubscriptionRequest;
 use App\Models\Tenant;
 use App\Models\User;
@@ -60,6 +63,31 @@ class OwnerAlerts
             ], $url));
 
             self::push("Permintaan paket {$plan} dari {$tenant->name} — {$total}", 'Buka permintaan langganan', $url, 'plan-request-'.$request->getKey());
+        });
+    }
+
+    /** A confirmed iPaymu payment. $duplicate: the plan was already active, so this one needs a manual look. */
+    public static function paymentReceived(IpaymuPayment $payment, bool $duplicate = false): void
+    {
+        self::guard(function () use ($payment, $duplicate) {
+            $tenant = $payment->request->tenant;
+            $plan = config("plans.plans.{$payment->request->plan}.name", $payment->request->plan);
+            $cycle = $payment->request->billing_cycle === 'yearly' ? 'Tahunan' : 'Bulanan';
+            $total = 'Rp '.number_format((int) $payment->amount, 0, ',', '.');
+            $url = IpaymuPaymentResource::getUrl('index', panel: 'admin');
+            $note = $duplicate ? 'Paket sudah aktif sebelum pembayaran ini masuk. Cek kemungkinan pembayaran ganda.' : null;
+
+            self::email(new PaymentReceived($tenant->name, $plan, $total, array_filter([
+                'Agensi' => $tenant->name,
+                'Paket' => $plan,
+                'Periode' => $cycle,
+                'Total' => $total,
+                'Metode' => $payment->channel,
+                'ID transaksi iPaymu' => $payment->trx_id,
+                'Catatan' => $note,
+            ], 'filled'), $url));
+
+            self::push("Pembayaran diterima: {$tenant->name} {$plan} {$total} via iPaymu".($duplicate ? ' (cek pembayaran ganda)' : ''), 'Buka daftar transaksi iPaymu', $url, 'payment-'.$payment->getKey());
         });
     }
 

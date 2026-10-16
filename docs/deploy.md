@@ -209,7 +209,30 @@ Pemeriksaan harian `plan:check` (dijadwalkan 01:00, butuh `schedule:run` di cron
 - tenggang habis, status menjadi `read_only`: data bisa dilihat, tidak bisa ditambah atau diubah, AI dan follow-up otomatis berhenti
 - email pengingat ke admin agensi 3 hari sebelum berakhir (perlu pengaturan `MAIL_*`)
 
-Lead baru dari formulir dan WhatsApp tetap diterima walau melebihi batas lead aktif atau status hanya-baca; lead tidak pernah dibuang. Biaya template WhatsApp resmi ditagih Meta langsung ke agensi dan bukan bagian paket. Pembayaran otomatis (Xendit/Midtrans) dan invoice belum ada (tahap 2).
+Lead baru dari formulir dan WhatsApp tetap diterima walau melebihi batas lead aktif atau status hanya-baca; lead tidak pernah dibuang. Biaya template WhatsApp resmi ditagih Meta langsung ke agensi dan bukan bagian paket. Pembayaran otomatis lewat iPaymu ada di bagian berikut. Invoice belum ada.
+
+## Pembayaran otomatis iPaymu (QRIS, Virtual Account, e-wallet)
+
+Memakai iPaymu API v2 (redirect payment). Transfer manual tetap jalan sebagai cadangan. Tanpa `IPAYMU_VA` dan `IPAYMU_API_KEY`, tombol bayar disembunyikan.
+
+Isi di `.env` lalu `php artisan config:cache`:
+
+```
+IPAYMU_VA=0000001234567890
+IPAYMU_API_KEY=xxxxxxxx
+IPAYMU_SANDBOX=true      # true: https://sandbox.ipaymu.com, false: https://my.ipaymu.com
+IPAYMU_EXPIRED_HOURS=24  # batas waktu bayar
+```
+
+VA dan API key sandbox berbeda dengan produksi (dashboard iPaymu, menu Integrasi). Saat produksi, iPaymu mewajibkan IP server statis dan domain yang terdaftar. Jalankan `php artisan migrate` (tabel `ipaymu_payments`).
+
+**URL callback (notify):** `APP_URL/billing/ipaymu/notify`, dikirim otomatis di tiap transaksi (`notifyUrl`), jadi tidak perlu diisi di dashboard. Pastikan APP_URL benar dan dapat dijangkau dari internet.
+
+Alur: admin agensi memilih paket di menu Langganan lalu klik **Bayar sekarang**, dan dialihkan ke halaman iPaymu. Setelah bayar, iPaymu memanggil URL callback. Aplikasi memeriksa tanda tangan (`X-Signature`, kunci VA), lalu menanyakan ulang status transaksi ke API iPaymu, dan hanya bila statusnya berhasil serta nominal dan referensinya cocok, paket diaktifkan dengan logika yang sama seperti tombol "Setujui" di super admin. Callback ganda aman (paket diaktifkan sekali). Pemilik platform menerima email dan push "Pembayaran diterima". Daftar transaksi ada di **/admin, menu Transaksi iPaymu**.
+
+Pengecekan: setiap callback dicatat di log aplikasi (`storage/logs`: ID transaksi, status, referensi, hasil), tanpa API key. Callback dengan tanda tangan salah dibalas 400, referensi atau nominal tidak cocok dibalas 422, dan bila API iPaymu tidak terjangkau dibalas 503 agar iPaymu mengirim ulang.
+
+Uji sandbox: isi kunci sandbox, `IPAYMU_SANDBOX=true`, pilih paket, klik Bayar sekarang, selesaikan pembayaran di sandbox, lalu pastikan status di menu Langganan berubah menjadi Berhasil dan paket aktif.
 
 ## Landing page builder
 
