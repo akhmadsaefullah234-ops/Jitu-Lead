@@ -3,7 +3,7 @@
 /*
  * Text of /kebijakan-privasi and /syarat-layanan. This is the default; the
  * platform owner can replace either text in /admin (Halaman hukum). Placeholders:
- * {perusahaan} {kontak} {alamat} {aplikasi} {backup_hari} {backup_luar_hari} {tanggal}.
+ * {perusahaan} {kontak} {alamat} {aplikasi} {uji_coba_hari} {backup_hari} {backup_luar_hari} {tanggal}.
  *
  * IMPORTANT: this is a draft written from how the app actually works. It is NOT
  * legal advice and must be reviewed by a lawyer before release.
@@ -14,7 +14,7 @@ return [
     'contact' => env('LEGAL_CONTACT_EMAIL', env('SUPPORT_EMAIL')),
     'address' => env('LEGAL_ADDRESS'),
     // Date of the last change to the default text.
-    'updated' => '2026-10-09',
+    'updated' => '2026-10-16',
 
     'documents' => [
 
@@ -108,6 +108,7 @@ return [
                         'Langganan dibayar di muka lewat transfer bank sesuai paket dan siklus (bulanan atau tahunan) yang dipilih. Paket aktif setelah pembayaran kami konfirmasi.',
                         'Bila masa langganan berakhir, akun menjadi hanya-baca setelah masa tenggang yang tertera di aplikasi. AI dan tindak lanjut otomatis berhenti selama hanya-baca.',
                         'Lead dari formulir dan WhatsApp tetap diterima walau batas paket tercapai.',
+                        'Ketentuan pengembalian dana ada di {tautan:kebijakan-pengembalian-dana}.',
                     ]],
                 ]],
                 ['Penggunaan yang diperbolehkan', [
@@ -140,6 +141,43 @@ return [
                 ]],
                 ['Kontak', [
                     ['p', 'Pertanyaan tentang syarat ini: {kontak}.'],
+                ]],
+            ],
+        ],
+        'kebijakan-pengembalian-dana' => [
+            'title' => 'Kebijakan Pengembalian Dana',
+            'intro' => 'Kebijakan ini menjelaskan kapan pembayaran langganan {aplikasi} dapat dikembalikan dan cara mengajukannya.',
+            'sections' => [
+                ['Produk', [
+                    ['p', '{aplikasi} dijual sebagai langganan layanan perangkat lunak (SaaS) bulanan atau tahunan, dikelola oleh {perusahaan}. Pembayaran dilakukan di muka untuk periode yang dipilih.'],
+                ]],
+                ['Uji coba gratis', [
+                    ['p', 'Setiap agensi baru mendapat masa percobaan gratis selama {uji_coba_hari} hari untuk mencoba semua fitur paket percobaan sebelum membayar. Karena itu, pembayaran langganan pada umumnya tidak dapat dikembalikan setelah dilakukan.'],
+                ]],
+                ['Pengecualian', [
+                    ['p', 'Pengembalian dana dapat diberikan dalam keadaan berikut:'],
+                    ['ul', [
+                        'Tagihan ganda: Anda membayar lebih dari satu kali untuk periode yang sama.',
+                        'Salah nominal: jumlah yang Anda bayarkan lebih besar dari tagihan; selisihnya dikembalikan.',
+                        'Layanan tidak dapat dipakai karena kesalahan sistem kami dan tidak dapat kami pulihkan dalam waktu yang wajar.',
+                    ]],
+                ]],
+                ['Cara mengajukan', [
+                    ['p', 'Kirim email ke {kontak} paling lambat 7 hari setelah tanggal pembayaran. Pengajuan setelah itu tidak dapat kami proses. Cantumkan:'],
+                    ['ul', [
+                        'nama agensi dan email akun Anda,',
+                        'bukti pembayaran (struk atau mutasi rekening) beserta tanggal dan nominalnya,',
+                        'alasan pengajuan.',
+                    ]],
+                ]],
+                ['Proses pengembalian', [
+                    ['p', 'Kami memeriksa pengajuan Anda dan memberi kabar lewat email. Bila disetujui, dana dikembalikan dalam 7 sampai 14 hari kerja ke rekening atau metode pembayaran asal.'],
+                ]],
+                ['Berhenti berlangganan', [
+                    ['p', 'Anda tidak perlu mengajukan apa pun untuk berhenti: cukup tidak memperpanjang. Setelah masa langganan dan masa tenggang berakhir, akun menjadi hanya-baca. Data Anda tetap aman dan bisa dilihat, dan akun bisa dipakai penuh lagi kapan saja dengan memilih paket.'],
+                ]],
+                ['Kontak', [
+                    ['p', 'Pertanyaan tentang kebijakan ini: {kontak}{alamat}. Pembaruan terakhir: {tanggal}.'],
                 ]],
             ],
         ],

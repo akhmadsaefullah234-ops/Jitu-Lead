@@ -7,6 +7,7 @@ use App\LandingPages\RichText;
 use App\Legal\LegalDocs;
 use App\Models\LandingPage;
 use App\Models\LegalDocument;
+use App\Models\PlatformSetting;
 use App\Models\User;
 use App\Support\CurrentTenant;
 use Filament\Facades\Filament;
@@ -21,7 +22,8 @@ class LegalPagesTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        config(['legal.contact' => 'privasi@example.com', 'legal.company' => 'PT Contoh', 'legal.address' => null]);
+        config(['legal.company' => 'PT Contoh']);
+        PlatformSetting::write('contact', ['email' => 'privasi@example.com', 'phone' => '082113345882', 'address' => null]);
     }
 
     private function owner(): User
@@ -53,7 +55,8 @@ class LegalPagesTest extends TestCase
 
     public function test_placeholders_use_the_real_company_contact_and_retention_numbers(): void
     {
-        config(['jitu.backup.keep_days' => 7, 'jitu.backup.remote_keep_days' => 30, 'legal.address' => 'Jl. Contoh 1, Jakarta']);
+        config(['jitu.backup.keep_days' => 7, 'jitu.backup.remote_keep_days' => 30]);
+        PlatformSetting::write('contact', ['email' => 'privasi@example.com', 'address' => 'Jl. Contoh 1, Jakarta']);
 
         $this->get('/kebijakan-privasi')->assertSee('PT Contoh')->assertSee('Jl. Contoh 1, Jakarta')->assertSee('7 hari di server')->assertSee('30 hari di penyimpanan luar server')
             ->assertDontSee('{kontak}', false)->assertDontSee('{backup_hari}', false);

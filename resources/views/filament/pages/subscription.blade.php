@@ -125,6 +125,7 @@
             <li>Bila paket habis, ada masa tenggang {{ config('plans.grace_days') }} hari. Setelah itu akun menjadi hanya-baca: data aman dan bisa dilihat, tetapi tidak bisa ditambah atau diubah.</li>
         </ol>
         <p class="sb-note" style="margin-top:.5rem">Turun ke paket lebih kecil tidak menghapus data. Hanya penambahan baru yang dibatasi mengikuti paket.</p>
+        <p class="sb-note" style="margin-top:.5rem">Pembayaran umumnya tidak dapat dikembalikan karena ada uji coba gratis, dengan pengecualian tertentu. Lihat <a href="{{ url('/kebijakan-pengembalian-dana') }}" target="_blank" rel="noopener" style="text-decoration:underline">Kebijakan Pengembalian Dana</a>.</p>
     </x-filament::section>
 
     <x-filament::section heading="Tambahan (per bulan)" description="Butuh lebih dari batas paket? Hubungi pengelola untuk menambahkan.">

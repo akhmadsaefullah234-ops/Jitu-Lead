@@ -48,7 +48,16 @@
     </div>
     <h2 style="margin-top:2.5rem">Tambahan per bulan</h2>
     <ul>@foreach ($addons as $addon)<li>{{ $addon['unit_label'] }}: <b>{{ $rp($addon['price']) }}</b></li>@endforeach</ul>
+    <p class="note" style="margin-top:1rem">Pembayaran langganan umumnya tidak dapat dikembalikan karena ada uji coba gratis, dengan pengecualian tertentu. Lihat <a href="{{ url('/kebijakan-pengembalian-dana') }}" style="color:inherit">Kebijakan Pengembalian Dana</a>.</p>
     <p class="note" style="margin-top:1rem">Biaya template WhatsApp resmi ditagih langsung oleh Meta ke akun Anda dan bukan bagian dari paket.</p>
+    <nav class="note" style="margin-top:2rem;display:flex;flex-wrap:wrap;gap:.4rem 1rem" aria-label="Tautan bawah">
+        <a href="{{ url('/') }}" style="color:inherit">Beranda</a>
+        <a href="{{ url('/faq') }}" style="color:inherit">FAQ</a>
+        <a href="{{ url('/kontak') }}" style="color:inherit">Kontak</a>
+        <a href="{{ url('/kebijakan-privasi') }}" style="color:inherit">Kebijakan Privasi</a>
+        <a href="{{ url('/syarat-layanan') }}" style="color:inherit">Syarat Layanan</a>
+        <a href="{{ url('/kebijakan-pengembalian-dana') }}" style="color:inherit">Kebijakan Pengembalian Dana</a>
+    </nav>
 </main>
 </body>
 </html>

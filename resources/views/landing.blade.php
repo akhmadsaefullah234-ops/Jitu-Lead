@@ -9,7 +9,8 @@
     $cta = $open ? url('/app/register') : url('/app/login');
     $ctaText = $invite ? 'Daftar dengan kode undangan' : ($open ? 'Coba gratis '.$trialDays.' hari' : 'Masuk');
     $ctaShort = $invite ? 'Daftar' : 'Coba gratis';
-    $wa = $contact && preg_match('/^\+?\d[\d\s-]{7,}$/', $contact) ? 'https://wa.me/'.preg_replace('/\D/', '', $contact) : null;
+    $waDigits = \App\Support\PhoneNumber::whatsapp($contact);
+    $wa = $waDigits ? 'https://wa.me/'.$waDigits : null;
     $login = url('/app/login');
     $testimonials = collect($testimonials ?? [])->filter(fn ($t) => filled($t['quote'] ?? null) && filled($t['name'] ?? null))->values();
     $cheapest = collect($plans)->min(fn ($p) => $p['price']['monthly']);
@@ -657,14 +658,9 @@ footer a:hover { color: var(--ink); }
   <div class="wrap">
     <div class="s-head"><span class="eyebrow">Tanya jawab</span><h2>Yang sering ditanyakan</h2></div>
     <div class="faq">
-      <details><summary>Apakah nomor WhatsApp saya aman dipakai?</summary><p>Anda bisa memakai nomor yang sudah ada dengan scan QR, atau WhatsApp Business API resmi untuk volume besar. Untuk scan QR, gunakan nomor kantor dan hindari pesan massal ke orang yang tidak mengenal Anda.</p></details>
-      <details><summary>Apakah saya perlu API key AI sendiri?</summary><p>Tidak. AI sudah disediakan dan kuotanya mengikuti paket. @isset($addons['ai'])Jika kurang, tambah {{ $num($addons['ai']['unit']) }} balasan seharga {{ $rp($addons['ai']['price']) }}.@endisset</p></details>
-      <details><summary>Apakah AI membalas pelanggan tanpa persetujuan saya?</summary><p>Anda yang menentukan. AI bisa hanya membuat draf yang dikirim agen, atau membalas otomatis untuk pertanyaan umum. AI berhenti saat agen mengetik dan menyerahkan chat ke agen untuk kata kunci tertentu.</p></details>
-      <details><summary>Bagaimana lead dibagi ke agen?</summary><p>Bergiliran sesuai porsi yang Anda atur, misalnya 60% dan 40%, atau dibagi rata. Lead yang tidak ditanggapi dalam batas waktu bisa dipindah otomatis ke agen berikutnya.</p></details>
-      <details><summary>Bagaimana jika lead melebihi batas paket?</summary><p>Lead dari formulir dan WhatsApp tetap diterima. Anda mendapat peringatan untuk menaikkan paket.</p></details>
-      <details><summary>Apa yang terjadi jika langganan berakhir?</summary><p>Ada masa tenggang {{ $graceDays }} hari. Setelah itu akun menjadi baca saja. Data tidak dihapus dan bisa dipakai lagi setelah perpanjang.</p></details>
-      <details><summary>Bagaimana cara membayar?</summary><p>Saat ini lewat transfer bank. Nomor rekening tertera di menu Langganan setelah Anda masuk.</p></details>
-      <details><summary>Bisa dipakai di HP?</summary><p>Bisa. Buka {{ parse_url(url('/'), PHP_URL_HOST) }} di browser HP, lalu pasang ke layar utama. Tampilannya seperti aplikasi dan notifikasi lead baru masuk langsung.</p></details>
+      @foreach ($faq as $item)
+      <details><summary>{{ $item['q'] }}</summary><p>{{ $item['a'] }}</p></details>
+      @endforeach
     </div>
   </div>
 </section>
@@ -675,8 +671,8 @@ footer a:hover { color: var(--ink); }
     <div class="s-head"><span class="eyebrow">Kontak</span><h2>Hubungi kami</h2></div>
     <div class="kontak">
       @isset($ownerContact['email'])<div class="k"><span>Email</span><a href="mailto:{{ $ownerContact['email'] }}">{{ $ownerContact['email'] }}</a></div>@endisset
-      @isset($ownerContact['phone'])<div class="k"><span>Telepon / WhatsApp</span><a href="tel:+{{ $ownerContact['phone_digits'] }}">{{ $ownerContact['phone'] }}</a></div>@endisset
-      @isset($ownerContact['address'])<div class="k"><span>Alamat usaha</span><address>{{ $ownerContact['address'] }}</address></div>@endisset
+      @isset($ownerContact['phone'])<div class="k"><span>Telepon / WhatsApp</span>@isset($ownerContact['phone_digits'])<a href="tel:+{{ $ownerContact['phone_digits'] }}">{{ $ownerContact['phone'] }}</a> <a href="https://wa.me/{{ $ownerContact['phone_digits'] }}" rel="noopener" style="font-weight:500">Chat WhatsApp</a>@else{{ $ownerContact['phone'] }}@endisset</div>@endisset
+      @isset($ownerContact['address'])<div class="k"><span>{{ $ownerContact['address_label'] }}</span><address>{{ $ownerContact['address'] }}</address></div>@endisset
     </div>
   </div>
 </section>
@@ -699,9 +695,11 @@ footer a:hover { color: var(--ink); }
   <div class="wrap">
     <span>&copy; {{ date('Y') }} JITU LEAD</span>
     <nav aria-label="Tautan bawah">
+      <a href="{{ url('/faq') }}">FAQ</a>
+      <a href="{{ url('/kontak') }}">Kontak</a>
       <a href="{{ url('/kebijakan-privasi') }}">Kebijakan Privasi</a>
       <a href="{{ url('/syarat-layanan') }}">Syarat Layanan</a>
-      @if ($ownerContact !== [])<a href="#kontak">Kontak</a>@endif
+      <a href="{{ url('/kebijakan-pengembalian-dana') }}">Pengembalian Dana</a>
       <a href="{{ $login }}">Masuk</a>
     </nav>
   </div>
