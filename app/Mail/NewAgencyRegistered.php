@@ -20,7 +20,7 @@ class NewAgencyRegistered extends Mailable implements ShouldQueue
 
     public function content(): Content
     {
-        return new Content(text: 'mail.owner-alert', with: [
+        return new Content(markdown: 'mail.owner-alert', with: [
             'headline' => "Agensi baru mendaftar: {$this->agency}",
             'details' => $this->details,
             'url' => $this->url,

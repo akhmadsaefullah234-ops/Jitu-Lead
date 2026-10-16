@@ -179,6 +179,12 @@ WHATSAPP_GATEWAY_SIGNING_SECRET=...
 Cara termudah (satu VPS): `sudo bash gateway/install.sh` (juga untuk memperbarui gateway; setelah pembaruan ke Baileys 7 semua nomor perlu scan QR ulang, lihat `gateway/README.md`) memasang gateway dan mengisi .env otomatis (lihat `gateway/README.md`). Atau isi manual lalu `php artisan config:cache`. Tanpa isian ini, agensi yang memilih "WhatsApp biasa" harus mengisi alamat dan kunci gateway mereka sendiri di bagian lanjutan.
 
 
+## Email bermerek (logo dan tema)
+
+Semua email (verifikasi, reset sandi, undangan, notifikasi pemilik, backup gagal, langganan) memakai satu tema di `resources/views/vendor/mail` dengan logo `public/images/email-logo.png`, dimuat lewat alamat absolut `APP_URL` (Gmail tidak menampilkan SVG). Pastikan `APP_URL` di `.env` benar (https dan domain publik), lalu `php artisan config:cache`. Untuk mengganti logo, ganti PNG itu (lebar tampil 160px, simpan 2x agar tajam).
+
+Tautan verifikasi email yang dibuka oleh akun lain atau sudah kedaluwarsa kini menampilkan halaman penjelasan dengan tombol keluar-lalu-masuk dan kirim ulang, bukan 403 polos. Aksi "Kirim tautan reset sandi" di /admin → Users mengirim tautan ke halaman reset panel /app.
+
 ## Paket langganan (tahap 1, pembayaran manual)
 
 Paket, harga, dan batas didefinisikan di satu tempat: `config/plans.php`. Halaman `/harga`, menu Langganan, dan semua pengecekan batas membaca file itu.

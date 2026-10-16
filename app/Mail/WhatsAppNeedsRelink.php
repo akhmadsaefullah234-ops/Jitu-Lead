@@ -20,7 +20,7 @@ class WhatsAppNeedsRelink extends Mailable
 
     public function content(): Content
     {
-        return new Content(view: 'mail.whatsapp-needs-relink', with: [
+        return new Content(markdown: 'mail.whatsapp-needs-relink', with: [
             'tenant' => $this->tenant,
             'channel' => $this->channel,
             'url' => WaChannelResource::getUrl('index', tenant: $this->tenant),

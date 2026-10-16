@@ -20,7 +20,7 @@ class SubscriptionRequested extends Mailable implements ShouldQueue
 
     public function content(): Content
     {
-        return new Content(text: 'mail.owner-alert', with: [
+        return new Content(markdown: 'mail.owner-alert', with: [
             'headline' => "{$this->agency} meminta paket {$this->plan} dan akan mentransfer pembayaran.",
             'details' => $this->details,
             'url' => $this->url,

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\EmailVerificationHelpController;
 use App\Http\Controllers\WhatsAppMediaController;
 use App\Legal\LegalDocs;
 use App\Marketing\Faq;
@@ -16,6 +17,11 @@ Route::get('/', fn () => view('landing', [
 ]))->name('home');
 
 // Public information pages, in the same style as the legal pages: questions and answers (the same list as the front page) and the business contact.
+Route::middleware('auth')->group(function () {
+    Route::post('verifikasi-email/ganti-akun', [EmailVerificationHelpController::class, 'switchAccount'])->middleware('throttle:10,1')->name('verification.switch');
+    Route::post('verifikasi-email/kirim-ulang', [EmailVerificationHelpController::class, 'resend'])->middleware('throttle:3,1')->name('verification.resend');
+});
+
 Route::get('faq', fn () => view('legal.faq', ['faq' => Faq::items()]))->middleware('throttle:public-pages')->name('faq');
 Route::get('kontak', fn () => view('legal.contact', ['company' => config('legal.company'), 'contact' => PlatformSetting::fullContact()]))
     ->middleware('throttle:public-pages')->name('contact');

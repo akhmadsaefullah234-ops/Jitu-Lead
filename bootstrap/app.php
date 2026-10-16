@@ -1,5 +1,6 @@
 <?php
 
+use App\Auth\VerificationLinkProblem;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -20,6 +21,8 @@ return Application::configure(basePath: dirname(__DIR__))
         //
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // A wrong or expired email verification link gets a page that explains it, not a bare 403.
+        $exceptions->render(fn (Throwable $e, Request $request) => VerificationLinkProblem::render($e, $request));
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );

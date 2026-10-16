@@ -1,5 +1,13 @@
-{{ $agency }} ({{ $user }}) menulis di chat support:
+<x-mail::message>
+# Chat support baru
 
-{{ $body }}
+**{{ $agency }}** ({{ $user }}) menulis di chat support:
 
-Balas di: {{ $url }}
+@foreach (preg_split('/\R/', (string) $body) as $line)
+> {{ $line }}
+@endforeach
+
+<x-mail::button :url="$url">
+Balas di admin
+</x-mail::button>
+</x-mail::message>
