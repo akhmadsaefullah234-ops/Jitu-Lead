@@ -32,7 +32,7 @@ class TrialEmails
         }
 
         $steps = collect(TrialEmailSettings::steps())->filter(fn (array $s) => $s['enabled']);
-        $left = max(0, (int) config('trial_emails.daily_limit') - $this->sentToday());
+        $left = DailyEmailQuota::remaining();
         $today = CarbonImmutable::now(config('app.timezone'))->startOfDay();
         $oldest = $today->subDays(max(0, (int) collect(config('trial_emails.steps'))->max('days')) + (int) config('trial_emails.window_days') + 1);
 
@@ -157,9 +157,10 @@ class TrialEmails
         );
     }
 
-    public static function unsubscribeUrl(User $user): string
+    /** $campaign: the promo campaign the email belongs to, so its statistics can count the unsubscribe. */
+    public static function unsubscribeUrl(User $user, ?int $campaign = null): string
     {
-        return URL::signedRoute('trial-emails.unsubscribe', ['user' => $user->getKey()]);
+        return URL::signedRoute('trial-emails.unsubscribe', array_filter(['user' => $user->getKey(), 'kampanye' => $campaign]));
     }
 
     /** @return array<string, string> */
@@ -189,11 +190,6 @@ class TrialEmails
             'subscription' => 'filament.app.pages.subscription',
             default => 'filament.app.pages.dashboard',
         }, ['tenant' => $tenant->slug]);
-    }
-
-    private function sentToday(): int
-    {
-        return (int) TrialEmailLog::query()->where('created_at', '>=', now()->timezone(config('app.timezone'))->startOfDay())->sum('recipients');
     }
 
     private function log(Tenant $tenant, string $step, CarbonImmutable $anchor, string $status, int $recipients): void
