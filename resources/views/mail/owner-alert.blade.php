@@ -1,7 +1,11 @@
-{{ $headline }}
+<x-mail::message>
+# {{ $headline }}
 
 @foreach ($details as $label => $value)
-{{ $label }}: {{ $value }}
+- **{{ $label }}:** {{ $value }}
 @endforeach
 
-{{ $linkLabel }}: {{ $url }}
+<x-mail::button :url="$url">
+{{ $linkLabel }}
+</x-mail::button>
+</x-mail::message>

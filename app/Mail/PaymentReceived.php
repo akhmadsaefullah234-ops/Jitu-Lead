@@ -20,7 +20,7 @@ class PaymentReceived extends Mailable implements ShouldQueue
 
     public function content(): Content
     {
-        return new Content(text: 'mail.owner-alert', with: [
+        return new Content(markdown: 'mail.owner-alert', with: [
             'headline' => "Pembayaran diterima: {$this->agency} {$this->plan} {$this->total} via iPaymu.",
             'details' => $this->details,
             'url' => $this->url,

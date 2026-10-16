@@ -21,7 +21,7 @@ class SubscriptionEnding extends Mailable
 
     public function content(): Content
     {
-        return new Content(view: 'mail.subscription-ending', with: [
+        return new Content(markdown: 'mail.subscription-ending', with: [
             'trial' => $this->subscription->status === Subscription::TRIAL,
             'ends' => $this->subscription->endsAt()->timezone(config('app.timezone')),
             'days' => $this->subscription->daysLeft(),

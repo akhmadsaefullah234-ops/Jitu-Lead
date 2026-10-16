@@ -1,9 +1,17 @@
-Backup harian JITU LEAD pada {{ $when }} GAGAL.
+<x-mail::message>
+# Backup harian GAGAL
 
-{{ $errorMessage }}
+Backup harian JITU LEAD pada **{{ $when }}** gagal.
 
-Langkah:
+> {{ $errorMessage }}
+
+**Langkah:**
+
 {{ $steps }}
 
-Lihat riwayat: {{ $url }}
-Pulihkan/ulangi: php artisan backup:run
+<x-mail::button :url="$url">
+Lihat riwayat backup
+</x-mail::button>
+
+Untuk mengulang: `php artisan backup:run`
+</x-mail::message>

@@ -20,7 +20,7 @@ class SupportMessageReceived extends Mailable
 
     public function content(): Content
     {
-        return new Content(text: 'mail.support-message-received', with: [
+        return new Content(markdown: 'mail.support-message-received', with: [
             'agency' => $this->thread->tenant?->name,
             'user' => $this->thread->user?->name,
             'body' => $this->message->body,
