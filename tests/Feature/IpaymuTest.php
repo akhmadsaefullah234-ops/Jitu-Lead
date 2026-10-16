@@ -20,8 +20,10 @@ use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Livewire\Livewire;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class IpaymuTest extends TestCase
@@ -460,6 +462,68 @@ class IpaymuTest extends TestCase
 
         $this->notify($this->buyerFeePayload())->assertStatus(422);
         $this->assertSame(IpaymuPayment::PENDING, IpaymuPayment::first()->status);
+    }
+
+    /** Sandbox QRIS as iPaymu really answered: Status 7 (Escrow), the buyer has paid and iPaymu holds the money. */
+    public function test_an_escrow_payment_counts_as_paid_and_is_marked(): void
+    {
+        $this->fakeIpaymu(['TransactionId' => 241491, 'Status' => 7, 'StatusDesc' => 'Escrow', 'Amount' => 202582, 'SubTotal' => 199000, 'Fee' => 4975]);
+        $payment = $this->startPayment();
+
+        $this->notify($this->buyerFeePayload() + ['is_escrow' => 'true']
+            + ['transaction_status_code' => '7', 'settlement_status' => 'settled'])->assertOk();
+
+        $this->assertSame('tim', $this->tenant->currentSubscription()->refresh()->plan);
+        $payment->refresh();
+        $this->assertSame([IpaymuPayment::PAID, true, 'Berhasil (escrow)'], [$payment->status, $payment->is_escrow, $payment->label()]);
+        Mail::assertQueued(PaymentReceived::class, 1);
+
+        $this->actingAs($this->owner);
+        Filament::setCurrentPanel(Filament::getPanel('admin'));
+        Livewire::test(ListIpaymuPayments::class)->assertSee('Berhasil (escrow)');
+    }
+
+    public function test_a_normal_payment_is_not_marked_as_escrow(): void
+    {
+        $this->fakeIpaymu();
+        $this->startPayment();
+
+        $this->notify($this->payload())->assertOk();
+
+        $this->assertFalse(IpaymuPayment::first()->is_escrow);
+        $this->assertSame('Berhasil', IpaymuPayment::first()->label());
+    }
+
+    /** @return array<string, array{int, string}> */
+    public static function statusCodes(): array
+    {
+        return ['expired' => [-2, 'expired'], 'pending' => [0, 'pending'], 'berhasil' => [1, 'paid'], 'batal' => [2, 'failed'], 'refund' => [3, 'failed'],
+            'error' => [4, 'failed'], 'gagal' => [5, 'failed'], 'berhasil-unsettled' => [6, 'paid'], 'escrow' => [7, 'paid']];
+    }
+
+    #[DataProvider('statusCodes')]
+    public function test_every_documented_status_code_maps_to_the_right_state(int $code, string $state): void
+    {
+        $this->fakeIpaymu(['Status' => $code]);
+        $this->startPayment();
+
+        $this->notify($this->payload())->assertOk();
+
+        $this->assertSame($state, IpaymuPayment::first()->status);
+        $this->assertSame($state === 'paid', $this->tenant->currentSubscription()->refresh()->plan === 'tim');
+    }
+
+    public function test_an_unknown_status_code_stays_pending_and_is_logged_as_a_warning(): void
+    {
+        Log::spy();
+        $this->fakeIpaymu(['Status' => 99, 'StatusDesc' => 'Aneh']);
+        $this->startPayment();
+
+        $this->notify($this->payload())->assertOk();
+
+        $this->assertSame(IpaymuPayment::PENDING, IpaymuPayment::first()->status);
+        $this->assertNotSame('tim', $this->tenant->currentSubscription()->refresh()->plan);
+        Log::shouldHaveReceived('warning')->withArgs(fn ($message) => str_contains($message, 'kode status tidak dikenal'))->once();
     }
 
     // --- screens ---
