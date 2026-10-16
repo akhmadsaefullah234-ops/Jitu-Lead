@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /** An agency's request to start or change a plan, waiting for the platform owner to confirm the transfer. */
 class SubscriptionRequest extends Model
@@ -24,5 +25,10 @@ class SubscriptionRequest extends Model
     public function tenant(): BelongsTo
     {
         return $this->belongsTo(Tenant::class);
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(IpaymuPayment::class);
     }
 }

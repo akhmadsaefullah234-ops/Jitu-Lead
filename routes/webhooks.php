@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Webhooks\IpaymuNotifyController;
 use App\Http\Controllers\Webhooks\LeadCaptureController;
 use App\Http\Controllers\Webhooks\WhatsAppWebhookController;
 use Illuminate\Support\Facades\Route;
@@ -18,3 +19,6 @@ Route::middleware('throttle:capture')->prefix('capture')->group(function () {
     Route::post('{token}', [LeadCaptureController::class, 'store'])->name('capture.store');
     Route::options('{token}', [LeadCaptureController::class, 'preflight']);
 });
+
+// iPaymu payment notification: no session or CSRF token, authenticated by its signature and a second check with iPaymu.
+Route::post('billing/ipaymu/notify', IpaymuNotifyController::class)->middleware('throttle:ipaymu-notify')->name('billing.ipaymu.notify');

@@ -68,12 +68,40 @@
         </div>
     </x-filament::section>
 
+    @if ($payment && ($pending || $payment->status === 'paid'))
+        @php($pStatus = $payment->status === 'pending' && ! $payment->isOpen() ? 'expired' : $payment->status)
+        <div @if ($pStatus === 'pending') wire:poll.10s @endif>
+        <x-filament::section heading="Status pembayaran iPaymu" icon="heroicon-o-qr-code">
+            <p style="font-size:.9rem;line-height:1.7">
+                <span class="sb-pill" style="{{ ['paid' => 'background:#dcfce7;color:#166534', 'pending' => 'background:#fef3c7;color:#92400e'][$pStatus] ?? 'background:#fee2e2;color:#991b1b' }}">{{ ['pending' => 'Menunggu pembayaran', 'paid' => 'Berhasil', 'failed' => 'Gagal', 'expired' => 'Kedaluwarsa'][$pStatus] }}</span>
+                {{ $rp($payment->amount) }}
+                @if ($pStatus === 'paid') · Paket sudah aktif. Terima kasih.
+                @elseif ($pStatus === 'pending') · Selesaikan pembayaran di halaman iPaymu. Halaman ini diperbarui otomatis setelah pembayaran terkonfirmasi.
+                @elseif ($pStatus === 'expired') · Waktu pembayaran habis. Buat pembayaran baru dengan tombol di bawah.
+                @else · Pembayaran tidak berhasil. Coba lagi dengan tombol di bawah atau pakai transfer manual.
+                @endif
+            </p>
+        </x-filament::section>
+        </div>
+    @endif
+
     @if ($pending)
         <x-filament::section heading="Permintaan menunggu pembayaran" icon="heroicon-o-clock">
             <p style="font-size:.9rem;line-height:1.7">
                 Paket <b>{{ $plans[$pending->plan]['name'] }}</b>, {{ $pending->billing_cycle === 'yearly' ? 'tahunan' : 'bulanan' }}. Total <b>{{ $rp($pending->amount) }}</b>.
                 Transfer sesuai nominal, lalu kami aktifkan setelah pembayaran terkonfirmasi.
             </p>
+            @if ($ipaymuOn)
+                @php($payWhat = $payment?->isOpen() ? 'Lanjutkan pembayaran' : ($payment ? 'Bayar ulang' : 'Bayar sekarang (QRIS / Virtual Account / e-wallet)'))
+                <div style="margin-top:.75rem;padding:.9rem 1rem;border:1px solid var(--primary-600);border-radius:.7rem">
+                    <b>Bayar otomatis</b>
+                    <p class="sb-note" style="margin:.25rem 0 .6rem">QRIS, Virtual Account, atau e-wallet lewat iPaymu. Paket aktif otomatis setelah pembayaran berhasil.</p>
+                    <x-filament::button wire:click="pay" icon="heroicon-o-qr-code">
+                        {{ $payWhat }}
+                    </x-filament::button>
+                </div>
+                <p class="sb-note" style="margin-top:.75rem"><b>Atau transfer manual:</b></p>
+            @endif
             @if ($bankInfo)
                 <pre style="margin-top:.5rem;padding:.75rem 1rem;border-radius:.6rem;background:var(--gray-50);white-space:pre-wrap;font-family:inherit;font-size:.9rem">{{ $bankInfo }}</pre>
             @else

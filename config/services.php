@@ -35,6 +35,14 @@ return [
         ],
     ],
 
+    // iPaymu (API v2, redirect payment) for subscription payments. Without VA and API key the pay button stays hidden.
+    'ipaymu' => [
+        'va' => env('IPAYMU_VA'),
+        'api_key' => env('IPAYMU_API_KEY'),
+        'sandbox' => env('IPAYMU_SANDBOX', true),
+        'expired_hours' => (int) env('IPAYMU_EXPIRED_HOURS', 24),
+    ],
+
     // The AI assistant that drafts or sends WhatsApp replies. Without a key it stays off.
     'anthropic' => [
         'key' => env('ANTHROPIC_API_KEY'),
