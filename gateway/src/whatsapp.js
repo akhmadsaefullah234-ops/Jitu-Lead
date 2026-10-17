@@ -44,49 +44,64 @@ const digits = (jid) => String(jid).split('@')[0].split(':')[0];
 const masked = (jid) => '…' + digits(jid || '').slice(-4);
 
 /**
- * The sender's phone-number jid when the event itself carries it: Baileys 7 puts
+ * The other party's phone-number jid when the event itself carries it: Baileys 7 puts
  * it in remoteJidAlt, Baileys 6 in senderPn, and old-style chats are the jid itself.
  */
 function phoneJid(key = {}) {
-  return [key.remoteJidAlt, key.senderPn, key.remoteJid].find((j) => typeof j === 'string' && j.endsWith(PN)) ?? null;
+  // On our own message senderPn is our own number, never the customer's.
+  const candidates = key.fromMe ? [key.remoteJidAlt, key.remoteJid] : [key.remoteJidAlt, key.senderPn, key.remoteJid];
+
+  return candidates.find((j) => typeof j === 'string' && j.endsWith(PN)) ?? null;
 }
 
 /**
  * Decides what to do with a WhatsApp event:
  *   { action: 'forward', inbound }   send to the CRM
  *   { action: 'ciphertext', own? }   arrived but undecryptable (a retry may still deliver it; `own`: sent by our own other device)
- *   { action: 'lookup', lid }        a @lid chat whose phone number is not in the event
- *   { action: 'skip', reason, quiet } not for the CRM; `quiet` marks the expected cases (own messages, groups)
+ *   { action: 'lookup', lid, own? }  a @lid chat whose phone number is not in the event
+ *   { action: 'skip', reason, quiet } not for the CRM; `quiet` marks the expected cases (groups, status, notes to self)
+ *
+ * A message our own account sent (fromMe) is forwarded too, with from_me: true: that is an agent replying
+ * from the WhatsApp app on the phone. `from` is then the customer's number, as for an inbound message.
+ * `ownNumber` (digits) skips the account's chat with itself.
  */
-function classify(msg) {
+function classify(msg, ownNumber = null) {
   const key = msg.key ?? {};
   const jid = key.remoteJid || '';
+  const own = Boolean(key.fromMe);
 
-  if (key.fromMe) {
+  if (own && !msg.message && msg.messageStubType === STUB_CIPHERTEXT) {
     // Our own account's other devices failing to decrypt is a sign of a broken session, so it is reported.
-    return !msg.message && msg.messageStubType === STUB_CIPHERTEXT ? { action: 'ciphertext', own: true } : { action: 'skip', reason: 'pesan_sendiri', quiet: true };
+    return { action: 'ciphertext', own: true };
   }
   if (!jid.endsWith(PN) && !jid.endsWith(LID)) return { action: 'skip', reason: 'bukan_chat_pribadi', quiet: true };
   if (!msg.message) {
+    if (own) return { action: 'skip', reason: 'tanpa_isi', quiet: true };
+
     return msg.messageStubType === STUB_CIPHERTEXT ? { action: 'ciphertext' } : { action: 'skip', reason: 'tanpa_isi', quiet: false };
   }
   if (isSystemOnly(msg.message)) return { action: 'skip', reason: 'pesan_sistem', quiet: true };
 
   const phone = phoneJid(key);
-  if (!phone) return { action: 'lookup', lid: jid };
+  if (!phone) return own ? { action: 'lookup', lid: jid, own: true } : { action: 'lookup', lid: jid };
+  if (own && ownNumber && digits(phone) === String(ownNumber)) return { action: 'skip', reason: 'catatan_sendiri', quiet: true };
 
   return { action: 'forward', inbound: build(msg, digits(phone)) };
 }
 
 function build(msg, from) {
-  return {
+  const own = Boolean(msg.key?.fromMe);
+  const inbound = {
     id: msg.key.id,
     from,
     type: typeOf(msg.message),
     text: textOf(msg.message),
-    name: msg.pushName || null,
+    // On our own message pushName is the business account's own name, not the customer's.
+    name: own ? null : msg.pushName || null,
     timestamp: seconds(msg.messageTimestamp),
   };
+
+  return own ? { ...inbound, from_me: true } : inbound;
 }
 
 /** Turns a WhatsApp event into the shape the CRM expects. Returns null for chats the CRM should not see. */
@@ -165,9 +180,11 @@ function connector({ log, decryptWaitMs = 45000, lookupRetryMs = 3000, loadLib =
         const retried = pending.has(id);
 
         // History sync arrives as 'append'; only live messages (or a retried one we are waiting for) count.
+        // Messages this gateway sent itself also come back as 'append', and the CRM already has them.
         if (type !== 'notify' && !retried) continue;
+        if (msg.key?.fromMe && sentCache.has(id)) continue;
 
-        const c = classify(msg);
+        const c = classify(msg, sock?.user?.id ? digits(sock.user.id) : null);
 
         if (c.action === 'ciphertext') {
           if (c.own) {
@@ -197,7 +214,9 @@ function connector({ log, decryptWaitMs = 45000, lookupRetryMs = 3000, loadLib =
           skipped(msg, c.reason, c.quiet);
         } else if (c.action === 'lookup') {
           const phone = await phoneForLid(c.lid);
-          if (phone) {
+          if (phone && c.own && sock?.user?.id && phone === digits(sock.user.id)) {
+            skipped(msg, 'catatan_sendiri', true);
+          } else if (phone) {
             handlers.onDecryptOk?.();
             handlers.onMessage(await withMedia(msg, build(msg, phone)));
           } else {

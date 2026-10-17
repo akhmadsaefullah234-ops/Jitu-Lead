@@ -58,6 +58,7 @@ class LeadForm
                 Section::make('Kebutuhan properti')
                     ->columns(2)
                     ->columnSpanFull()
+                    ->visible(fn () => self::showsPropertyFields())
                     ->schema([
                         ToggleButtons::make('need')
                             ->label('Kebutuhan')
@@ -120,6 +121,12 @@ class LeadForm
                             ->hiddenOn('create'),
                     ]),
             ]);
+    }
+
+    /** Agencies that do not sell property hide these fields ("Pengaturan agensi" on the lead list). */
+    public static function showsPropertyFields(): bool
+    {
+        return app(CurrentTenant::class)->get()?->showsPropertyFields() ?? true;
     }
 
     private static function canAssign(): bool

@@ -40,21 +40,19 @@ class HandleInboundWhatsApp
     public function message(WaChannel $channel, InboundMessage $incoming): ?WaMessage
     {
         if (WaMessage::query()->where('channel_id', $channel->getKey())->where('external_id', $incoming->externalId)->exists()) {
-            return null; // Providers retry deliveries; each message is stored once.
+            // Providers retry deliveries; each message is stored once. A message sent from the CRM also comes back
+            // from the gateway as the account's own message, with the id the CRM saved when it sent it.
+            return null;
+        }
+
+        if ($incoming->fromMe) {
+            return $this->fromPhone($channel, $incoming);
         }
 
         $lead = null;
         $isNewLead = false;
 
-        // A gateway sends the picture itself inside the webhook; it is kept as a file, never in the database.
-        $media = $incoming->media;
-        $imageBytes = null;
-
-        if ($incoming->type === 'image' && is_array($media) && isset($media['data'])) {
-            $imageBytes = base64_decode((string) $media['data'], true) ?: null;
-        }
-
-        unset($media['data']);
+        [$media, $imageBytes] = $this->splitMedia($incoming);
 
         try {
             $message = DB::transaction(function () use ($channel, $incoming, $media, &$lead, &$isNewLead) {
@@ -113,6 +111,79 @@ class HandleInboundWhatsApp
         } catch (UniqueConstraintViolationException) {
             return null; // The same delivery arrived twice at once.
         }
+    }
+
+    /**
+     * A reply an agent typed in the WhatsApp app on the phone of a gateway number. It is shown in the Inbox as
+     * an outgoing message and counts as the lead being attended to, and the AI steps back as when an agent
+     * sends from the CRM. It is not a customer message: no AI reply, no alert, no unread count, and the
+     * follow-ups keep their schedule. A number that is not a lead yet is ignored unless configured otherwise.
+     */
+    private function fromPhone(WaChannel $channel, InboundMessage $incoming): ?WaMessage
+    {
+        [$media, $imageBytes] = $this->splitMedia($incoming);
+
+        try {
+            $message = DB::transaction(function () use ($channel, $incoming, $media) {
+                $lead = Lead::query()->where('phone', $incoming->from)->latest('id')->first();
+
+                if ($lead === null) {
+                    if (! config('whatsapp.phone_messages_create_leads')) {
+                        return null;
+                    }
+                    $lead = $this->createLead($incoming);
+                }
+
+                $conversation = WaConversation::query()->firstOrCreate(['lead_id' => $lead->getKey()], ['phone' => $incoming->from]);
+
+                $message = $conversation->messages()->create([
+                    'channel_id' => $channel->getKey(),
+                    'direction' => 'out',
+                    'type' => $incoming->type,
+                    'body' => $incoming->body,
+                    'media' => $media === [] ? null : $media,
+                    'status' => MessageStatus::Sent,
+                    'external_id' => $incoming->externalId,
+                    'sent_at' => $incoming->sentAt,
+                    'from_phone' => true,
+                ]);
+
+                $conversation->forceFill(['last_message_at' => $incoming->sentAt, 'unread_count' => 0])->save();
+                $conversation->pauseAiFor((int) config('whatsapp.ai_after_send_pause_seconds'));
+
+                $lead->activities()->create([
+                    'type' => 'whatsapp_out_phone',
+                    'body' => 'Chat WhatsApp dibalas dari aplikasi WhatsApp di HP',
+                    'meta' => ['message_id' => $message->getKey()],
+                ]);
+
+                return $message;
+            });
+        } catch (UniqueConstraintViolationException) {
+            return null;
+        }
+
+        if ($message !== null) {
+            $this->keepImage($message, $imageBytes);
+        }
+
+        return $message;
+    }
+
+    /** @return array{0: array<string, mixed>|null, 1: ?string} the media without the picture itself, and the picture */
+    private function splitMedia(InboundMessage $incoming): array
+    {
+        // A gateway sends the picture itself inside the webhook; it is kept as a file, never in the database.
+        $media = $incoming->media;
+        $imageBytes = null;
+
+        if ($incoming->type === 'image' && is_array($media) && isset($media['data'])) {
+            $imageBytes = base64_decode((string) $media['data'], true) ?: null;
+        }
+
+        unset($media['data']);
+
+        return [$media, $imageBytes];
     }
 
     private function keepImage(WaMessage $message, ?string $bytes): void

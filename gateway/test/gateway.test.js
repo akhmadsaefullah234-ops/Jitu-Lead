@@ -161,12 +161,27 @@ test('kirim gambar dan dokumen lewat POST /messages; data rusak, jenis asing, da
   g.close();
 });
 
-test('toInbound melewatkan grup dan pesan sendiri', () => {
+test('toInbound melewatkan grup, status, dan broadcast; pesan sendiri (dari HP) diteruskan sebagai from_me', () => {
   const base = { key: { id: 'a', remoteJid: '6281@s.whatsapp.net' }, message: { conversation: 'hi' }, pushName: 'Siti', messageTimestamp: 1790000001 };
   assert.equal(toInbound(base).from, '6281');
   assert.equal(toInbound(base).text, 'hi');
+  assert.equal(toInbound(base).from_me, undefined);
   assert.equal(toInbound({ ...base, key: { ...base.key, remoteJid: '123@g.us' } }), null);
-  assert.equal(toInbound({ ...base, key: { ...base.key, fromMe: true } }), null);
+
+  const own = toInbound({ ...base, key: { ...base.key, fromMe: true }, pushName: 'Agensi Saya' });
+  assert.deepEqual(own, { id: 'a', from: '6281', type: 'text', text: 'hi', name: null, timestamp: 1790000001, from_me: true });
+
+  for (const jid of ['123@g.us', 'status@broadcast', '1717@broadcast', '1203@newsletter']) {
+    assert.equal(toInbound({ ...base, key: { ...base.key, fromMe: true, remoteJid: jid } }), null, jid);
+  }
+});
+
+test('classify pesan sendiri: nomor pelanggan dari remoteJidAlt, bukan senderPn (itu nomor kita); catatan ke diri sendiri dilewati', () => {
+  const own = (key) => ({ key: { id: 'o', fromMe: true, ...key }, message: { conversation: 'Siap, saya kirim brosurnya' }, messageTimestamp: 1790000002 });
+  assert.equal(classify(own({ remoteJid: '1234567890@lid', remoteJidAlt: '6281234567890@s.whatsapp.net', senderPn: '6289999999999@s.whatsapp.net' })).inbound.from, '6281234567890');
+  assert.deepEqual(classify(own({ remoteJid: '1234567890@lid', senderPn: '6289999999999@s.whatsapp.net' })), { action: 'lookup', lid: '1234567890@lid', own: true });
+  assert.equal(classify(own({ remoteJid: '6289999999999@s.whatsapp.net' }), '6289999999999').reason, 'catatan_sendiri');
+  assert.equal(classify({ key: { id: 'x', fromMe: true, remoteJid: '6281@s.whatsapp.net' }, message: { protocolMessage: {} } }).reason, 'pesan_sistem');
 });
 
 // --- LID, dekripsi, kesehatan sesi, auth atomik ---
@@ -291,6 +306,26 @@ test('connector: pesan dari perangkat lain akun yang gagal dibuka dihitung; kode
 
   f.sock.ev.emit('connection.update', { connection: 'close', lastDisconnect: { error: Object.assign(new Error('Bad Session'), { output: { statusCode: 500 } }) } });
   assert.deepEqual(f.events.closes, [{ loggedOut: false, needsRelink: true }]);
+});
+
+test('connector: balasan dari aplikasi WhatsApp di HP diteruskan (teks dan gambar); kiriman gateway sendiri tidak', async () => {
+  const f = await fakeConnector({ download: async () => Buffer.from('IMG') });
+  f.sock.user = { id: '6289999999999:12@s.whatsapp.net' };
+  const sentId = await f.conn.send('6281234567890@s.whatsapp.net', 'Dari CRM');
+  const fromPhone = (id, message) => ({ key: { id, fromMe: true, remoteJid: '1234567890@lid', remoteJidAlt: '6281234567890@s.whatsapp.net' }, message, messageTimestamp: 1790000003 });
+
+  f.sock.ev.emit('messages.upsert', { type: 'notify', messages: [
+    fromPhone('hp1', { conversation: 'Halo, ini dari HP' }),
+    fromPhone('hp2', { imageMessage: { mimetype: 'image/jpeg', caption: 'Denah' } }),
+    fromPhone(sentId, { conversation: 'Dari CRM' }),
+    { key: { id: 'self', fromMe: true, remoteJid: '6289999999999@s.whatsapp.net' }, message: { conversation: 'catatan' } },
+  ] });
+  f.sock.ev.emit('messages.upsert', { type: 'append', messages: [fromPhone('hp-old', { conversation: 'riwayat' })] });
+  await new Promise((r) => setTimeout(r, 30));
+
+  assert.deepEqual(f.events.messages.map((m) => m.id), ['hp1', 'hp2']);
+  assert.ok(f.events.messages.every((m) => m.from_me === true && m.from === '6281234567890'));
+  assert.deepEqual(f.events.messages[1].media, { mime_type: 'image/jpeg', data: Buffer.from('IMG').toString('base64') });
 });
 
 test('connector: pesan keluar disimpan untuk getMessage (kirim ulang atas permintaan WhatsApp)', async () => {

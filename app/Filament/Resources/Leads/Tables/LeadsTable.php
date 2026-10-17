@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Leads\Tables;
 
 use App\Actions\ReassignLead;
 use App\Enums\Interest;
+use App\Filament\Resources\Leads\Schemas\LeadForm;
 use App\Models\Lead;
 use App\Support\CurrentTenant;
 use Filament\Actions\Action;
@@ -38,7 +39,7 @@ class LeadsTable
                     ->searchable()
                     ->sortable()
                     ->wrap()
-                    ->description(fn (Lead $record) => collect([$record->phone, $record->property?->name])->filter()->implode(' · ')),
+                    ->description(fn (Lead $record) => collect([$record->phone, LeadForm::showsPropertyFields() ? $record->property?->name : null])->filter()->implode(' · ')),
                 TextColumn::make('phone')
                     ->label('Telepon')
                     ->searchable()
