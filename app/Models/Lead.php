@@ -96,7 +96,7 @@ class Lead extends Model
 
     /**
      * Open leads whose owner has not reacted for the given minutes since getting them: no message, note
-     * or stage move by the owner, and no AI reply either. Only leads that were given to someone count.
+     * or stage move by the owner, and no AI reply or reply from the WhatsApp app on the phone either. Only leads that were given to someone count.
      */
     public function scopeUnattended(Builder $query, int $minutes): void
     {
@@ -108,7 +108,7 @@ class Lead extends Model
                 ->whereColumn('la.lead_id', 'leads.id')
                 ->whereColumn('la.created_at', '>=', 'leads.assigned_at')
                 ->where('la.type', '!=', 'reassigned')
-                ->where(fn ($w) => $w->whereColumn('la.user_id', 'leads.owner_id')->orWhere('la.type', 'ai_reply')));
+                ->where(fn ($w) => $w->whereColumn('la.user_id', 'leads.owner_id')->orWhereIn('la.type', ['ai_reply', 'whatsapp_out_phone'])));
     }
 
     public function owner(): BelongsTo

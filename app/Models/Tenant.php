@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
-#[Fillable(['name', 'slug', 'plan', 'status', 'timezone', 'trial_ends_at', 'ai_instructions', 'ai_handoff_keywords', 'lead_reassign_mode', 'lead_reassign_minutes', 'lead_reassign_max'])]
+#[Fillable(['name', 'slug', 'plan', 'status', 'timezone', 'trial_ends_at', 'ai_instructions', 'ai_handoff_keywords', 'lead_reassign_mode', 'lead_reassign_minutes', 'lead_reassign_max', 'show_property_fields'])]
 class Tenant extends Model
 {
     protected $hidden = ['capture_token'];
@@ -21,7 +21,23 @@ class Tenant extends Model
         return [
             'trial_ends_at' => 'datetime',
             'capture_settings' => 'array',
+            'show_property_fields' => 'boolean',
         ];
+    }
+
+    /**
+     * Whether leads have the property fields (budget, location, property type and so on). An agency that does
+     * not sell property turns them off; the platform's own sales agency never has them.
+     */
+    public function showsPropertyFields(): bool
+    {
+        return ! $this->isPlatformSales() && ($this->show_property_fields ?? true);
+    }
+
+    /** The platform owner's agency that sells JITU LEAD itself (PLATFORM_SALES_TENANT). */
+    public function isPlatformSales(): bool
+    {
+        return filled(config('jitu.platform_sales_tenant')) && $this->slug === config('jitu.platform_sales_tenant');
     }
 
     /**

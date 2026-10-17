@@ -95,6 +95,7 @@ class GatewayProvider implements WhatsAppProvider
                         media: is_array($request->input('media')) ? $request->input('media') : null,
                         sentAt: InboundMessage::at($request->input('timestamp')),
                         contactName: $request->input('name'),
+                        fromMe: $request->boolean('from_me'),
                     );
                 }
                 break;

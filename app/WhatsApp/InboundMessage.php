@@ -5,7 +5,8 @@ namespace App\WhatsApp;
 use Carbon\CarbonImmutable;
 
 /**
- * A message from a client, normalized from either provider's payload.
+ * A message in a chat with a client, normalized from either provider's payload: usually from the client,
+ * or ($fromMe) a reply the business typed in the WhatsApp app on the phone.
  */
 final class InboundMessage
 {
@@ -22,6 +23,8 @@ final class InboundMessage
         public readonly CarbonImmutable $sentAt,
         public readonly ?string $contactName = null,
         public readonly ?array $referral = null,
+        // Sent by the business itself from the WhatsApp app on the phone; $from is then the customer.
+        public readonly bool $fromMe = false,
     ) {}
 
     /**

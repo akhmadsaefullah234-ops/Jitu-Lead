@@ -29,6 +29,10 @@ return [
     // After an agent sends a message by hand, the client's answer is likely meant for that agent.
     'ai_after_send_pause_seconds' => (int) env('AI_AFTER_SEND_PAUSE_SECONDS', 300),
 
+    // Replies an agent types in the WhatsApp app on the phone (gateway numbers) are copied into the Inbox.
+    // A reply to a number that is not a lead yet is ignored, unless this is on: then it becomes a new lead.
+    'phone_messages_create_leads' => (bool) env('WHATSAPP_PHONE_MESSAGES_CREATE_LEADS', false),
+
     // Window lengths from Meta's pricing rules, in hours.
     'service_window_hours' => 24,
     'free_entry_window_hours' => 72,
