@@ -10,14 +10,23 @@
     </x-filament::section>
 
     <x-filament::section heading="Contoh isi file">
+        <style>
+            .il-sample { border-collapse: collapse; font-size: .875rem; }
+            .il-sample th, .il-sample td { border: 1px solid #d1d5db; padding: .25rem .75rem; text-align: left; }
+            /* Phones: the sample sheet fits the screen instead of scrolling sideways */
+            @media (max-width: 639px) {
+                .il-sample { width: 100%; table-layout: fixed; font-size: .75rem; }
+                .il-sample th, .il-sample td { padding: .25rem .35rem; overflow-wrap: anywhere; }
+            }
+        </style>
         <div style="overflow-x: auto">
-            <table style="border-collapse: collapse; font-size: .875rem">
+            <table class="il-sample">
                 <thead>
-                    <tr>@foreach (['nama', 'telepon', 'email', 'catatan'] as $h)<th style="border: 1px solid #d1d5db; padding: .25rem .75rem; text-align: left">{{ $h }}</th>@endforeach</tr>
+                    <tr>@foreach (['nama', 'telepon', 'email', 'catatan'] as $h)<th>{{ $h }}</th>@endforeach</tr>
                 </thead>
                 <tbody>
-                    <tr>@foreach (['Budi Santoso', '081234567890', 'budi@contoh.com', 'Cari rumah 2 kamar'] as $c)<td style="border: 1px solid #d1d5db; padding: .25rem .75rem">{{ $c }}</td>@endforeach</tr>
-                    <tr>@foreach (['Siti Aminah', '+6281398765432', '', 'Tanya KPR'] as $c)<td style="border: 1px solid #d1d5db; padding: .25rem .75rem">{{ $c }}</td>@endforeach</tr>
+                    <tr>@foreach (['Budi Santoso', '081234567890', 'budi@contoh.com', 'Cari rumah 2 kamar'] as $c)<td>{{ $c }}</td>@endforeach</tr>
+                    <tr>@foreach (['Siti Aminah', '+6281398765432', '', 'Tanya KPR'] as $c)<td>{{ $c }}</td>@endforeach</tr>
                 </tbody>
             </table>
         </div>

@@ -108,6 +108,22 @@
         .fi-sidebar { padding-top: env(safe-area-inset-top); }
         .fi-sidebar-item-button { min-height: 3rem; font-size: .95rem; }
     }
+    /* Phones: table rows are stacked into cards (Table::stackedOnMobile). Label and value share a line to keep each
+       card short, and the first column reads as the card's title. */
+    @media (max-width: 639px) {
+        .fi-ta-table-stacked-on-mobile > tbody > tr > .fi-ta-cell:not(.fi-ta-selection-cell):has(> .fi-ta-cell-label) {
+            display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); column-gap: .75rem; align-items: baseline; }
+        .fi-ta-table-stacked-on-mobile > tbody > tr > .fi-ta-cell > .fi-ta-cell-label { padding-top: .2rem !important; font-weight: 500; }
+        .fi-ta-table-stacked-on-mobile > tbody > tr > .fi-ta-cell:not(.fi-ta-selection-cell):first-child,
+        .fi-ta-table-stacked-on-mobile > tbody > tr > .fi-ta-selection-cell:first-child + .fi-ta-cell { display: block; }
+        .fi-ta-table-stacked-on-mobile > tbody > tr > .fi-ta-cell:not(.fi-ta-selection-cell):first-child > .fi-ta-cell-label,
+        .fi-ta-table-stacked-on-mobile > tbody > tr > .fi-ta-selection-cell:first-child + .fi-ta-cell > .fi-ta-cell-label { display: none; }
+        .fi-ta-table-stacked-on-mobile > tbody > tr > .fi-ta-cell:not(.fi-ta-selection-cell):first-child .fi-ta-text-item:first-child,
+        .fi-ta-table-stacked-on-mobile > tbody > tr > .fi-ta-selection-cell:first-child + .fi-ta-cell .fi-ta-text-item:first-child { font-weight: 600; font-size: 1rem; }
+        .fi-ta-table-stacked-on-mobile .fi-ta-cell-content, .fi-ta-table-stacked-on-mobile .fi-ta-text { min-width: 0; overflow-wrap: anywhere; }
+        /* The lead list already shows the phone under the name */
+        .fi-ta-table-stacked-on-mobile > tbody > tr:has(> .fi-ta-cell-name) > .fi-ta-cell-phone.lg\:fi-visible { display: none; }
+    }
     @media (max-width: 1023px) and (display-mode: standalone) { .fi-topbar { box-shadow: 0 1px 0 #fecaca; } }
     @media (prefers-reduced-motion: reduce) { * { transition-duration: .01ms !important; animation-duration: .01ms !important; } }
 </style>
