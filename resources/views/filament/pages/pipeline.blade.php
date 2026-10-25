@@ -31,6 +31,16 @@
             .jl-bar .jl-input[type="search"] { flex: 1 1 100% !important; max-width: none !important; }
             .jl-card { cursor: default; }
         }
+        /* Phones: one stage at a time, picked from tabs that wrap, so the board never scrolls sideways */
+        .jl-tabs { display: none; }
+        @media (max-width: 640px) {
+            .jl-tabs { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .75rem; }
+            .jl-tabs .jl-chip { display: inline-flex; gap: .35rem; align-items: center; min-height: 2.25rem; }
+            .jl-tabs .jl-chip span { font-size: .75rem; opacity: .75; }
+            .jl-board { display: block; overflow: visible; padding-bottom: 0; }
+            .jl-col { display: none; }
+            .jl-col.is-current { display: flex; }
+        }
         .jl-empty { font-size: .75rem; color: var(--gray-500); padding: .5rem .25rem; }
         .dark .jl-chip, .dark .jl-input { background: var(--gray-900); border-color: var(--gray-700); color: var(--gray-100); }
         .dark .jl-chip[aria-pressed="true"] { background: white; color: var(--gray-950); border-color: white; }
@@ -57,6 +67,14 @@
         @endif
     </div>
 
+    <div x-data="{ stage: {{ collect($columns)->first()['stage']->id ?? 'null' }} }">
+    <div class="jl-tabs" role="tablist" aria-label="Tahap">
+        @foreach ($columns as $column)
+            <button type="button" class="jl-chip" role="tab" wire:key="tab-{{ $column['stage']->id }}"
+                x-bind:aria-pressed="stage === {{ $column['stage']->id }} ? 'true' : 'false'" x-bind:aria-selected="stage === {{ $column['stage']->id }}"
+                x-on:click="stage = {{ $column['stage']->id }}">{{ $column['stage']->name }} <span>{{ $column['count'] }}</span></button>
+        @endforeach
+    </div>
     <div class="jl-board" x-data="{ dragging: null }">
         @foreach ($columns as $column)
             @php($stage = $column['stage'])
@@ -65,7 +83,7 @@
                 class="jl-col {{ $stage->isOpen() ? '' : 'is-closed' }}"
                 aria-label="{{ $stage->name }}"
                 x-data="{ over: false }"
-                :class="{ 'is-over': over }"
+                :class="{ 'is-over': over, 'is-current': stage === {{ $stage->id }} }"
                 x-on:dragover.prevent="over = true"
                 x-on:dragleave="if (! $el.contains($event.relatedTarget)) over = false"
                 x-on:drop.prevent="over = false; if (dragging) $wire.moveLead(dragging, {{ $stage->id }})"
@@ -126,5 +144,6 @@
                 </div>
             </section>
         @endforeach
+    </div>
     </div>
 </x-filament-panels::page>

@@ -22,6 +22,20 @@
         .rp-f .b { height: .7rem; border-radius: 9999px; background: var(--gray-100); overflow: hidden; }
         .rp-f .b i { display: block; height: 100%; border-radius: 9999px; background: var(--primary-600); }
         .rp-f .b i.won { background: #16a34a; } .rp-f .b i.lost { background: #9ca3af; }
+        .rp-grid > * { min-width: 0; }
+        /* Phones: each table row becomes a small card, figures side by side under the name, labelled */
+        @media (max-width: 639px) {
+            .rp-kpi .v { font-size: 1.15rem; }
+            .rp-f { grid-template-columns: minmax(0, 7rem) 1fr 1.75rem; }
+            .rp-tbl thead { display: none; }
+            .rp-tbl tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .25rem .5rem; padding: .6rem 0; border-bottom: 1px solid var(--gray-100); }
+            .rp-tbl td { padding: 0; border: 0; }
+            .rp-tbl td:first-child, .rp-tbl td:nth-child(5) { grid-column: 1 / -1; }
+            .rp-tbl td:first-child { font-weight: 600; }
+            .rp-tbl td[colspan] { font-weight: 400; }
+            .rp-tbl td.n { text-align: left; }
+            .rp-tbl td[data-label]::before { content: attr(data-label); display: block; font-size: .75rem; color: var(--gray-500); }
+        }
     </style>
 
     <div class="rp-bar">
@@ -48,7 +62,7 @@
                 <thead><tr><th>Sumber</th><th class="n">Lead</th><th class="n">Closing</th><th class="n">Konversi</th></tr></thead>
                 <tbody>
                     @forelse ($perSource as $r)
-                        <tr><td>{{ $r['name'] }}</td><td class="n">{{ $r['leads'] }}</td><td class="n">{{ $r['won'] }}</td><td class="n">{{ $r['rate'] }}</td></tr>
+                        <tr><td>{{ $r['name'] }}</td><td class="n" data-label="Lead">{{ $r['leads'] }}</td><td class="n" data-label="Closing">{{ $r['won'] }}</td><td class="n" data-label="Konversi">{{ $r['rate'] }}</td></tr>
                     @empty
                         <tr><td colspan="4">Belum ada data pada periode ini.</td></tr>
                     @endforelse
@@ -61,7 +75,7 @@
                 <thead><tr><th>Agen</th><th class="n">Lead</th><th class="n">Closing</th><th class="n">Konversi</th><th class="n">Nilai transaksi</th></tr></thead>
                 <tbody>
                     @forelse ($perAgent as $r)
-                        <tr><td>{{ $r['name'] }}</td><td class="n">{{ $r['leads'] }}</td><td class="n">{{ $r['won'] }}</td><td class="n">{{ $r['rate'] }}</td><td class="n">Rp {{ number_format($r['value'], 0, ',', '.') }}</td></tr>
+                        <tr><td>{{ $r['name'] }}</td><td class="n" data-label="Lead">{{ $r['leads'] }}</td><td class="n" data-label="Closing">{{ $r['won'] }}</td><td class="n" data-label="Konversi">{{ $r['rate'] }}</td><td class="n" data-label="Nilai transaksi">Rp {{ number_format($r['value'], 0, ',', '.') }}</td></tr>
                     @empty
                         <tr><td colspan="5">Belum ada data pada periode ini.</td></tr>
                     @endforelse
