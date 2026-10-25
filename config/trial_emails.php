@@ -53,7 +53,7 @@ return [
             'from' => 'end', 'days' => -3, 'link' => 'subscription',
             'subject' => 'Masa percobaan {agensi} berakhir {hari_tersisa} hari lagi',
             'button' => 'Pilih paket dan bayar',
-            'body' => "Halo {nama},\n\nMasa percobaan **{agensi}** di JITU LEAD berakhir pada **{tanggal_berakhir}** ({hari_tersisa} hari lagi).\n\nSetelah itu akun menjadi hanya-baca: data tetap aman dan bisa dilihat, tetapi tidak bisa ditambah atau diubah, dan AI serta follow-up otomatis berhenti. Pilih paket sekarang supaya pekerjaan tim tidak terputus.",
+            'body' => "Halo {nama},\n\nMasa percobaan **{agensi}** di JITU LEAD berakhir pada **{tanggal_berakhir}** ({hari_tersisa} hari lagi).\n\nSetelah itu semua menu CRM dikunci sampai agensi memilih paket, dan AI serta follow-up otomatis berhenti. Lead dan chat yang masuk tetap tersimpan. Pilih paket sekarang supaya pekerjaan tim tidak terputus.",
         ],
         'ending_1' => [
             'label' => 'H-1 berakhir: pengingat terakhir',
@@ -63,11 +63,11 @@ return [
             'body' => "Halo {nama},\n\nMasa percobaan **{agensi}** berakhir besok, **{tanggal_berakhir}**.\n\nPilih paket hari ini agar lead, chat WhatsApp, AI, dan follow-up otomatis tetap berjalan tanpa jeda. Pembayaran bisa langsung dari menu Langganan.",
         ],
         'ended' => [
-            'label' => 'H+1 setelah berakhir: akun hanya-baca',
+            'label' => 'H+1 setelah berakhir: akun dikunci',
             'from' => 'end', 'days' => 1, 'link' => 'subscription',
-            'subject' => 'Akun {agensi} sekarang hanya-baca, data Anda aman',
+            'subject' => 'Akun {agensi} dikunci, data Anda aman',
             'button' => 'Aktifkan kembali',
-            'body' => "Halo {nama},\n\nMasa percobaan **{agensi}** sudah berakhir dan akun sekarang hanya-baca.\n\nSemua data Anda aman: lead, chat, dan pengaturan tetap tersimpan dan bisa dilihat. Begitu paket dipilih dan dibayar, semuanya langsung bisa dipakai lagi tanpa perlu mengatur ulang.",
+            'body' => "Halo {nama},\n\nMasa percobaan **{agensi}** sudah berakhir dan semua menu CRM sekarang dikunci.\n\nSemua data Anda aman: lead, chat, dan pengaturan tetap tersimpan, dan lead serta chat baru tetap masuk. Begitu paket dipilih dan dibayar, semuanya langsung bisa dipakai lagi tanpa perlu mengatur ulang.",
         ],
         'last_offer' => [
             'label' => 'H+7 setelah berakhir: penawaran terakhir',

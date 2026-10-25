@@ -89,9 +89,21 @@ class TrialPopupTest extends TestCase
     public function test_the_popup_and_the_plan_badge_are_on_every_panel_page(): void
     {
         $tenant = $this->makeTenant();
-        $this->endTrial($tenant);
+        $tenant->currentSubscription()->update(['trial_ends_at' => now()->addDays(2)]);
         $admin = $this->adminOf($tenant);
 
-        $this->actingAs($admin)->get('/app/'.$tenant->slug)->assertOk()->assertSee('Masa percobaan 14 hari Anda sudah berakhir', false);
+        $this->actingAs($admin)->get('/app/'.$tenant->slug)->assertOk()->assertSee('Masa langganan Anda segera berakhir', false);
+    }
+
+    public function test_after_the_trial_the_admin_lands_on_the_plans_instead_of_the_popup(): void
+    {
+        $tenant = $this->makeTenant();
+        $this->endTrial($tenant);
+        $this->actingAs($this->adminOf($tenant));
+
+        $this->get('/app/'.$tenant->slug)->assertRedirect('/app/'.$tenant->slug.'/subscription');
+        $this->get('/app/'.$tenant->slug.'/subscription')->assertOk()
+            ->assertSee('Percobaan berakhir')
+            ->assertDontSee('Masa percobaan 14 hari Anda sudah berakhir', false);
     }
 }
