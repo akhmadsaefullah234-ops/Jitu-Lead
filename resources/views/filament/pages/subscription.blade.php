@@ -27,6 +27,13 @@
         .sb-pill { display: inline-block; border-radius: 9999px; padding: .1rem .7rem; font-weight: 700; font-size: .8rem; }
     </style>
 
+    @if (\App\Billing\TrialLock::applies())
+        <div role="alert" style="border:1px solid #fecaca;background:#fef2f2;color:#991b1b;border-radius:.9rem;padding:1rem 1.1rem;display:grid;gap:.35rem">
+            <strong style="font-size:1rem">Masa percobaan sudah berakhir, semua menu dikunci.</strong>
+            <span style="font-size:.875rem;color:#7f1d1d">Pilih paket di bawah untuk membuka kembali. Lead, chat WhatsApp, dan formulir web yang masuk tetap tersimpan di CRM dan tampil lagi begitu langganan aktif.</span>
+        </div>
+    @endif
+
     <x-filament::section heading="Paket Anda">
         <div style="display:flex;flex-wrap:wrap;gap:.75rem 2rem;align-items:center">
             <div>
@@ -41,6 +48,8 @@
             @endif
             @if ($sub->effectiveStatus() === 'past_due')
                 <div class="sb-note" style="color:#92400e">Segera perpanjang. Setelah masa tenggang berakhir, akun menjadi hanya-baca.</div>
+            @elseif (\App\Billing\TrialLock::applies())
+                <div class="sb-note" style="color:#991b1b">Data Anda aman. Pilih paket untuk membuka kembali semua menu, AI, dan follow-up otomatis.</div>
             @elseif ($sub->effectiveStatus() === 'read_only')
                 <div class="sb-note" style="color:#991b1b">Data Anda aman dan masih bisa dilihat. Perpanjang paket untuk menambah dan mengubah data, serta mengaktifkan AI dan follow-up otomatis lagi.</div>
             @endif

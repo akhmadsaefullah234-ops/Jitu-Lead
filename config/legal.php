@@ -14,7 +14,7 @@ return [
     'contact' => env('LEGAL_CONTACT_EMAIL', env('SUPPORT_EMAIL')),
     'address' => env('LEGAL_ADDRESS'),
     // Date of the last change to the default text.
-    'updated' => '2026-10-16',
+    'updated' => '2026-10-25',
 
     'documents' => [
 
@@ -117,7 +117,7 @@ return [
                 ]],
                 ['Uji coba dan langganan', [
                     ['ul', [
-                        'Agensi baru mendapat masa percobaan gratis selama 14 hari. Setelah itu, akun menjadi hanya-baca (data tetap aman dan bisa dilihat) sampai admin agensi memilih paket.',
+                        'Agensi baru mendapat masa percobaan gratis selama 14 hari. Setelah itu, semua menu dikunci sampai admin agensi memilih paket; data tetap aman, dan lead serta chat yang masuk tetap tersimpan.',
                         'Langganan dibayar di muka lewat transfer bank sesuai paket dan siklus (bulanan atau tahunan) yang dipilih. Paket aktif setelah pembayaran kami konfirmasi.',
                         'Bila masa langganan berakhir, akun menjadi hanya-baca setelah masa tenggang yang tertera di aplikasi. AI dan tindak lanjut otomatis berhenti selama hanya-baca.',
                         'Lead dari formulir dan WhatsApp tetap diterima walau batas paket tercapai.',
