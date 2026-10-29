@@ -29,6 +29,7 @@ class ProvisionTenant
                 'status' => 'trial',
                 'trial_ends_at' => now()->addDays(14),
                 'industry' => Industry::make($industry)->key,
+                'shipping' => config("shipping.presets.{$slug}"),
             ]);
 
             $tenant->currentSubscription();

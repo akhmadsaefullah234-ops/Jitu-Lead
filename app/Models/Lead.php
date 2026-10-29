@@ -25,7 +25,7 @@ use LogicException;
     'next_action', 'next_action_due_at', 'need', 'property_type', 'location',
     'budget_min', 'budget_max', 'payment_method', 'property_id', 'survey_at',
     'survey_location', 'unit', 'deal_value', 'lost_reason_id', 'custom_fields', 'stage_entered_at',
-    'variant', 'quantity', 'shipping_address', 'courier',
+    'variant', 'quantity', 'shipping_address', 'courier', 'shipping_cost', 'order_items',
 ])]
 class Lead extends Model
 {
@@ -77,6 +77,7 @@ class Lead extends Model
             'stage_entered_at' => 'datetime',
             'assigned_at' => 'datetime',
             'custom_fields' => 'array',
+            'order_items' => 'array',
         ];
     }
 

@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Collection;
 
-#[Fillable(['conversation_id', 'message_id', 'body', 'status', 'reason', 'api_call', 'media_asset_ids'])]
+#[Fillable(['conversation_id', 'message_id', 'body', 'status', 'reason', 'api_call', 'media_asset_ids', 'actions'])]
 class AiDraft extends Model
 {
     use BelongsToTenant;
@@ -23,7 +23,7 @@ class AiDraft extends Model
 
     protected function casts(): array
     {
-        return ['media_asset_ids' => 'array'];
+        return ['media_asset_ids' => 'array', 'actions' => 'array'];
     }
 
     /** The library items the AI suggests sending with this answer (only those still sendable). */

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Actions\GenerateAiReply;
 use App\Actions\LearnFromReply;
 use App\Actions\SendLibraryItem;
 use App\Actions\SendWhatsAppMessage;
@@ -13,8 +14,12 @@ use App\Models\AiDraft;
 use App\Models\Lead;
 use App\Models\MediaAsset;
 use App\Models\MediaFolder;
+use App\Models\Property;
 use App\Models\WaConversation;
 use App\Models\WaTemplate;
+use App\Shipping\Regions;
+use App\Shipping\Shipping;
+use App\Shipping\ShippingQuote;
 use App\Support\CurrentTenant;
 use App\WhatsApp\RouteDecision;
 use App\WhatsApp\RouteSelector;
@@ -22,8 +27,10 @@ use App\WhatsApp\WhatsAppException;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
@@ -140,10 +147,31 @@ class Inbox extends Page
 
         $conversation->pauseAiFor(config('whatsapp.ai_after_send_pause_seconds'));
         $this->markAiDraft($conversation, AiDraft::SENT);
+        $this->applySuggestedOrder($conversation);
         app(LearnFromReply::class)($conversation, $message);
         $this->sendSuggestedAttachments($conversation);
         $this->draft = '';
         $this->usedAiDraft = null;
+    }
+
+    /** When the agent sent an AI suggestion that confirms an order, the order is written onto the lead now. */
+    private function applySuggestedOrder(WaConversation $conversation): void
+    {
+        $draft = $this->usedAiDraft ? AiDraft::query()->where('conversation_id', $conversation->getKey())->find($this->usedAiDraft) : null;
+
+        if (! $draft?->actions) {
+            return;
+        }
+
+        $actions = app(GenerateAiReply::class)->applyActions($conversation->lead, $draft->actions, auth()->user(), auth()->user()->name.' (saran AI)');
+        $draft->forceFill(['actions' => $actions])->save();
+
+        foreach ($actions as $action) {
+            $outcome = $action['outcome'] ?? [];
+            ($outcome['status'] ?? null) === 'tercatat'
+                ? Notification::make()->title('Pesanan dicatat di lead')->body($outcome['pesan'] ?? null)->success()->send()
+                : Notification::make()->title('Pesanan belum tercatat')->body($outcome['pesan'] ?? null)->warning()->send();
+        }
     }
 
     /** When the agent used an AI suggestion, the library items the AI picked go out right after the text. */
@@ -248,6 +276,53 @@ class Inbox extends Page
 
                 $conversation->pauseAiFor(config('whatsapp.ai_after_send_pause_seconds'));
                 $this->markAiDraft($conversation, AiDraft::SENT);
+            });
+    }
+
+    /**
+     * Prices the chat's order from the shop's zone table (the same one the AI uses) and puts the result in the
+     * message box for the agent to check and send.
+     */
+    public function shippingQuoteAction(): Action
+    {
+        return Action::make('shippingQuote')
+            ->label('Hitung ongkir')->icon(Heroicon::OutlinedTruck)->color('gray')->size('sm')
+            ->modalHeading('Hitung ongkir')
+            ->modalDescription('Dari tabel zona di Pengaturan > Pengiriman. Hasilnya masuk ke kotak pesan untuk Anda periksa sebelum dikirim.')
+            ->modalSubmitActionLabel('Hitung')
+            ->visible(fn () => $this->current() !== null && Shipping::available(app(CurrentTenant::class)->get()))
+            ->fillForm(function () {
+                $lead = $this->current()?->lead;
+
+                return [
+                    'items' => $lead?->order_items
+                        ? array_map(fn (array $i) => ['product_id' => $i['product_id'] ?? null, 'varian' => $i['variant'] ?? null, 'jumlah' => $i['quantity'] ?? 1], $lead->order_items)
+                        : [['product_id' => $lead?->property_id, 'varian' => $lead?->variant, 'jumlah' => $lead?->quantity ?: 1]],
+                ];
+            })
+            ->schema([
+                Repeater::make('items')->label('Produk')->addActionLabel('Tambah produk')->minItems(1)->defaultItems(1)->columns(3)->schema([
+                    Select::make('product_id')->label('Produk')->required()->searchable()->columnSpan(3)
+                        ->options(fn () => Property::query()->orderBy('name')->pluck('name', 'id')),
+                    TextInput::make('varian')->label('Varian')->maxLength(60)->columnSpan(2),
+                    TextInput::make('jumlah')->label('Jumlah')->numeric()->integer()->minValue(1)->maxValue(1000)->default(1)->required(),
+                ]),
+                TextInput::make('kota')->label('Kota/kabupaten tujuan')->required()->maxLength(80)->placeholder('Mis. Kab. Bandung'),
+                Select::make('provinsi')->label('Provinsi')->options(Regions::options())->searchable()
+                    ->helperText('Boleh dikosongkan untuk kota yang dikenal.'),
+            ])
+            ->action(function (array $data, Action $action) {
+                $quote = Shipping::quote(app(CurrentTenant::class)->get(), $data['kota'] ?? null, $data['provinsi'] ?? null, $data['items'] ?? []);
+
+                if (! $quote->ok()) {
+                    Notification::make()->title($quote->status === ShippingQuote::NEEDS_ADMIN ? 'Perlu konfirmasi admin' : 'Ongkir belum bisa dihitung')
+                        ->body($quote->message)->warning()->send();
+                    $action->halt();
+                }
+
+                $this->draft = trim($this->draft) === '' ? $quote->summary() : rtrim($this->draft)."\n\n".$quote->summary();
+                $this->updatedDraft();
+                Notification::make()->title('Ongkir dihitung, zona '.$quote->zone)->body(nl2br(e($quote->summary())))->success()->persistent()->send();
             });
     }
 

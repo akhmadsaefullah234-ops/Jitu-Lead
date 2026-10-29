@@ -64,7 +64,10 @@
                         <br class="wa-back-br"><strong>{{ $conversation->lead->name }}</strong>
                         <div class="p" style="font-size:.75rem;color:var(--gray-500)">{{ $conversation->phone }} · {{ $conversation->lead->stage?->name }}@if ($aiMode) · Pembalas: {{ $aiMode->getLabel() }}@endif</div>
                     </div>
-                    <a class="jl-link" style="font-size:.8rem;font-weight:600" href="{{ $leadUrl($conversation->lead) }}" wire:navigate>Buka lead</a>
+                    <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;justify-content:flex-end">
+                        {{ $this->shippingQuoteAction }}
+                        <a class="jl-link" style="font-size:.8rem;font-weight:600" href="{{ $leadUrl($conversation->lead) }}" wire:navigate>Buka lead</a>
+                    </div>
                 </div>
                 <div class="wa-banner {{ $decision->tone() }}">
                     <b>{{ $decision->title }}</b>{{ $decision->note }}
@@ -110,6 +113,11 @@
                             <strong>Saran balasan AI</strong>
                             @if ($aiDraft->reason) <span style="color:#6b7280">({{ $aiDraft->reason }})</span> @endif
                             <div style="margin:.35rem 0;white-space:pre-wrap">{{ $aiDraft->body }}</div>
+                            @foreach ($aiDraft->actions ?? [] as $action)
+                                @if (($action['type'] ?? null) === 'order' && ! ($action['applied'] ?? false))
+                                    <div style="margin:.25rem 0;font-size:.8rem;color:#6b7280">Bila dikirim, pesanan ikut dicatat di lead ({{ $action['result']['kurir'] ?? '' }}, ongkir {{ $action['result']['ongkir_teks'] ?? '' }}{{ isset($action['result']['total_teks']) ? ', total '.$action['result']['total_teks'] : '' }}) dan lead pindah ke Menunggu pembayaran.</div>
+                                @endif
+                            @endforeach
                             @if ($aiDraft->suggestedAssets()->isNotEmpty())
                                 <div style="margin:.25rem 0;font-size:.8rem;color:#6b7280">Ikut terkirim: {{ $aiDraft->suggestedAssets()->pluck('title')->implode(', ') }}</div>
                             @endif
