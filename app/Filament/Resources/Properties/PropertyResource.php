@@ -12,6 +12,7 @@ use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -73,6 +74,14 @@ class PropertyResource extends Resource
             TextInput::make('developer')->label('Developer (primary)')->maxLength(120)->visible($property),
             TextInput::make('price_from')->label($property ? 'Harga mulai (Rp)' : 'Harga (Rp)')->numeric()->minValue(0)->prefix('Rp'),
             Select::make('status')->label($property ? 'Status' : 'Stok')->options(self::statuses())->default('available')->required(),
+            // Shipping cost is counted from these (Pengaturan > Pengiriman)
+            TextInput::make('weight_grams')->label('Berat (gram)')->numeric()->integer()->minValue(1)->maxValue(1000000)->suffix('g')->visible(! $property)
+                ->helperText('Berat siap kirim, termasuk kemasan. Kosong = berat bawaan di pengaturan Pengiriman.'),
+            Grid::make(3)->columnSpanFull()->visible(! $property)->schema([
+                TextInput::make('length_cm')->label('Panjang (cm)')->numeric()->integer()->minValue(1)->maxValue(1000),
+                TextInput::make('width_cm')->label('Lebar (cm)')->numeric()->integer()->minValue(1)->maxValue(1000),
+                TextInput::make('height_cm')->label('Tinggi (cm)')->numeric()->integer()->minValue(1)->maxValue(1000),
+            ]),
             KeyValue::make('details')->label('Rincian tambahan')->keyLabel('Nama')->valueLabel('Isi')
                 ->helperText($property ? 'Contoh: luas tanah, luas bangunan, sertifikat.' : 'Contoh: ukuran, warna, bahan, berat.')->columnSpanFull(),
         ])->columns(2);
@@ -87,6 +96,7 @@ class PropertyResource extends Resource
             TextColumn::make('kind')->label('Jenis')->badge()->visible($property),
             TextColumn::make('property_type')->label($property ? 'Tipe' : 'Kategori')->toggleable(),
             TextColumn::make('location')->label('Lokasi')->searchable()->toggleable()->visible($property),
+            TextColumn::make('weight_grams')->label('Berat')->suffix(' g')->toggleable()->visible(! $property),
             TextColumn::make('price_from')->label($property ? 'Harga mulai' : 'Harga')->money('IDR', locale: 'id')->sortable(),
             TextColumn::make('status')->label($property ? 'Status' : 'Stok')->badge()
                 ->formatStateUsing(fn (string $state) => self::statuses()[$state] ?? $state)

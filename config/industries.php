@@ -127,6 +127,7 @@ TXT,
                 'quantity' => 'Jumlah',
                 'shipping_address' => 'Alamat kirim',
                 'courier' => 'Kurir',
+                'shipping_cost' => 'Ongkir',
             ],
 
             'terms' => [

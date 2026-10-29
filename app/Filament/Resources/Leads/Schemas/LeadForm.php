@@ -98,6 +98,10 @@ class LeadForm
                         TextInput::make('courier')
                             ->placeholder('JNE, J&T, SiCepat, GoSend')
                             ->maxLength(60),
+                        TextInput::make('shipping_cost')
+                            ->numeric()
+                            ->minValue(0)
+                            ->prefix('Rp'),
                         Textarea::make('shipping_address')
                             ->rows(2)
                             ->maxLength(500)
