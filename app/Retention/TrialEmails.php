@@ -179,6 +179,8 @@ class TrialEmails
             '{jumlah_lead}' => (string) Lead::withoutGlobalScopes()->where('tenant_id', $tenant->getKey())->whereNull('deleted_at')->count(),
             '{jumlah_pesan}' => (string) WaMessage::withoutGlobalScopes()->where('tenant_id', $tenant->getKey())->count(),
             '{paket_percobaan}' => (string) config('plans.plans.'.config('plans.trial_plan').'.name'),
+            '{katalog}' => $tenant->industry()->term('catalog_item'),
+            '{isi_pengetahuan}' => $tenant->industry()->term('knowledge_examples'),
         ];
     }
 

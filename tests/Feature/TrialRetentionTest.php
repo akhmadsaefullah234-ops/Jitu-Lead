@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Actions\ProvisionTenant;
 use App\Billing\Subscriptions;
 use App\Enums\Role;
 use App\Enums\StageType;
@@ -210,7 +209,7 @@ class TrialRetentionTest extends TestCase
         // the three stages were added once to the owner's pipeline, after the existing ones
         $names = app(CurrentTenant::class)->run($sales, fn () => $sales->stages()->pluck('name')->all());
         $this->assertSame([PlatformLeads::TRIAL, PlatformLeads::SUBSCRIBED, PlatformLeads::DROPPED], array_slice($names, -3));
-        $this->assertSame(count(ProvisionTenant::STAGES) + 3, count($names));
+        $this->assertSame(count(config('industries.industries.properti.stages')) + 3, count($names));
     }
 
     public function test_no_lead_without_consent_or_without_the_setting(): void

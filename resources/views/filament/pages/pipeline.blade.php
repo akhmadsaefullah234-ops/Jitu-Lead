@@ -104,7 +104,7 @@
                         >
                             <div>
                                 <div class="nm">{{ $lead->name }}</div>
-                                <div class="sub">{{ $lead->property?->name ?? $lead->location ?? 'Properti belum dipilih' }}</div>
+                                <div class="sub">{{ $lead->property?->name ?? $lead->location ?? \App\Support\Industry::t('item_missing') }}</div>
                             </div>
                             <div class="row">
                                 <x-filament::badge :color="$lead->interest->getColor()" size="sm">{{ $lead->interest->getLabel() }}</x-filament::badge>

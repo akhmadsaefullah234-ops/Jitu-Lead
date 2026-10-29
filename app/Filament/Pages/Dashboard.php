@@ -13,6 +13,7 @@ use App\Filament\Widgets\RecentLeads;
 use App\Filament\Widgets\SalesStats;
 use App\Filament\Widgets\WhatsAppPrompt;
 use App\Support\CurrentTenant;
+use App\Support\Industry;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Dashboard as BaseDashboard;
@@ -49,7 +50,7 @@ class Dashboard extends BaseDashboard
             Action::make('loadDemo')->label('Isi data contoh')->icon(Heroicon::OutlinedSparkles)
                 ->visible(fn () => $this->isAdmin() && ! $demo->hasLeads())
                 ->requiresConfirmation()->modalHeading('Isi data contoh?')
-                ->modalDescription('Membuat sekitar 30 lead dan 4 properti contoh agar dasbor dan pipeline terlihat berjalan. Bisa dihapus kapan saja tanpa menyentuh data asli Anda.')
+                ->modalDescription('Membuat sekitar 30 lead dan 4 '.Industry::t('catalog_item').' contoh agar dasbor dan pipeline terlihat berjalan. Bisa dihapus kapan saja tanpa menyentuh data asli Anda.')
                 ->action(function () use ($demo) {
                     $count = $demo->load();
                     Notification::make()->title("{$count} lead contoh dibuat")->success()->send();
@@ -58,7 +59,7 @@ class Dashboard extends BaseDashboard
             Action::make('clearDemo')->label('Hapus data contoh')->icon(Heroicon::OutlinedTrash)->color('gray')
                 ->visible(fn () => $this->isAdmin() && $demo->hasDemo())
                 ->requiresConfirmation()->modalHeading('Hapus semua data contoh?')
-                ->modalDescription('Hanya lead dan properti bertanda contoh yang dihapus. Data yang Anda masukkan sendiri tetap aman.')
+                ->modalDescription('Hanya lead dan '.Industry::t('catalog_item').' bertanda contoh yang dihapus. Data yang Anda masukkan sendiri tetap aman.')
                 ->action(function () use ($demo) {
                     $count = $demo->clear();
                     Notification::make()->title("{$count} lead contoh dihapus")->success()->send();

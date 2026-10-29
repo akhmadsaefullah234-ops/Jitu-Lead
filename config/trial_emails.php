@@ -5,7 +5,8 @@
  * its text changed in /admin (Email percobaan) without a deploy; the texts here are the defaults.
  *
  * "from": signup = days after the agency was created, end = days relative to the day the trial ends.
- * Placeholders: {nama} {agensi} {hari_tersisa} {tanggal_berakhir} {jumlah_lead} {jumlah_pesan} {paket_percobaan}.
+ * Placeholders: {nama} {agensi} {hari_tersisa} {tanggal_berakhir} {jumlah_lead} {jumlah_pesan} {paket_percobaan}, and in the
+ * agency's own business words (config/industries.php): {katalog} ("properti" or "produk") {isi_pengetahuan}.
  * "link": where the button goes (whatsapp, knowledge, dashboard, subscription).
  *
  * The ending reminders (end -3 and end -1) replace the old single "segera berakhir" email for trials, so an
@@ -37,9 +38,9 @@ return [
         'ai_knowledge' => [
             'label' => 'H+3 daftar: isi pengetahuan AI',
             'from' => 'signup', 'days' => 3, 'link' => 'knowledge',
-            'subject' => 'Ajari AI tentang properti {agensi}',
+            'subject' => 'Ajari AI tentang {katalog} {agensi}',
             'button' => 'Isi pengetahuan AI',
-            'body' => "Halo {nama},\n\nAI di JITU LEAD bisa membantu membalas chat calon pembeli, tetapi jawabannya hanya sebaik informasi yang Anda berikan.\n\nBuka menu **Pengetahuan AI** lalu isi hal-hal yang paling sering ditanyakan: daftar proyek dan tipe unit, harga dan cara bayar, lokasi, promo yang berlaku, dan jam kantor. Anda juga bisa mengunggah brosur PDF.\n\nSemakin lengkap isinya, semakin jarang AI menyerahkan chat ke agen.",
+            'body' => "Halo {nama},\n\nAI di JITU LEAD bisa membantu membalas chat calon pembeli, tetapi jawabannya hanya sebaik informasi yang Anda berikan.\n\nBuka menu **Pengetahuan AI** lalu isi hal-hal yang paling sering ditanyakan: {isi_pengetahuan}. Anda juga bisa mengunggah brosur atau katalog PDF.\n\nSemakin lengkap isinya, semakin jarang AI menyerahkan chat ke agen.",
         ],
         'usage_summary' => [
             'label' => 'H+7 daftar: ringkasan pemakaian',

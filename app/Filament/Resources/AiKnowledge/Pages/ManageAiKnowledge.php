@@ -4,7 +4,6 @@ namespace App\Filament\Resources\AiKnowledge\Pages;
 
 use App\Actions\ImportKnowledgeDocument;
 use App\Ai\AnthropicClient;
-use App\Ai\Defaults;
 use App\Ai\DocumentException;
 use App\Ai\DocumentReader;
 use App\Filament\Resources\AiKnowledge\AiKnowledgeResource;
@@ -103,7 +102,11 @@ class ManageAiKnowledge extends ManageRecords
                 Action::make('reset')->label('Kembalikan ke bawaan')->color('gray')->cancelParentActions()
                     ->requiresConfirmation()
                     ->action(function () {
-                        app(CurrentTenant::class)->get()->update(['ai_instructions' => Defaults::INSTRUCTIONS, 'ai_handoff_keywords' => Defaults::keywordText()]);
+                        $tenant = app(CurrentTenant::class)->get();
+                        $tenant->update([
+                            'ai_instructions' => $tenant->industry()->config('ai_instructions'),
+                            'ai_handoff_keywords' => implode(', ', $tenant->industry()->config('handoff_keywords')),
+                        ]);
                         Notification::make()->title('Dikembalikan ke bawaan')->success()->send();
                     }),
             ])

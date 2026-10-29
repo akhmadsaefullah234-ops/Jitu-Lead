@@ -6,6 +6,7 @@ use App\Enums\Interest;
 use App\Enums\Need;
 use App\Enums\PaymentMethod;
 use App\Enums\PropertyKind;
+use App\Enums\StageRequirement;
 use App\Enums\StageType;
 use App\Models\Lead;
 use App\Models\LeadSource;
@@ -31,11 +32,18 @@ class DemoData
         'Mega Puspita', 'Irfan Hakim', 'Nanda Kusumawati',
     ];
 
-    /** [stage name, how many sample leads] */
+    /** Per industry: [stage name, how many sample leads] */
     private const STAGES = [
-        ['Lead baru', 6], ['Dihubungi', 5], ['Terkualifikasi', 4], ['Jadwal survei', 3], ['Sudah survei', 3],
-        ['Negosiasi', 2], ['Booking', 2], ['Closing', 3], ['Gugur', 3],
+        'properti' => [
+            ['Lead baru', 6], ['Dihubungi', 5], ['Terkualifikasi', 4], ['Jadwal survei', 3], ['Sudah survei', 3],
+            ['Negosiasi', 2], ['Booking', 2], ['Closing', 3], ['Gugur', 3],
+        ],
+        'retail' => [
+            ['Tanya produk', 8], ['Order masuk', 5], ['Menunggu pembayaran', 4], ['Dikemas & dikirim', 4], ['Selesai', 6], ['Batal', 3],
+        ],
     ];
+
+    private const COURIERS = ['JNE', 'J&T', 'SiCepat', 'GoSend'];
 
     public function __construct(private CurrentTenant $current) {}
 
@@ -58,8 +66,9 @@ class DemoData
             $sources = LeadSource::query()->pluck('id')->all();
             $lost = LostReason::query()->pluck('id')->all();
             $created = 0;
+            $shop = $this->isShop();
 
-            foreach (self::STAGES as [$stageName, $count]) {
+            foreach (self::STAGES[$shop ? 'retail' : 'properti'] as [$stageName, $count]) {
                 $stage = Stage::query()->where('name', $stageName)->first();
 
                 if ($stage === null) {
@@ -79,15 +88,22 @@ class DemoData
                         'stage_id' => $stage->getKey(),
                         'owner_id' => $owner?->getKey(),
                         'interest' => [Interest::Hot, Interest::Warm, Interest::Cold][($created + $n) % 3],
+                        'property_id' => $property->getKey(),
+                        'next_action' => $stage->default_action,
+                        'custom_fields' => ['demo' => true],
+                    ]);
+                    $lead->fill($shop ? [
+                        'variant' => ['S', 'M', 'L', 'XL'][$created % 4],
+                        'quantity' => 1 + $created % 3,
+                        'courier' => self::COURIERS[$created % count(self::COURIERS)],
+                        'shipping_address' => 'Jl. Contoh No. '.(1 + $created).', '.['Bandung', 'Surabaya', 'Medan', 'Makassar'][$created % 4],
+                    ] : [
                         'need' => Need::Buy,
                         'property_type' => $property->property_type,
                         'location' => $property->location,
                         'budget_min' => (int) ($property->price_from * 0.9),
                         'budget_max' => (int) ($property->price_from * 1.15),
                         'payment_method' => $created % 4 === 0 ? PaymentMethod::Cash : PaymentMethod::Kpr,
-                        'property_id' => $property->getKey(),
-                        'next_action' => $stage->default_action,
-                        'custom_fields' => ['demo' => true],
                     ]);
 
                     $this->fillStage($lead, $stage, $property, $lost, $created);
@@ -122,16 +138,19 @@ class DemoData
             $lead->next_action_due_at = $due;
         }
 
-        match ($stage->name) {
-            'Jadwal survei' => $lead->forceFill([
+        match ($stage->requirement) {
+            StageRequirement::Survey => $lead->forceFill([
                 'survey_at' => now()->addDays(1 + $i % 4)->setTime(10 + $i % 5, 0),
                 'survey_location' => 'Unit contoh '.$property->name,
             ]),
-            'Booking', 'Closing' => $lead->forceFill([
+            StageRequirement::Booking => $lead->forceFill($lead->quantity ? [
+                'unit' => $property->name.' '.$lead->variant.' x'.$lead->quantity,
+                'deal_value' => $property->price_from * $lead->quantity,
+            ] : [
                 'unit' => 'Unit '.chr(65 + $i % 5).'-'.(10 + $i),
                 'deal_value' => $property->price_from,
             ]),
-            'Gugur' => $lead->forceFill(['lost_reason_id' => $lost === [] ? null : $lost[$i % count($lost)]]),
+            StageRequirement::LostReason => $lead->forceFill(['lost_reason_id' => $lost === [] ? null : $lost[$i % count($lost)]]),
             default => null,
         };
 
@@ -150,9 +169,22 @@ class DemoData
         return ($agents->isNotEmpty() ? $agents : $users)->values()->all();
     }
 
+    private function isShop(): bool
+    {
+        return $this->current->get()->industry()->key === 'retail';
+    }
+
     /** @return list<Property> */
     private function properties(): array
     {
+        if ($this->isShop()) {
+            $products = [['Kaos Polos Premium', 'Pakaian', 89_000], ['Hijab Voal Motif', 'Pakaian', 65_000], ['Sneakers Kanvas', 'Sepatu', 249_000], ['Tas Selempang Kulit', 'Aksesoris', 179_000]];
+
+            return array_map(fn (array $r) => Property::create([
+                'name' => $r[0].' (contoh)', 'property_type' => $r[1], 'price_from' => $r[2], 'details' => ['demo' => true],
+            ]), $products);
+        }
+
         $rows = [
             [PropertyKind::Primary, 'Cluster Bukit Asri', 'Rumah', 'Bogor Selatan', 'PT Bukit Asri Lestari', 785_000_000],
             [PropertyKind::Primary, 'Apartemen Taman Kota Tower B', 'Apartemen', 'Jakarta Selatan', 'PT Taman Kota Hunian', 620_000_000],

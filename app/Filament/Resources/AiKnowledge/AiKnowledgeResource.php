@@ -4,6 +4,7 @@ namespace App\Filament\Resources\AiKnowledge;
 
 use App\Filament\Resources\AiKnowledge\Pages\ManageAiKnowledge;
 use App\Models\AiKnowledgeItem;
+use App\Support\Industry;
 use BackedEnum;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -36,11 +37,11 @@ class AiKnowledgeResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            TextInput::make('title')->label('Judul')->required()->maxLength(120)->placeholder('Contoh: Harga Cluster Mawar, Cara KPR, Jam survei'),
+            TextInput::make('title')->label('Judul')->required()->maxLength(120)->placeholder(Industry::t('knowledge_title_hint')),
             Textarea::make('question')->label('Pertanyaan klien (opsional)')->rows(2)->maxLength(500)
                 ->helperText('Isi bila ini jawaban untuk satu pertanyaan tertentu.'),
             Textarea::make('content')->label('Isi / jawaban')->required()->rows(8)->maxLength(4000)
-                ->helperText('Tulis apa adanya: harga, DP, cicilan, fasilitas, alamat, syarat KPR, jam survei. AI tidak akan menambah yang tidak tertulis.'),
+                ->helperText(Industry::t('knowledge_body_hint')),
             Toggle::make('active')->label('Dipakai AI')->default(true),
         ]);
     }

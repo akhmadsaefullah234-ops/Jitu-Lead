@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\Role;
+use App\Support\Industry;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -11,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
-#[Fillable(['name', 'slug', 'plan', 'status', 'timezone', 'trial_ends_at', 'ai_instructions', 'ai_handoff_keywords', 'lead_reassign_mode', 'lead_reassign_minutes', 'lead_reassign_max', 'show_property_fields'])]
+#[Fillable(['name', 'slug', 'plan', 'status', 'timezone', 'trial_ends_at', 'ai_instructions', 'ai_handoff_keywords', 'lead_reassign_mode', 'lead_reassign_minutes', 'lead_reassign_max', 'show_property_fields', 'industry'])]
 class Tenant extends Model
 {
     protected $hidden = ['capture_token'];
@@ -25,11 +26,17 @@ class Tenant extends Model
         ];
     }
 
+    /** The kind of business this agency runs, with its lead fields and wording (config/industries.php). */
+    public function industry(): Industry
+    {
+        return Industry::of($this);
+    }
+
     /**
-     * Whether leads have the property fields (budget, location, property type and so on). An agency that does
-     * not sell property turns them off; the platform's own sales agency never has them.
+     * Whether leads show the fields of the agency's industry (budget and location for property, variant and
+     * courier for retail, and so on). An agency can switch them off; the platform's own sales agency never has them.
      */
-    public function showsPropertyFields(): bool
+    public function showsIndustryFields(): bool
     {
         return ! $this->isPlatformSales() && ($this->show_property_fields ?? true);
     }

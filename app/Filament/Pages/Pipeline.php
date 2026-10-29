@@ -10,6 +10,7 @@ use App\Models\Lead;
 use App\Models\LostReason;
 use App\Models\Stage;
 use App\Support\CurrentTenant;
+use App\Support\Industry;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DateTimePicker;
@@ -117,19 +118,19 @@ class Pipeline extends Page
                     ->required()
                     ->live(),
                 DateTimePicker::make('survey_at')
-                    ->label('Jadwal survei')
+                    ->label('Jadwal '.mb_strtolower(Industry::t('visit')))
                     ->seconds(false)
                     ->minDate(now())
                     ->required()
                     ->visible(fn (Get $get) => $this->requirementOf($get('stage_id')) === StageRequirement::Survey),
                 TextInput::make('survey_location')
-                    ->label('Lokasi survei')
+                    ->label('Lokasi '.mb_strtolower(Industry::t('visit')))
                     ->required()
                     ->maxLength(200)
                     ->visible(fn (Get $get) => $this->requirementOf($get('stage_id')) === StageRequirement::Survey),
                 TextInput::make('unit')
-                    ->label('Unit')
-                    ->placeholder('Contoh: Blok C-12')
+                    ->label(Industry::t('deal_item'))
+                    ->placeholder(Industry::t('deal_item_hint'))
                     ->required()
                     ->maxLength(120)
                     ->visible(fn (Get $get) => $this->requirementOf($get('stage_id')) === StageRequirement::Booking),

@@ -39,7 +39,7 @@ class LeadsTable
                     ->searchable()
                     ->sortable()
                     ->wrap()
-                    ->description(fn (Lead $record) => collect([$record->phone, LeadForm::showsPropertyFields() ? $record->property?->name : null])->filter()->implode(' · ')),
+                    ->description(fn (Lead $record) => collect([$record->phone, LeadForm::showsIndustryFields() ? $record->property?->name : null])->filter()->implode(' · ')),
                 TextColumn::make('phone')
                     ->label('Telepon')
                     ->searchable()

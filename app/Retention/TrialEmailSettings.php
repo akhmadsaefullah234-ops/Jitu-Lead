@@ -13,7 +13,7 @@ class TrialEmailSettings
 {
     public const EDITABLE = ['enabled', 'subject', 'button', 'body'];
 
-    public const PLACEHOLDERS = ['{nama}', '{agensi}', '{hari_tersisa}', '{tanggal_berakhir}', '{jumlah_lead}', '{jumlah_pesan}', '{paket_percobaan}'];
+    public const PLACEHOLDERS = ['{nama}', '{agensi}', '{hari_tersisa}', '{tanggal_berakhir}', '{jumlah_lead}', '{jumlah_pesan}', '{paket_percobaan}', '{katalog}', '{isi_pengetahuan}'];
 
     public static function saved(): array
     {

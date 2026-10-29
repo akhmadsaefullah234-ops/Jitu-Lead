@@ -3,6 +3,8 @@
 namespace App\Filament\Widgets;
 
 use App\Filament\Widgets\Concerns\VisibleLeads;
+use App\Models\Stage;
+use App\Support\Industry;
 use Filament\Support\Icons\Heroicon;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
@@ -31,7 +33,11 @@ class SalesStats extends StatsOverviewWidget
         $wonCount = (clone $won)->count();
         $wonValue = (int) (clone $won)->sum('deal_value');
         $open = $this->leads()->open()->count();
-        $surveys = $this->leads()->open()->whereBetween('survey_at', [now(), now()->addDays(7)])->count();
+        $industry = Industry::current();
+        // A shop has no visits; it watches orders that are past the first question instead
+        $surveys = $industry->key === 'properti'
+            ? $this->leads()->open()->whereBetween('survey_at', [now(), now()->addDays(7)])->count()
+            : $this->leads()->open()->where('stage_id', '!=', Stage::query()->orderBy('position')->value('id'))->count();
 
         return [
             Stat::make('Lead baru (30 hari)', number_format($new, 0, ',', '.'))
@@ -39,8 +45,8 @@ class SalesStats extends StatsOverviewWidget
                 ->descriptionIcon($new >= $previous ? Heroicon::ArrowTrendingUp : Heroicon::ArrowTrendingDown)
                 ->color($new >= $previous ? 'success' : 'danger'),
             Stat::make('Lead aktif', number_format($open, 0, ',', '.'))->description('Masih di pipeline')->color('primary'),
-            Stat::make('Survei 7 hari ke depan', number_format($surveys, 0, ',', '.'))->description('Jadwal yang akan datang')->color('warning'),
-            Stat::make('Closing (30 hari)', number_format($wonCount, 0, ',', '.'))
+            Stat::make($industry->term('visits_upcoming'), number_format($surveys, 0, ',', '.'))->description($industry->key === 'properti' ? 'Jadwal yang akan datang' : 'Belum selesai')->color('warning'),
+            Stat::make($industry->term('won_stat'), number_format($wonCount, 0, ',', '.'))
                 ->description('Nilai Rp '.number_format($wonValue, 0, ',', '.'))->color('success'),
         ];
     }
