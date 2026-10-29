@@ -2,6 +2,7 @@
 
 namespace App\Enums;
 
+use App\Support\Industry;
 use Filament\Support\Contracts\HasLabel;
 
 /**
@@ -16,8 +17,8 @@ enum StageRequirement: string implements HasLabel
     public function getLabel(): string
     {
         return match ($this) {
-            self::Survey => 'Jadwal dan lokasi survei',
-            self::Booking => 'Unit dan nilai transaksi',
+            self::Survey => 'Jadwal dan lokasi '.mb_strtolower(Industry::t('visit')),
+            self::Booking => Industry::t('deal_requirement'),
             self::LostReason => 'Alasan gugur',
         };
     }

@@ -25,7 +25,7 @@ class PropertyFieldsSettingTest extends TestCase
         $tenant = $this->makeTenant();
         $this->actingInTenant($this->adminOf($tenant), $tenant);
 
-        $this->assertTrue($tenant->fresh()->showsPropertyFields());
+        $this->assertTrue($tenant->fresh()->showsIndustryFields());
 
         $page = Livewire::test(CreateLead::class);
         foreach (self::PROPERTY_FIELDS as $field) {
@@ -43,7 +43,7 @@ class PropertyFieldsSettingTest extends TestCase
         Livewire::test(ListLeads::class)->assertSee('Griya Asri Blok C')
             ->callAction('agencySettings', data: ['show_property_fields' => false])->assertHasNoActionErrors();
 
-        $this->assertFalse($tenant->fresh()->showsPropertyFields());
+        $this->assertFalse($tenant->fresh()->showsIndustryFields());
         app(CurrentTenant::class)->set($tenant->fresh());
 
         Livewire::test(ListLeads::class)->assertCanSeeTableRecords([$lead])->assertDontSee('Griya Asri Blok C');
@@ -73,7 +73,7 @@ class PropertyFieldsSettingTest extends TestCase
         $this->actingInTenant($this->adminOf($tenant), $tenant);
 
         $this->assertTrue((bool) $tenant->fresh()->show_property_fields);
-        $this->assertFalse($tenant->fresh()->showsPropertyFields());
+        $this->assertFalse($tenant->fresh()->showsIndustryFields());
 
         $page = Livewire::test(CreateLead::class);
         foreach (self::PROPERTY_FIELDS as $field) {
@@ -81,6 +81,6 @@ class PropertyFieldsSettingTest extends TestCase
         }
 
         $other = $this->makeTenant('agensi-lain');
-        $this->assertTrue($other->fresh()->showsPropertyFields());
+        $this->assertTrue($other->fresh()->showsIndustryFields());
     }
 }

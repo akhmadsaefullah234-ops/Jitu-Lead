@@ -12,6 +12,9 @@ class Property extends Model
 {
     use BelongsToTenant;
 
+    // A shop's products have no kind or status picker, so they start as these
+    protected $attributes = ['kind' => 'primary', 'status' => 'available'];
+
     protected function casts(): array
     {
         return [

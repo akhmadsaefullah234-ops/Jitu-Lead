@@ -7,8 +7,11 @@ use App\Enums\Need;
 use App\Enums\PaymentMethod;
 use App\Models\Lead;
 use App\Support\CurrentTenant;
+use App\Support\Industry;
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Field;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\ToggleButtons;
 use Filament\Schemas\Components\Section;
@@ -55,44 +58,51 @@ class LeadForm
                             ->relationship('source', 'name')
                             ->preload(),
                     ]),
-                Section::make('Kebutuhan properti')
+                Section::make(fn () => Industry::t('lead_section'))
                     ->columns(2)
                     ->columnSpanFull()
-                    ->visible(fn () => self::showsPropertyFields())
-                    ->schema([
+                    ->visible(fn () => self::showsIndustryFields())
+                    ->schema(array_map(self::industryField(...), [
                         ToggleButtons::make('need')
-                            ->label('Kebutuhan')
                             ->options(Need::class)
                             ->default(Need::Buy)
                             ->inline()
                             ->required(),
                         Select::make('property_type')
-                            ->label('Tipe properti')
                             ->options(self::PROPERTY_TYPES),
                         TextInput::make('location')
-                            ->label('Lokasi incaran')
                             ->maxLength(120),
                         Select::make('payment_method')
-                            ->label('Cara bayar')
                             ->options(PaymentMethod::class),
                         TextInput::make('budget_min')
-                            ->label('Budget minimum')
                             ->prefix('Rp')
                             ->numeric()
                             ->minValue(0),
                         TextInput::make('budget_max')
-                            ->label('Budget maksimum')
                             ->prefix('Rp')
                             ->numeric()
                             ->minValue(0)
                             ->gte('budget_min'),
                         Select::make('property_id')
-                            ->label('Properti diminati')
                             ->relationship('property', 'name')
                             ->searchable()
                             ->preload()
                             ->columnSpanFull(),
-                    ]),
+                        TextInput::make('variant')
+                            ->placeholder('Contoh: Hitam, L')
+                            ->maxLength(120),
+                        TextInput::make('quantity')
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(100000),
+                        TextInput::make('courier')
+                            ->placeholder('JNE, J&T, SiCepat, GoSend')
+                            ->maxLength(60),
+                        Textarea::make('shipping_address')
+                            ->rows(2)
+                            ->maxLength(500)
+                            ->columnSpanFull(),
+                    ])),
                 Section::make('Tindak lanjut')
                     ->columns(2)
                     ->columnSpanFull()
@@ -123,10 +133,18 @@ class LeadForm
             ]);
     }
 
-    /** Agencies that do not sell property hide these fields ("Pengaturan agensi" on the lead list). */
-    public static function showsPropertyFields(): bool
+    /** An agency can hide its industry's fields ("Pengaturan agensi" on the lead list). */
+    public static function showsIndustryFields(): bool
     {
-        return app(CurrentTenant::class)->get()?->showsPropertyFields() ?? true;
+        return app(CurrentTenant::class)->get()?->showsIndustryFields() ?? true;
+    }
+
+    /** Shows the field only for the industries that use it, under that industry's label (config/industries.php). */
+    private static function industryField(Field $field): Field
+    {
+        return $field
+            ->label(fn () => Industry::current()->leadFields()[$field->getName()] ?? $field->getName())
+            ->visible(fn () => Industry::current()->usesLeadField($field->getName()));
     }
 
     private static function canAssign(): bool

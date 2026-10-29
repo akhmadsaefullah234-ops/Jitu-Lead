@@ -4,6 +4,7 @@ namespace App\Filament\Resources\LeadSources;
 
 use App\Filament\Resources\LeadSources\Pages\ManageLeadSources;
 use App\Models\LeadSource;
+use App\Support\Industry;
 use BackedEnum;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -34,16 +35,23 @@ class LeadSourceResource extends Resource
     public const TYPES = [
         'ads' => 'Iklan',
         'portal' => 'Portal properti',
+        'social' => 'Media sosial',
         'form' => 'Formulir web',
         'whatsapp' => 'WhatsApp',
         'manual' => 'Manual',
     ];
 
+    /** The types, with the portal named the way the agency's industry calls it (a shop's is the marketplace). */
+    public static function types(): array
+    {
+        return ['portal' => Industry::t('source_portal')] + self::TYPES;
+    }
+
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
             TextInput::make('name')->label('Nama sumber')->required()->maxLength(60),
-            Select::make('type')->label('Jenis')->options(self::TYPES)->required()->default('manual'),
+            Select::make('type')->label('Jenis')->options(self::types())->required()->default('manual'),
         ]);
     }
 
@@ -51,7 +59,7 @@ class LeadSourceResource extends Resource
     {
         return $table->defaultSort('name')->columns([
             TextColumn::make('name')->label('Sumber')->searchable(),
-            TextColumn::make('type')->label('Jenis')->badge()->formatStateUsing(fn (string $state) => self::TYPES[$state] ?? $state),
+            TextColumn::make('type')->label('Jenis')->badge()->formatStateUsing(fn (string $state) => self::types()[$state] ?? $state),
         ])->recordActions([EditAction::make(), DeleteAction::make()]);
     }
 

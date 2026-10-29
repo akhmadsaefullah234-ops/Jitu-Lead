@@ -12,6 +12,7 @@ use App\LandingPages\Templates;
 use App\Models\LandingPage;
 use App\Models\Property;
 use App\Support\CurrentTenant;
+use App\Support\Industry;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -97,7 +98,7 @@ class LandingPageResource extends Resource
                         Sections::upload('logo', 600)->label('Logo (opsional)'),
                         Select::make('property_id')->label('Properti yang dipromosikan')->placeholder('Tidak dipilih')
                             ->options(fn () => Property::query()->orderBy('name')->pluck('name', 'id'))->searchable()
-                            ->helperText('Lead dari halaman ini otomatis tercatat tertarik pada properti ini.'),
+                            ->helperText('Lead dari halaman ini otomatis tercatat tertarik pada '.Industry::t('catalog_item').' ini.'),
                     ]),
                     Section::make('Isi halaman')->description('Tambah, seret, atau pakai tombol naik/turun untuk mengurutkan. Gunakan ikon salin untuk menggandakan bagian.')->schema([
                         Builder::make('blocks')->hiddenLabel()->addActionLabel('Tambah bagian')->blocks(Sections::blocks())

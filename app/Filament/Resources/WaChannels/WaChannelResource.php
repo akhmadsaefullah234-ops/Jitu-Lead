@@ -10,6 +10,7 @@ use App\Filament\Resources\WaChannels\Pages\EditWaChannel;
 use App\Filament\Resources\WaChannels\Pages\ListWaChannels;
 use App\Filament\Support\NoAutofill;
 use App\Models\WaChannel;
+use App\Support\Industry;
 use App\WhatsApp\GatewayProvider;
 use App\WhatsApp\GatewayUrlGuard;
 use App\WhatsApp\Providers;
@@ -96,7 +97,7 @@ class WaChannelResource extends Resource
                 ->schema([
                     Textarea::make('intro_template')->label('Pesan perkenalan')->rows(3)
                         ->placeholder(WaChannel::DEFAULT_INTRO)
-                        ->helperText('Dikirim lebih dulu saat nomor ini pertama kali menulis ke klien. Variabel: {nama} {agen} {agensi} {properti}.'),
+                        ->helperText('Dikirim lebih dulu saat nomor ini pertama kali menulis ke klien. Variabel: {nama} {agen} {agensi} {'.Industry::t('catalog_item').'}.'),
                 ]),
             Section::make('Gateway sendiri (lanjutan)')->columns(2)->collapsible()->collapsed($platformGateway)
                 ->description($platformGateway ? 'Abaikan bagian ini bila Anda menyambungkan lewat scan QR. Isi hanya jika Anda punya gateway WhatsApp sendiri.' : 'Isi alamat dan kunci dari gateway WhatsApp Anda.')

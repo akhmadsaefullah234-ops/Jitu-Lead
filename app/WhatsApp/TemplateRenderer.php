@@ -4,13 +4,14 @@ namespace App\WhatsApp;
 
 use App\Models\Lead;
 use App\Models\User;
+use App\Support\Industry;
 
 /**
- * Fills {nama}, {agen}, {agensi} and {properti} in message templates.
+ * Fills {nama}, {agen}, {agensi} and {properti} or {produk} (the same thing in shop words) in message templates.
  */
 class TemplateRenderer
 {
-    public const PLACEHOLDERS = ['nama', 'agen', 'agensi', 'properti'];
+    public const PLACEHOLDERS = ['nama', 'agen', 'agensi', 'properti', 'produk'];
 
     /**
      * @return array{text: string, parameters: array<int, string>} Parameters are in order of appearance, as Meta's positional template variables expect.
@@ -21,7 +22,8 @@ class TemplateRenderer
             'nama' => explode(' ', trim($lead->name))[0] ?: $lead->name,
             'agen' => $agent->name,
             'agensi' => $agencyName,
-            'properti' => $lead->property?->name ?? $lead->location ?? 'properti yang Anda tanyakan',
+            'properti' => $item = $lead->property?->name ?? $lead->location ?? Industry::of($lead->tenant)->term('item_fallback'),
+            'produk' => $item,
         ];
 
         $parameters = [];
