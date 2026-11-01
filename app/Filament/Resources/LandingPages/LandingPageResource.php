@@ -13,6 +13,7 @@ use App\Models\LandingPage;
 use App\Models\Property;
 use App\Support\CurrentTenant;
 use App\Support\Industry;
+use App\Tracking\PixelEvents;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -104,6 +105,10 @@ class LandingPageResource extends Resource
                         Builder::make('blocks')->hiddenLabel()->addActionLabel('Tambah bagian')->blocks(Sections::blocks())
                             ->collapsible()->collapsed()->cloneable()->reorderable()->reorderableWithButtons()->blockNumbers(false)->blockPickerColumns(2),
                     ]),
+                    Section::make('Pixel saat halaman dibuka')->collapsible()->collapsed()
+                        ->description('Untuk halaman terima kasih, misalnya Lead, CompleteRegistration, atau Purchase. Biarkan "Tidak ada" untuk halaman biasa; PageView tetap terkirim otomatis.')
+                        ->visible(fn () => PlanLimits::current()?->feature('pixels') ?? true)
+                        ->schema([PixelEvents::fieldset('page_events', 'Event', null)]),
                     Section::make('SEO dan berbagi')->collapsible()->collapsed()->columns(1)->description('Tampilan saat halaman muncul di Google atau dibagikan lewat WhatsApp dan Facebook.')->schema([
                         TextInput::make('meta_title')->label('Judul untuk Google dan pratinjau link')->maxLength(120)->helperText('Kosongkan untuk memakai judul halaman.'),
                         Textarea::make('description')->label('Deskripsi singkat')->rows(2)->maxLength(300),

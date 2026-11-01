@@ -3,10 +3,12 @@
 namespace App\LandingPages;
 
 use App\Models\LandingPage;
+use App\Models\LeadForm;
 use App\Models\Tenant;
 use App\Models\TrackingSetting;
 use App\Models\WaChannel;
 use App\Support\PhoneNumber;
+use App\Tracking\PixelEvents;
 use Illuminate\Support\Str;
 
 /**
@@ -28,7 +30,8 @@ class PageData
 
         $number = self::digits($page->whatsapp_number) ?: self::agencyNumber();
         $firstCta = collect($sections)->firstWhere('type', 'cta');
-        $message = (string) ($firstCta['props']['message'] ?? 'Halo, saya tertarik dengan '.$page->title);
+        $message = (string) ($firstCta['props']['buttons'][0]['wa_message'] ?? $firstCta['props']['message'] ?? 'Halo, saya tertarik dengan '.$page->title);
+        $message = Buttons::fill($message, ['judul' => (string) $page->title, 'produk' => (string) ($page->property?->name ?? ''), 'halaman' => '']) ?: 'Halo, saya tertarik dengan '.$page->title;
         $hero = collect($sections)->firstWhere('type', 'hero');
 
         $description = $page->description
@@ -36,6 +39,14 @@ class PageData
             ?: $page->title;
 
         $og = Embeds::image($page->og_image, $tenantId) ?? Embeds::image($hero['props']['image'] ?? null, $tenantId) ?? Embeds::image($page->logo, $tenantId);
+
+        $tracking = $preview ? null : TrackingSetting::active();
+        $formIds = collect($sections)->where('type', 'form')->map(fn ($s) => (int) ($s['props']['form_id'] ?? 0))->filter()->all();
+        $forms = LeadForm::query()->whereIn('id', $formIds)->get()->keyBy('id');
+        $pagePx = PixelEvents::resolve($page->page_events, [], $tracking);
+        // The agency's main form fills in where no other form is chosen, and below pages without a form block.
+        $needsPrimary = ! in_array('form', $types, true)
+            || collect($sections)->where('type', 'form')->contains(fn ($s) => ! $forms->has((int) ($s['props']['form_id'] ?? 0)));
 
         return [
             'tenant' => $tenant,
@@ -54,9 +65,16 @@ class PageData
             'usesScript' => (bool) array_intersect($types, ['kpr', 'countdown', 'video']),
             'tenantId' => $tenantId,
             'preview' => $preview,
-            'tracking' => $preview ? null : TrackingSetting::active(),
-            'settings' => $tenant->formSettings(),
-            'endpoint' => $tenant->captureUrl(),
+            'tracking' => $tracking,
+            'pagePx' => $pagePx ? json_encode($pagePx, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
+            'forms' => $forms,
+            'primaryForm' => $needsPrimary ? LeadForm::primary() : null,
+            'btnCtx' => [
+                'tenant' => $tenant,
+                'wa' => $number ?: null,
+                'vars' => ['judul' => (string) $page->title, 'produk' => (string) ($page->property?->name ?? ''), 'halaman' => $preview ? '' : $page->publicUrl()],
+                'anchor' => '#daftar',
+            ],
         ];
     }
 
@@ -71,7 +89,7 @@ class PageData
     }
 
     /** The agency's own WhatsApp number: the first channel that has one. */
-    private static function agencyNumber(): string
+    public static function agencyNumber(): string
     {
         return self::digits(WaChannel::query()->whereNotNull('phone')->where('phone', '!=', '')->orderBy('position')->orderBy('id')->value('phone'));
     }

@@ -13,6 +13,8 @@ final class ConversionPayload
 {
     /**
      * @param  array<string, string>  $ids  fbp, fbc, ttclid, ttp when the browser had them
+     * @param  array{meta?: ?string, tiktok?: ?string, value?: float, currency?: string, content_name?: string}  $event  the form's own
+     *                                                                                                                   event per platform (null: send none) and its value; empty means the agency's default event
      */
     public function __construct(
         public readonly string $eventId,
@@ -23,12 +25,29 @@ final class ConversionPayload
         public readonly ?string $ip,
         public readonly ?string $userAgent,
         public readonly array $ids = [],
+        public readonly array $event = [],
     ) {}
+
+    /** The event a platform gets: the form's own choice, or the agency's default when the form has none. Null: send nothing. */
+    public function eventName(string $platform, ?string $default): ?string
+    {
+        return array_key_exists($platform, $this->event) ? $this->event[$platform] : $default;
+    }
+
+    /** @return array<string, mixed> value, currency and content_name, when set */
+    public function customData(): array
+    {
+        return array_filter([
+            'value' => $this->event['value'] ?? null,
+            'currency' => isset($this->event['value']) ? ($this->event['currency'] ?? PixelEvents::CURRENCY) : null,
+            'content_name' => $this->event['content_name'] ?? null,
+        ], fn ($v) => $v !== null);
+    }
 
     /**
      * @param  array<string, string>  $ids
      */
-    public static function make(string $eventId, ?string $email, ?string $phone, ?string $sourceUrl, ?string $ip, ?string $userAgent, array $ids = []): self
+    public static function make(string $eventId, ?string $email, ?string $phone, ?string $sourceUrl, ?string $ip, ?string $userAgent, array $ids = [], array $event = []): self
     {
         $phone = PhoneNumber::normalize($phone);
 
@@ -41,6 +60,7 @@ final class ConversionPayload
             $ip,
             $userAgent,
             $ids,
+            $event,
         );
     }
 
@@ -53,6 +73,6 @@ final class ConversionPayload
     /** @param  array<string, mixed>  $data */
     public static function fromArray(array $data): self
     {
-        return new self($data['eventId'], $data['eventTime'], $data['sourceUrl'], $data['emailHash'], $data['phoneHash'], $data['ip'], $data['userAgent'], $data['ids'] ?? []);
+        return new self($data['eventId'], $data['eventTime'], $data['sourceUrl'], $data['emailHash'], $data['phoneHash'], $data['ip'], $data['userAgent'], $data['ids'] ?? [], $data['event'] ?? []);
     }
 }

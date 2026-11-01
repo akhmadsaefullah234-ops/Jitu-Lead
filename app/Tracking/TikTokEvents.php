@@ -14,8 +14,9 @@ class TikTokEvents
     public function send(TrackingSetting $settings, ConversionPayload $payload): void
     {
         $token = $settings->credential('tiktok_events_token');
+        $event = $payload->eventName('tiktok', $settings->eventFor('tiktok'));
 
-        if (blank($settings->tiktok_pixel_id) || blank($token)) {
+        if (blank($settings->tiktok_pixel_id) || blank($token) || $event === null) {
             return;
         }
 
@@ -33,11 +34,12 @@ class TikTokEvents
             'event_source_id' => $settings->tiktok_pixel_id,
             'test_event_code' => $settings->credential('tiktok_test_event_code'),
             'data' => [array_filter([
-                'event' => $settings->eventFor('tiktok'),
+                'event' => $event,
                 'event_time' => $payload->eventTime,
                 'event_id' => $payload->eventId,
                 'user' => $user,
                 'page' => $payload->sourceUrl ? ['url' => $payload->sourceUrl] : null,
+                'properties' => $payload->customData() ?: null,
             ])],
         ]);
 

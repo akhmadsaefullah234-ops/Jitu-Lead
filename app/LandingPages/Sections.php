@@ -2,6 +2,7 @@
 
 namespace App\LandingPages;
 
+use App\Models\LeadForm;
 use App\Support\CurrentTenant;
 use Closure;
 use Filament\Forms\Components\Builder\Block;
@@ -38,6 +39,7 @@ class Sections
         'legal' => 'Legalitas',
         'video' => 'Video YouTube',
         'cta' => 'Ajakan + tombol WhatsApp',
+        'buttons' => 'Tombol aksi',
         'form' => 'Formulir pendaftaran',
         'countdown' => 'Hitung mundur promo',
         'highlights' => 'Keunggulan',
@@ -46,6 +48,28 @@ class Sections
     ];
 
     public const LEGAL_DOCS = ['SHM (Sertifikat Hak Milik)', 'SHGB / HGB (Hak Guna Bangunan)', 'PBG (Persetujuan Bangunan Gedung)', 'IMB (izin lama)', 'AJB (Akta Jual Beli)', 'Izin lokasi', 'Pecah sertifikat', 'Bebas sengketa'];
+
+    /**
+     * The buttons of a hero or "Ajakan" section. Pages saved before buttons could be set up keep their one button.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function buttonsOf(string $type, array $props): array
+    {
+        if (isset($props['buttons']) && is_array($props['buttons'])) {
+            return array_values(array_filter($props['buttons'], 'is_array'));
+        }
+
+        return match ($type) {
+            'hero' => [['label' => $props['cta_label'] ?? 'Daftar sekarang', 'action' => 'scroll', 'color' => 'light', 'size' => 'lg']],
+            'cta' => [[
+                'label' => $props['label'] ?? 'Chat via WhatsApp', 'action' => 'whatsapp', 'color' => 'wa', 'size' => 'lg', 'icon' => 'whatsapp',
+                'wa_target' => filled($props['number'] ?? null) ? 'manual' : 'agency', 'wa_number' => $props['number'] ?? null,
+                'wa_message' => $props['message'] ?? 'Halo, saya tertarik dengan {judul}.',
+            ]],
+            default => [],
+        };
+    }
 
     public static function has(string $type): bool
     {
@@ -80,7 +104,7 @@ class Sections
             'kpr' => Heroicon::OutlinedCalculator, 'testimonials' => Heroicon::OutlinedChatBubbleBottomCenterText, 'faq' => Heroicon::OutlinedQuestionMarkCircle,
             'legal' => Heroicon::OutlinedShieldCheck, 'video' => Heroicon::OutlinedPlayCircle, 'cta' => Heroicon::OutlinedChatBubbleLeftRight,
             'form' => Heroicon::OutlinedClipboardDocumentList, 'countdown' => Heroicon::OutlinedClock, 'highlights' => Heroicon::OutlinedStar,
-            'details' => Heroicon::OutlinedTableCells, default => Heroicon::OutlinedBars3BottomLeft,
+            'details' => Heroicon::OutlinedTableCells, 'buttons' => Heroicon::OutlinedCursorArrowRays, default => Heroicon::OutlinedBars3BottomLeft,
         };
     }
 
@@ -117,8 +141,8 @@ class Sections
             'hero' => [
                 TextInput::make('headline')->label('Judul besar')->required()->maxLength(120),
                 TextInput::make('subheadline')->label('Kalimat pendukung')->maxLength(200),
-                TextInput::make('cta_label')->label('Teks tombol')->default('Daftar sekarang')->maxLength(40),
                 self::upload('image')->label('Foto latar'),
+                Buttons::repeater('buttons', 'Tombol', [['label' => 'Daftar sekarang', 'action' => 'scroll', 'color' => 'light', 'size' => 'lg', 'icon' => 'none']]),
             ],
             'price' => [
                 TextInput::make('label')->label('Keterangan kecil')->default('Harga mulai dari')->maxLength(60),
@@ -202,15 +226,21 @@ class Sections
             'cta' => [
                 self::heading('Tertarik? Tanyakan langsung', 'Judul'),
                 TextInput::make('text')->label('Kalimat pendukung')->maxLength(200),
-                TextInput::make('label')->label('Teks tombol')->default('Chat via WhatsApp')->maxLength(40),
-                TextInput::make('message')->label('Pesan awal di WhatsApp')->default('Halo, saya tertarik dengan unit yang ditawarkan.')->maxLength(200),
-                TextInput::make('number')->label('Nomor khusus (opsional)')->tel()->maxLength(20)
-                    ->helperText('Kosongkan untuk memakai nomor WhatsApp di pengaturan halaman.'),
+                Buttons::repeater('buttons', 'Tombol', [['label' => 'Chat via WhatsApp', 'action' => 'whatsapp', 'wa_target' => 'agency', 'wa_message' => 'Halo, saya tertarik dengan {judul}.', 'color' => 'wa', 'size' => 'lg', 'icon' => 'whatsapp']]),
+            ],
+            'buttons' => [
+                self::heading(''),
+                TextInput::make('text')->label('Kalimat pendukung')->maxLength(200),
+                Select::make('align')->label('Posisi')->options(['center' => 'Tengah', 'left' => 'Kiri', 'full' => 'Lebar penuh'])->default('center')->native(false),
+                Buttons::repeater('buttons', 'Tombol', [['label' => 'Chat via WhatsApp', 'action' => 'whatsapp', 'wa_target' => 'rotate', 'color' => 'wa', 'size' => 'lg', 'icon' => 'whatsapp']], 4),
             ],
             'form' => [
+                Select::make('form_id')->label('Formulir yang dipakai')->placeholder('Formulir utama')->native(false)
+                    ->options(fn () => LeadForm::query()->orderByDesc('is_primary')->orderBy('name')->pluck('name', 'id'))
+                    ->helperText('Buat dan atur kolomnya di menu Formulir.'),
                 TextInput::make('heading')->label('Judul formulir')->default('Daftar dan dapatkan info lengkap')->maxLength(100),
                 TextInput::make('intro')->label('Kalimat pengantar')->maxLength(200),
-                TextInput::make('button')->label('Teks tombol')->default('Kirim')->maxLength(40),
+                TextInput::make('button')->label('Teks tombol (opsional)')->maxLength(40)->helperText('Kosongkan untuk memakai teks tombol dari formulirnya.'),
             ],
             'countdown' => [
                 self::heading('Promo berakhir dalam'),

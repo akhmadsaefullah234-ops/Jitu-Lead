@@ -14,8 +14,9 @@ class MetaConversions
     public function send(TrackingSetting $settings, ConversionPayload $payload): void
     {
         $token = $settings->credential('meta_capi_token');
+        $event = $payload->eventName('meta', $settings->eventFor('meta'));
 
-        if (blank($settings->meta_pixel_id) || blank($token)) {
+        if (blank($settings->meta_pixel_id) || blank($token) || $event === null) {
             return;
         }
 
@@ -30,12 +31,13 @@ class MetaConversions
 
         $body = array_filter([
             'data' => [array_filter([
-                'event_name' => $settings->eventFor('meta'),
+                'event_name' => $event,
                 'event_time' => $payload->eventTime,
                 'event_id' => $payload->eventId,
                 'action_source' => 'website',
                 'event_source_url' => $payload->sourceUrl,
                 'user_data' => $user,
+                'custom_data' => $payload->customData() ?: null,
             ])],
             'test_event_code' => $settings->credential('meta_test_event_code'),
         ]);

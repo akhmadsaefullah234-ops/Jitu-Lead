@@ -3,14 +3,17 @@
 namespace Tests\Feature;
 
 use App\Enums\Role;
-use App\Filament\Pages\LeadCapture;
 use App\Filament\Pages\TrackingSettings;
 use App\Filament\Resources\LandingPages\LandingPageResource;
 use App\Filament\Resources\LandingPages\Pages\CreateLandingPage;
 use App\Filament\Resources\LandingPages\Pages\ListLandingPages;
+use App\Filament\Resources\LeadForms\Pages\EditLeadForm;
+use App\Filament\Resources\LeadForms\Pages\ListLeadForms;
 use App\Jobs\SendConversionEvents;
+use App\LeadForms\FormView;
 use App\Models\LandingPage;
 use App\Models\Lead;
+use App\Models\LeadForm;
 use App\Models\Property;
 use App\Models\Tenant;
 use App\Models\TrackingSetting;
@@ -72,7 +75,7 @@ class WebBuilderTest extends TestCase
         $this->tenant->forceFill(['capture_settings' => ['title' => 'Daftar Open House', 'button' => 'Ikut sekarang', 'color' => '#0044ff']])->save();
 
         $this->get("/f/{$this->token}")->assertOk()->assertSee('Daftar Open House')->assertSee('Ikut sekarang')->assertSee('#0044ff')
-            ->assertSee('name="phone"', false)->assertSee('name="website"', false)->assertSee('noindex', false);
+            ->assertSee('name="f[whatsapp]"', false)->assertSee('name="website"', false)->assertSee('noindex', false);
 
         $this->get('/f/salah')->assertNotFound();
         $this->tenant->forceFill(['status' => 'suspended'])->save();
@@ -261,15 +264,15 @@ class WebBuilderTest extends TestCase
         Http::assertSent(fn (Request $r) => str_contains($r->url(), 'graph.facebook.com') && $r['data'][0]['event_name'] === 'CompleteRegistration');
         Http::assertSent(fn (Request $r) => str_contains($r->url(), 'tiktok') && $r['data'][0]['event'] === 'Contact');
 
-        $html = view('public.partials.lead-form', ['settings' => ['ask_email' => false, 'ask_note' => false, 'button' => 'Kirim', 'privacy' => '', 'show_privacy' => false, 'success' => 'Terima kasih'], 'endpoint' => '/x', 'tracking' => $setting, 'pageId' => null, 'formId' => 'f'])->render();
-        $this->assertStringContainsString('data-meta-event="CompleteRegistration"', $html);
-        $this->assertStringContainsString('data-google-event="sign_up"', $html);
+        $html = $this->inTenant(fn () => view('public.partials.built-form', FormView::block(LeadForm::primary(), $this->tenant, $setting, null, 'f', null, null))->render());
+        $this->assertStringContainsString('&quot;meta&quot;:[&quot;CompleteRegistration&quot;,false]', $html);
+        $this->assertStringContainsString('&quot;google&quot;:&quot;sign_up&quot;', $html);
     }
 
     public function test_unknown_form_event_is_rejected_and_unset_one_defaults(): void
     {
         $this->actingInTenant($this->adminOf($this->tenant), $this->tenant);
-        Livewire::test(TrackingSettings::class)->callAction('edit', ['meta_pixel_id' => '1234567890', 'meta_event' => 'Purchase'])->assertHasActionErrors(['meta_event']);
+        Livewire::test(TrackingSettings::class)->callAction('edit', ['meta_pixel_id' => '1234567890', 'meta_event' => 'Bogus'])->assertHasActionErrors(['meta_event']);
 
         $setting = new TrackingSetting(['meta_event' => 'Bogus']);
         $this->assertSame('Lead', $setting->eventFor('meta'));
@@ -363,25 +366,30 @@ class WebBuilderTest extends TestCase
     public function test_form_page_shows_live_preview_and_design_changes_reach_visitors(): void
     {
         $this->actingInTenant($this->adminOf($this->tenant), $this->tenant);
+        $form = $this->inTenant(fn () => LeadForm::primary());
 
-        Livewire::test(LeadCapture::class)->assertSee("/f/{$this->token}", false)->assertSee('iframe', false)
-            ->callAction('design', ['title' => 'Booking Unit Hari Ini', 'intro' => 'Isi data', 'button' => 'Booking', 'success' => 'Siap!', 'color' => '#112233', 'ask_email' => true, 'ask_note' => false, 'show_privacy' => false])
-            ->assertHasNoActionErrors();
+        $page = Livewire::test(EditLeadForm::class, ['record' => $form->getKey()])
+            ->fillForm(['design.title' => 'Booking Unit Hari Ini', 'design.color' => '#112233', 'design.privacy' => '', 'submit.label' => 'Booking', 'after_submit.message' => 'Siap!']);
+        $this->assertStringContainsString('Booking Unit Hari Ini', $page->instance()->previewHtml());
+        $page->call('save')->assertHasNoFormErrors();
 
-        $this->get("/f/{$this->token}")->assertSee('Booking Unit Hari Ini')->assertSee('name="email"', false)->assertDontSee('name="note"', false)->assertDontSee('Dengan mengirim');
-        $this->postJson("/capture/{$this->token}", ['name' => 'Sinta', 'phone' => '081200003333'])->assertJson(['message' => 'Siap!']);
+        $this->get("/f/{$this->token}")->assertSee('Booking Unit Hari Ini')->assertSee('#112233')->assertSee('Booking')->assertDontSee('Dengan mengirim');
+        $this->postJson('/f/griya-prima/utama', ['f' => ['nama' => 'Sinta', 'whatsapp' => '081200003333']])->assertJsonPath('action.message', 'Siap!');
     }
 
-    public function test_inactive_form_is_clearly_unavailable_and_old_token_stops_working(): void
+    public function test_old_form_address_can_be_replaced_and_then_stops_working(): void
     {
         $this->tenant->forceFill(['capture_token' => null])->save();
         $this->actingInTenant($this->adminOf($this->tenant), $this->tenant);
 
-        Livewire::test(LeadCapture::class)->assertSee('Formulir belum aktif')->callAction('generate')->assertSee('/f/', false);
-
+        Livewire::test(ListLeadForms::class)->assertSee('Formulir utama')->callAction('generate');
         $old = $this->tenant->fresh()->capture_token;
-        Livewire::test(LeadCapture::class)->callAction('generate');
+        $this->assertNotNull($old);
+        $this->get("/f/{$old}")->assertOk()->assertSee('name="f[nama]"', false);
+
+        Livewire::test(ListLeadForms::class)->callAction('generate');
         $this->get("/f/{$old}")->assertNotFound();
         $this->assertTrue(URL::isValidUrl($this->tenant->fresh()->captureUrl()));
+        $this->get('/f/griya-prima/utama')->assertOk();
     }
 }

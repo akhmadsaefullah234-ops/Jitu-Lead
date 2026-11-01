@@ -104,6 +104,7 @@
         .preview-tag { background: #111827; color: #fff; text-align: center; font-size: .8125rem; padding: .35rem; }
         @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
     </style>
+    @include('public.partials.button-styles')
     @include('public.partials.tracking')
 </head>
 <body>
@@ -126,9 +127,9 @@
 
     @unless ($hasForm)
         <section class="blk" id="daftar"><div class="wrap"><div class="formbox">
-            <h2>{{ $settings['title'] }}</h2>
-            <p class="intro">{{ $settings['intro'] }}</p>
-            @include('public.partials.lead-form', ['formId' => 'lead-form', 'pageId' => $page->getKey()])
+            <h2>{{ $primaryForm->design('title', 'Daftar') }}</h2>
+            @if (filled($primaryForm->design('description')))<p class="intro">{{ $primaryForm->design('description') }}</p>@endif
+            @include('public.partials.built-form', \App\LeadForms\FormView::block($primaryForm, $tenant, $tracking, $page->getKey(), 'daftar-form', null, $btnCtx['vars']['halaman'] ?? null, $btnCtx['vars']))
         </div></div></section>
     @endunless
 
@@ -140,6 +141,7 @@
     </nav>
 
     @include('public.partials.form-assets')
+    @include('public.partials.pixel-js', ['pagePx' => $pagePx])
     @if ($usesScript)@include('public.partials.landing-js')@endif
 </body>
 </html>

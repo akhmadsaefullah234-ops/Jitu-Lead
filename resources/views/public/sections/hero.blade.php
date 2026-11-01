@@ -4,6 +4,6 @@
     <div class="wrap">
         <h1>{{ $p['headline'] ?? $page->title }}</h1>
         @if (filled($p['subheadline'] ?? null))<p>{{ $p['subheadline'] }}</p>@endif
-        <a class="btn" href="#daftar">{{ $p['cta_label'] ?? 'Daftar sekarang' }}</a>
+        <div class="jbs">@foreach (\App\LandingPages\Sections::buttonsOf('hero', $p) as $b)@include('public.partials.button', ['b' => $b, 'ctx' => $btnCtx, 'tracking' => $tracking])@endforeach</div>
     </div>
 </section>
