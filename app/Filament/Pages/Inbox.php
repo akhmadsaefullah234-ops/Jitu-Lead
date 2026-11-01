@@ -33,6 +33,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Support\Enums\Size;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Url;
@@ -228,6 +229,7 @@ class Inbox extends Page
     {
         return Action::make('sendAttachment')
             ->label('Lampiran')->icon(Heroicon::OutlinedPaperClip)->color('gray')
+            ->iconButton()->size(Size::Large)->tooltip('Lampirkan dari pustaka media')
             ->modalHeading('Kirim lampiran')
             ->modalDescription('Pilih dari pustaka media (price list, foto rumah, denah, link Maps), atau unggah file baru.')
             ->modalSubmitActionLabel('Kirim')

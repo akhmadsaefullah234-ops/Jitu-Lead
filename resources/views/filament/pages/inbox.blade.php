@@ -32,8 +32,13 @@
         .wa-m .b { white-space: pre-wrap; }
         .wa-m .meta { font-size: .68rem; color: var(--gray-500); margin-top: .15rem; }
         .wa-m.failed { border-color: var(--danger-600); }
-        .wa-compose { display: flex; gap: .5rem; padding: .7rem; border-top: 1px solid var(--gray-200); }
-        .wa-compose textarea { flex: 1; border: 1px solid var(--gray-300); border-radius: .5rem; padding: .45rem .7rem; font-size: .875rem; resize: none; }
+        .wa-compose { padding: .6rem .7rem .7rem; border-top: 1px solid var(--gray-200); min-width: 0; }
+        .wa-compose-row { display: flex; align-items: flex-end; gap: .35rem; min-width: 0; }
+        .wa-compose-row > .wa-compose-btn { flex: none; margin-bottom: .2rem; }
+        /* 3 lines to start, grows with the text (see grow() below) up to 40% of the screen or 10 lines, then scrolls */
+        .wa-compose textarea { flex: 1 1 auto; min-width: 0; width: 100%; box-sizing: border-box; border: 1px solid var(--gray-300); border-radius: .5rem; padding: .45rem .7rem; font-size: .875rem; line-height: 1.5; resize: none; overflow-y: auto; max-height: min(40vh, calc(15em + .9rem + 2px)); max-height: min(40dvh, calc(15em + .9rem + 2px)); }
+        .wa-compose-hint { margin: .25rem 0 0 2.6rem; font-size: .7rem; color: var(--gray-500); }
+        @media (hover: none) and (pointer: coarse) { .wa-compose-hint { display: none; } }
         .wa-empty { padding: 2rem 1rem; text-align: center; color: var(--gray-500); font-size: .875rem; }
         .dark .wa-list, .dark .wa-chat, .dark .wa-m { background: var(--gray-900); border-color: var(--gray-700); }
         .dark .wa-msgs { background: var(--gray-950); }
@@ -133,9 +138,21 @@
                     @if ($decision->isPaid())
                         {{ $this->sendPaidTemplateAction }}
                     @elseif ($decision->canSend())
-                        <textarea rows="2" wire:model.live.debounce.1500ms="draft" placeholder="Tulis pesan" aria-label="Pesan" x-on:keydown.enter.prevent="if (! $event.shiftKey) $wire.send()"></textarea>
-                        {{ $this->sendAttachmentAction }}
-                        <x-filament::button wire:click="send" wire:loading.attr="disabled">Kirim</x-filament::button>
+                        {{-- Enter is a new line; only the send button or Ctrl/Cmd+Enter sends. wire:ignore.self keeps the height
+                             grow() set when the page polls; the text itself still follows $wire.draft. --}}
+                        <div class="wa-compose-row">
+                            <span class="wa-compose-btn">{{ $this->sendAttachmentAction }}</span>
+                            <textarea rows="3" wire:model.live.debounce.1500ms="draft" wire:ignore.self placeholder="Tulis pesan" aria-label="Pesan" enterkeyhint="enter"
+                                x-data="{ grow() { $el.style.height = 'auto'; $el.style.height = ($el.scrollHeight + $el.offsetHeight - $el.clientHeight) + 'px' } }"
+                                x-init="$nextTick(() => grow())" x-effect="$wire.draft; $nextTick(() => grow())" x-on:input="grow()"
+                                x-on:keydown.ctrl.enter.prevent="$wire.send()"
+                                x-on:keydown.meta.enter.prevent="$wire.send()"></textarea>
+                            <span class="wa-compose-btn">
+                                <x-filament::icon-button :icon="\Filament\Support\Icons\Heroicon::PaperAirplane" size="lg" label="Kirim" tooltip="Kirim"
+                                    wire:click="send" wire:loading.attr="disabled" wire:target="send" />
+                            </span>
+                        </div>
+                        <p class="wa-compose-hint" x-data x-text="/Mac|iP(hone|ad)/.test(navigator.platform) ? 'Cmd+Enter untuk kirim' : 'Ctrl+Enter untuk kirim'">Ctrl+Enter untuk kirim</p>
                     @else
                         <span class="wa-empty" style="padding:.3rem">Hubungkan nomor di menu Koneksi WhatsApp.</span>
                     @endif
