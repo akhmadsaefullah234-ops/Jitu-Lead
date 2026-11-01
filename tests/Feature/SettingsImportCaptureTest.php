@@ -5,7 +5,8 @@ namespace Tests\Feature;
 use App\Actions\ImportLeadsFromCsv;
 use App\Enums\Role;
 use App\Filament\Pages\ImportLeads;
-use App\Filament\Pages\LeadCapture;
+use App\Filament\Pages\TrackingSettings;
+use App\Filament\Resources\LeadForms\Pages\ListLeadForms;
 use App\Filament\Resources\LeadSources\Pages\ManageLeadSources;
 use App\Filament\Resources\LostReasons\Pages\ManageLostReasons;
 use App\Filament\Resources\Stages\Pages\ManageStages;
@@ -50,7 +51,7 @@ class SettingsImportCaptureTest extends TestCase
 
     public function test_only_admin_reaches_settings_screens(): void
     {
-        foreach ([ManageStages::class, ManageLeadSources::class, ManageLostReasons::class, ManageTeam::class, LeadCapture::class] as $page) {
+        foreach ([ManageStages::class, ManageLeadSources::class, ManageLostReasons::class, ManageTeam::class, TrackingSettings::class] as $page) {
             foreach ([Role::Agent, Role::Manager] as $role) {
                 $this->actingInTenant($this->member($this->tenant, $role), $this->tenant);
                 Livewire::test($page)->assertForbidden();
@@ -282,8 +283,8 @@ class SettingsImportCaptureTest extends TestCase
     {
         $this->actingInTenant($this->adminOf($this->tenant), $this->tenant);
 
-        Livewire::test(LeadCapture::class)->assertSee('Formulir belum aktif')
-            ->callAction('generate')->assertSee('/capture/');
+        Livewire::test(ListLeadForms::class)->assertActionHidden('htmlCode')->callAction('generate');
+        Livewire::test(ListLeadForms::class)->assertActionVisible('htmlCode');
 
         $this->assertNotNull($this->tenant->fresh()->capture_token);
         $this->assertArrayNotHasKey('capture_token', $this->tenant->fresh()->toArray());

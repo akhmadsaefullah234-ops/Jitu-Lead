@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\EmailVerificationHelpController;
+use App\Http\Controllers\LeadPhotoController;
 use App\Http\Controllers\TrialEmailUnsubscribeController;
 use App\Http\Controllers\WhatsAppMediaController;
 use App\Legal\LegalDocs;
@@ -41,3 +42,7 @@ Route::middleware(['signed', 'throttle:public-pages'])->group(function () {
 // Pictures customers send in WhatsApp chats. Private files, opened only by people who may see the lead.
 Route::get('wa-media/{message}', [WhatsAppMediaController::class, 'show'])
     ->whereNumber('message')->name('wa.media');
+
+// Photos visitors upload in a built form. Private files, opened only by people who may see the lead.
+Route::get('lead-foto/{lead}/{index}', [LeadPhotoController::class, 'show'])
+    ->whereNumber(['lead', 'index'])->name('lead.photo');

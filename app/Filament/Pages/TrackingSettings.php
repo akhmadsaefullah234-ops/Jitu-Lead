@@ -7,6 +7,7 @@ use App\Enums\Role;
 use App\Filament\Support\NoAutofill;
 use App\Models\TrackingSetting;
 use App\Support\CurrentTenant;
+use App\Tracking\PixelEvents;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
@@ -70,11 +71,12 @@ class TrackingSettings extends Page
         return [
             Action::make('edit')->label('Atur pelacakan')->visible(fn () => $this->lockedReason() === null)->icon(Heroicon::OutlinedCog6Tooth)
                 ->modalHeading('Atur pelacakan iklan')->modalWidth('3xl')
-                ->fillForm(fn () => $this->settings()?->only(['meta_pixel_id', 'tiktok_pixel_id', 'google_tag_id', 'google_ads_label', 'meta_event', 'tiktok_event', 'google_event', 'cred']) ?? [])
+                ->fillForm(fn () => ($this->settings()?->only(['meta_pixel_id', 'tiktok_pixel_id', 'google_tag_id', 'google_ads_label', 'meta_event', 'tiktok_event', 'google_event', 'cred']) ?? [])
+                    + ['button_events' => array_replace(TrackingSetting::BUTTON_DEFAULTS, (array) $this->settings()?->button_events)])
                 ->schema([
                     Section::make('Meta')->columns(2)->schema([
                         NoAutofill::text(TextInput::make('meta_pixel_id'))->label('Pixel ID')->regex('/^\d{6,20}$/')->placeholder('1234567890123456')->validationMessages(['regex' => 'Pixel ID berisi angka saja.']),
-                        Select::make('meta_event')->label('Event saat formulir dikirim')->options(TrackingSetting::EVENTS['meta'])->default('Lead')->native(false)
+                        Select::make('meta_event')->label('Event saat formulir dikirim')->options(PixelEvents::options('meta'))->searchable()->default('Lead')->native(false)
                             ->helperText('Pilih "Lead" bila ragu. Ganti bila kampanye Anda dioptimalkan untuk event lain.'),
                         NoAutofill::secret(TextInput::make('cred.meta_capi_token')->label('Token Conversions API'))
                             ->placeholder(fn () => $this->settings()?->credential('meta_capi_token') ? 'Tersimpan. Kosongkan jika tidak diubah.' : null),
@@ -82,7 +84,7 @@ class TrackingSettings extends Page
                     ]),
                     Section::make('TikTok')->columns(2)->schema([
                         NoAutofill::text(TextInput::make('tiktok_pixel_id'))->label('Pixel ID')->regex('/^[A-Za-z0-9]{8,40}$/')->validationMessages(['regex' => 'Pixel ID berisi huruf dan angka saja.']),
-                        Select::make('tiktok_event')->label('Event saat formulir dikirim')->options(TrackingSetting::EVENTS['tiktok'])->default('SubmitForm')->native(false),
+                        Select::make('tiktok_event')->label('Event saat formulir dikirim')->options(PixelEvents::options('tiktok'))->searchable()->default('SubmitForm')->native(false),
                         NoAutofill::secret(TextInput::make('cred.tiktok_events_token')->label('Token Events API'))
                             ->placeholder(fn () => $this->settings()?->credential('tiktok_events_token') ? 'Tersimpan. Kosongkan jika tidak diubah.' : null),
                         NoAutofill::text(TextInput::make('cred.tiktok_test_event_code'))->label('Kode uji event (opsional)')->maxLength(40),
@@ -90,13 +92,24 @@ class TrackingSettings extends Page
                     Section::make('Google')->columns(2)->schema([
                         NoAutofill::text(TextInput::make('google_tag_id'))->label('ID tag')->regex('/^(G|AW|GT)-[A-Za-z0-9]{4,20}$/')->placeholder('G-XXXXXXXXXX atau AW-123456789')
                             ->validationMessages(['regex' => 'Awali dengan G-, AW-, atau GT-.']),
-                        Select::make('google_event')->label('Event saat formulir dikirim')->options(TrackingSetting::EVENTS['google'])->default('generate_lead')->native(false),
+                        Select::make('google_event')->label('Event saat formulir dikirim')->options(PixelEvents::options('google'))->searchable()->default('generate_lead')->native(false),
                         NoAutofill::text(TextInput::make('google_ads_label'))->label('Label konversi Google Ads (opsional)')->regex('/^[A-Za-z0-9_-]{4,60}$/')
                             ->helperText('Hanya dipakai bila ID tag diawali AW-.'),
                     ]),
+                    Section::make('Event bawaan saat tombol diklik')->columns(3)
+                        ->description('Dipakai tombol di halaman landing dan formulir yang pixel-nya diatur "Ikuti Pengaturan Pelacakan". Tiap tombol bisa memilih event sendiri.')
+                        ->schema(array_map(fn (string $platform) => Select::make('button_events.'.$platform)->label(PixelEvents::PLATFORMS[$platform])
+                            ->options([PixelEvents::NONE => 'Tidak ada'] + PixelEvents::options($platform))->native(false)->searchable()->required(),
+                            array_keys(PixelEvents::PLATFORMS))),
                 ])
                 ->action(function (array $data) {
                     $setting = TrackingSetting::current() ?? new TrackingSetting;
+                    $buttonEvents = [];
+
+                    foreach (array_keys(PixelEvents::PLATFORMS) as $platform) {
+                        $choice = $data['button_events'][$platform] ?? null;
+                        $buttonEvents[$platform] = $choice === PixelEvents::NONE || PixelEvents::isStandard($platform, $choice) ? $choice : TrackingSetting::BUTTON_DEFAULTS[$platform];
+                    }
                     $credentials = $setting->credentials ?? [];
 
                     foreach ((array) ($data['cred'] ?? []) as $key => $value) {
@@ -115,6 +128,7 @@ class TrackingSettings extends Page
                         'meta_event' => $data['meta_event'] ?? 'Lead',
                         'tiktok_event' => $data['tiktok_event'] ?? 'SubmitForm',
                         'google_event' => $data['google_event'] ?? 'generate_lead',
+                        'button_events' => $buttonEvents,
                         'credentials' => $credentials,
                     ])->save();
 

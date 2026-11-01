@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Billing\PlanLimits;
 use App\Models\Concerns\BelongsToTenant;
+use App\Tracking\PixelEvents;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Model;
@@ -12,7 +13,7 @@ use Illuminate\Database\Eloquent\Model;
  * The agency's ad-tracking ids. The ids go into public pages; the API tokens
  * for server-side events are encrypted and never sent back to a form.
  */
-#[Fillable(['meta_pixel_id', 'tiktok_pixel_id', 'google_tag_id', 'google_ads_label', 'meta_event', 'tiktok_event', 'google_event', 'credentials'])]
+#[Fillable(['meta_pixel_id', 'tiktok_pixel_id', 'google_tag_id', 'google_ads_label', 'meta_event', 'tiktok_event', 'google_event', 'button_events', 'credentials'])]
 #[Hidden(['credentials'])]
 class TrackingSetting extends Model
 {
@@ -21,30 +22,17 @@ class TrackingSetting extends Model
     public const SECRETS = ['meta_capi_token', 'tiktok_events_token'];
 
     /**
-     * The event each platform receives when someone submits a form. Only these standard
-     * names are accepted, because the platforms ignore or mis-group unknown ones.
-     * The first of each list is the default.
+     * The event each platform receives when someone submits a form, chosen from every standard event of that
+     * platform (App\Tracking\PixelEvents). The first of each list is the default.
      */
     public const EVENTS = [
-        'meta' => [
-            'Lead' => 'Lead (calon pelanggan baru)',
-            'CompleteRegistration' => 'CompleteRegistration (pendaftaran selesai)',
-            'Contact' => 'Contact (menghubungi)',
-            'SubmitApplication' => 'SubmitApplication (mengajukan permohonan)',
-            'Schedule' => 'Schedule (menjadwalkan, misalnya survei)',
-        ],
-        'tiktok' => [
-            'SubmitForm' => 'SubmitForm (kirim formulir)',
-            'CompleteRegistration' => 'CompleteRegistration (pendaftaran selesai)',
-            'Contact' => 'Contact (menghubungi)',
-            'Subscribe' => 'Subscribe (berlangganan)',
-        ],
-        'google' => [
-            'generate_lead' => 'generate_lead (calon pelanggan baru)',
-            'sign_up' => 'sign_up (pendaftaran)',
-            'contact' => 'contact (menghubungi)',
-        ],
+        'meta' => PixelEvents::META,
+        'tiktok' => PixelEvents::TIKTOK,
+        'google' => PixelEvents::GOOGLE,
     ];
+
+    /** What a button click sends when its own pixel setting says "Ikuti Pengaturan Pelacakan". */
+    public const BUTTON_DEFAULTS = ['meta' => 'Contact', 'tiktok' => 'ClickButton', 'google' => 'select_content'];
 
     /** The event to send for a platform, falling back to its default if the stored one is not on the list. */
     public function eventFor(string $platform): string
@@ -54,9 +42,33 @@ class TrackingSetting extends Model
         return array_key_exists((string) $stored, self::EVENTS[$platform]) ? $stored : array_key_first(self::EVENTS[$platform]);
     }
 
+    /** The default click event for a platform: the agency's choice, "none", or BUTTON_DEFAULTS. */
+    public function buttonEventFor(string $platform): ?string
+    {
+        $stored = $this->button_events[$platform] ?? null;
+
+        return match (true) {
+            $stored === PixelEvents::NONE => null,
+            PixelEvents::isStandard($platform, $stored) => $stored,
+            default => self::BUTTON_DEFAULTS[$platform] ?? null,
+        };
+    }
+
+    /** @return array<string, ?string> per platform, the form-submit default */
+    public function formDefaults(): array
+    {
+        return ['meta' => $this->eventFor('meta'), 'tiktok' => $this->eventFor('tiktok'), 'google' => $this->eventFor('google')];
+    }
+
+    /** @return array<string, ?string> per platform, the button-click default */
+    public function buttonDefaults(): array
+    {
+        return ['meta' => $this->buttonEventFor('meta'), 'tiktok' => $this->buttonEventFor('tiktok'), 'google' => $this->buttonEventFor('google')];
+    }
+
     protected function casts(): array
     {
-        return ['credentials' => 'encrypted:array'];
+        return ['credentials' => 'encrypted:array', 'button_events' => 'array'];
     }
 
     public static function current(): ?self

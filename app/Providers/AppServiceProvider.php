@@ -35,6 +35,7 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('webhooks', fn (Request $request) => Limit::perMinute(300)->by($request->route('token') ?? $request->ip()));
         RateLimiter::for('ipaymu-notify', fn (Request $request) => Limit::perMinute(60)->by($request->ip()));
         RateLimiter::for('public-pages', fn (Request $request) => Limit::perMinute(120)->by($request->ip()));
+        RateLimiter::for('form-submit', fn (Request $request) => Limit::perMinute(10)->by($request->route('tenant').'|'.$request->route('form').'|'.$request->ip()));
         RateLimiter::for('capture', fn (Request $request) => Limit::perMinute(10)->by($request->route('token').'|'.$request->ip()));
     }
 }

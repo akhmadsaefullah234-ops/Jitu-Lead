@@ -107,7 +107,7 @@ class LandingBuilderTest extends TestCase
             $hero = Templates::blocks($key)[0]['props']['headline'];
             $this->assertStringContainsString(e($hero), $html, $key);
             $this->assertStringContainsString('id="daftar"', $html);
-            $this->assertStringContainsString('name="phone"', $html);
+            $this->assertStringContainsString('name="f[whatsapp]"', $html);
 
             // The editor opens on it and the side preview draws the unsaved state.
             $edit = Livewire::test(EditLandingPage::class, ['record' => $page->getKey()])->assertOk();
@@ -369,10 +369,10 @@ class LandingBuilderTest extends TestCase
         $page = $this->page(['blocks' => Templates::blocks('kpr'), 'title' => 'Promo KPR']);
 
         $html = $this->get('/p/griya-prima/bukit-asri')->assertOk()->getContent();
-        $this->assertStringContainsString('data-endpoint="'.$this->tenant->captureUrl().'"', $html);
+        $this->assertStringContainsString('action="'.url('/f/griya-prima/utama').'"', $html);
         $this->assertStringContainsString('data-page="'.$page->getKey().'"', $html);
 
-        $this->postJson("/capture/{$this->token}", ['name' => 'Sinta', 'phone' => '0812 7777 8888', 'page' => $page->getKey()])->assertOk();
+        $this->postJson('/f/griya-prima/utama', ['f' => ['nama' => 'Sinta', 'whatsapp' => '0812 7777 8888'], 'page' => $page->getKey()])->assertOk();
 
         $lead = $this->inTenant(fn () => Lead::firstOrFail());
         $this->assertSame('Landing: Promo KPR', $this->inTenant(fn () => $lead->source->name));

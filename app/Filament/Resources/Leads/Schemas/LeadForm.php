@@ -16,6 +16,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\ToggleButtons;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 
 class LeadForm
@@ -107,6 +108,10 @@ class LeadForm
                             ->maxLength(500)
                             ->columnSpanFull(),
                     ])),
+                Section::make('Jawaban formulir')
+                    ->columnSpanFull()->collapsible()
+                    ->visible(fn (?Lead $record) => filled($record?->custom_fields['formulir'] ?? null) || filled($record?->custom_fields['foto_formulir'] ?? null))
+                    ->schema([View::make('filament.lead-form-answers')]),
                 Section::make('Tindak lanjut')
                     ->columns(2)
                     ->columnSpanFull()
