@@ -328,6 +328,11 @@ class AiAssistantTest extends TestCase
             ->assertSee($this->aiAnswer)
             ->call('useAiDraft', $this->draftFor($message)->getKey())
             ->assertSet('draft', $this->aiAnswer)
+            // Once in the compose box the suggestion folds away, so the long text is not shown twice and the
+            // send and attach buttons stay in view.
+            ->assertSee('sudah dimasukkan ke kolom pesan')
+            ->assertDontSee('Pakai saran ini')
+            ->assertSeeHtml('wa-compose-row')
             ->call('send');
 
         $this->assertSame(AiDraft::SENT, $this->draftFor($message)->status);

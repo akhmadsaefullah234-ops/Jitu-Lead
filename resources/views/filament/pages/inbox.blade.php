@@ -6,7 +6,8 @@
             .wa--open .wa-list, .wa:not(.wa--open) .wa-chat { display: none; }
             .wa-list, .wa-chat { max-height: none; }
             .wa-chat { min-height: calc(100vh - 7rem); min-height: calc(100dvh - 7rem); }
-            .wa-compose { padding-bottom: calc(.7rem + env(safe-area-inset-bottom)); }
+            .wa .wa-compose { padding-bottom: calc(.7rem + env(safe-area-inset-bottom)); }
+            .wa .wa-compose textarea { max-height: 30vh; max-height: 30dvh; }
         }
         .wa-back { display: none; font-size: .8rem; font-weight: 600; color: var(--primary-600); }
         @media (max-width: 800px) { .wa-back { display: inline-block; margin-bottom: .15rem; } }
@@ -32,11 +33,17 @@
         .wa-m .b { white-space: pre-wrap; }
         .wa-m .meta { font-size: .68rem; color: var(--gray-500); margin-top: .15rem; }
         .wa-m.failed { border-color: var(--danger-600); }
-        .wa-compose { padding: .6rem .7rem .7rem; border-top: 1px solid var(--gray-200); min-width: 0; }
-        .wa-compose-row { display: flex; align-items: flex-end; gap: .35rem; min-width: 0; }
-        .wa-compose-row > .wa-compose-btn { flex: none; margin-bottom: .2rem; }
-        /* 3 lines to start, grows with the text (see grow() below) up to 40% of the screen or 10 lines, then scrolls */
-        .wa-compose textarea { flex: 1 1 auto; min-width: 0; width: 100%; box-sizing: border-box; border: 1px solid var(--gray-300); border-radius: .5rem; padding: .45rem .7rem; font-size: .875rem; line-height: 1.5; resize: none; overflow-y: auto; max-height: min(40vh, calc(15em + .9rem + 2px)); max-height: min(40dvh, calc(15em + .9rem + 2px)); }
+        /* The compose box never shrinks; the messages and a long AI suggestion give up room (and scroll) instead,
+           so the send and attach buttons stay on screen. */
+        .wa-compose { flex: none; padding: .6rem .7rem .7rem; border-top: 1px solid var(--gray-200); min-width: 0; }
+        .wa-msgs { min-height: 2.5rem; }
+        .ai-draft { flex: none; max-height: 22vh; overflow-y: auto; }
+        .ai-draft-body { white-space: pre-wrap; margin: .35rem 0; }
+        .wa-compose-row { display: flex; align-items: flex-start; gap: .35rem; min-width: 0; }
+        /* Level with the top of the text: a long message (e.g. an AI suggestion) never pushes them out of sight. */
+        .wa-compose-row > .wa-compose-btn { flex: none; margin-top: .1rem; }
+        /* 3 lines to start, grows with the text (see grow() below) up to 28% of the screen or 10 lines, then scrolls */
+        .wa-compose textarea { flex: 1 1 auto; min-width: 0; width: 100%; box-sizing: border-box; border: 1px solid var(--gray-300); border-radius: .5rem; padding: .45rem .7rem; font-size: .875rem; line-height: 1.5; resize: none; overflow-y: auto; max-height: min(28vh, calc(15em + .9rem + 2px)); max-height: min(28dvh, calc(15em + .9rem + 2px)); }
         .wa-compose-hint { margin: .25rem 0 0 2.6rem; font-size: .7rem; color: var(--gray-500); }
         @media (hover: none) and (pointer: coarse) { .wa-compose-hint { display: none; } }
         .wa-empty { padding: 2rem 1rem; text-align: center; color: var(--gray-500); font-size: .875rem; }
@@ -110,14 +117,18 @@
                     @endforelse
                 </div>
                 @if ($aiDraft)
-                    <div class="ai-draft" style="margin:.5rem 0;padding:.6rem .75rem;border:1px solid #fecaca;background:#fef2f2;border-radius:.6rem;font-size:.85rem">
+                    <div class="ai-draft" style="margin:.5rem .7rem;padding:.6rem .75rem;border:1px solid #fecaca;background:#fef2f2;border-radius:.6rem;font-size:.85rem">
                         @if ($aiDraft->status === \App\Models\AiDraft::HANDOFF)
                             <strong>AI menyerahkan chat ini ke Anda.</strong> {{ $aiDraft->reason }}.
                             <button type="button" wire:click="discardAiDraft({{ $aiDraft->id }})" style="margin-left:.5rem;text-decoration:underline">Tutup</button>
                         @else
                             <strong>Saran balasan AI</strong>
                             @if ($aiDraft->reason) <span style="color:#6b7280">({{ $aiDraft->reason }})</span> @endif
-                            <div style="margin:.35rem 0;white-space:pre-wrap">{{ $aiDraft->body }}</div>
+                            @if ($usedAiDraft === $aiDraft->id)
+                                <span style="color:#6b7280">sudah dimasukkan ke kolom pesan, silakan ubah lalu kirim.</span>
+                            @else
+                                <div class="ai-draft-body">{{ $aiDraft->body }}</div>
+                            @endif
                             @foreach ($aiDraft->actions ?? [] as $action)
                                 @if (($action['type'] ?? null) === 'order' && ! ($action['applied'] ?? false))
                                     <div style="margin:.25rem 0;font-size:.8rem;color:#6b7280">Bila dikirim, pesanan ikut dicatat di lead ({{ $action['result']['kurir'] ?? '' }}, ongkir {{ $action['result']['ongkir_teks'] ?? '' }}{{ isset($action['result']['total_teks']) ? ', total '.$action['result']['total_teks'] : '' }}) dan lead pindah ke Menunggu pembayaran.</div>
@@ -126,7 +137,9 @@
                             @if ($aiDraft->suggestedAssets()->isNotEmpty())
                                 <div style="margin:.25rem 0;font-size:.8rem;color:#6b7280">Ikut terkirim: {{ $aiDraft->suggestedAssets()->pluck('title')->implode(', ') }}</div>
                             @endif
-                            <button type="button" wire:click="useAiDraft({{ $aiDraft->id }})" style="font-weight:600;color:#b91c1c">Pakai saran ini</button>
+                            @if ($usedAiDraft !== $aiDraft->id)
+                                <button type="button" wire:click="useAiDraft({{ $aiDraft->id }})" style="font-weight:600;color:#b91c1c">Pakai saran ini</button>
+                            @endif
                             <button type="button" wire:click="discardAiDraft({{ $aiDraft->id }})" style="margin-left:.75rem;color:#6b7280">Buang</button>
                         @endif
                     </div>
