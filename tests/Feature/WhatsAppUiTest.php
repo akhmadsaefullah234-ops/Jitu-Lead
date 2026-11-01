@@ -86,6 +86,52 @@ class WhatsAppUiTest extends TestCase
         $this->assertSame(2, $conversation->messages()->count()); // intro + message
     }
 
+    public function test_compose_box_sends_only_on_button_or_ctrl_enter(): void
+    {
+        $this->gateway();
+        $agent = $this->member($this->tenant, Role::Agent);
+        $lead = $this->makeLead($this->tenant, ['owner_id' => $agent->getKey()]);
+        $this->inTenant(fn () => WaConversation::create(['lead_id' => $lead->getKey(), 'phone' => $lead->phone]));
+        $this->actingInTenant($agent, $this->tenant);
+
+        $html = Livewire::withQueryParams(['lead' => $lead->getKey()])->test(Inbox::class)->html();
+        preg_match('/<textarea[^<]*aria-label="Pesan".*?<\/textarea>/s', $html, $box);
+        $this->assertNotEmpty($box, 'kotak ketik tidak tampil');
+        $textarea = $box[0];
+
+        // Plain Enter is a new line: no plain keydown.enter handler, and the phone keyboard shows "enter", not "send"
+        $this->assertDoesNotMatchRegularExpression('/(x-on:|@)keydown\.enter\b/', $textarea);
+        $this->assertStringContainsString('enterkeyhint="enter"', $textarea);
+        $this->assertStringContainsString('rows="3"', $textarea);
+
+        // Ctrl+Enter and Cmd+Enter send
+        $this->assertStringContainsString('x-on:keydown.ctrl.enter.prevent="$wire.send()"', $textarea);
+        $this->assertStringContainsString('x-on:keydown.meta.enter.prevent="$wire.send()"', $textarea);
+        $this->assertStringContainsString('Ctrl+Enter untuk kirim', $html);
+
+        // Attachment and send are small icon buttons; the attachment modal is unchanged
+        $this->assertStringContainsString('Lampirkan dari pustaka media', $html);
+        $this->assertMatchesRegularExpression('/<button[^>]*wire:click="send"[^>]*>/s', $html);
+        $this->assertStringNotContainsString('>Kirim</span>', $html);
+    }
+
+    public function test_draft_is_cleared_after_sending(): void
+    {
+        $this->gateway();
+        $agent = $this->member($this->tenant, Role::Agent);
+        $lead = $this->makeLead($this->tenant, ['owner_id' => $agent->getKey()]);
+        $this->inTenant(fn () => WaConversation::create(['lead_id' => $lead->getKey(), 'phone' => $lead->phone]));
+        Http::fake(['gw.example.com/*' => Http::sequence()->push(['id' => 'x1'])->push(['id' => 'x2'])]);
+        $this->actingInTenant($agent, $this->tenant);
+
+        Livewire::withQueryParams(['lead' => $lead->getKey()])->test(Inbox::class)
+            ->set('draft', "Baris satu\nBaris dua\nBaris tiga\nBaris empat")
+            ->call('send')
+            ->assertSet('draft', '');
+
+        Http::assertSent(fn ($request) => ($request['text'] ?? $request['message'] ?? null) === "Baris satu\nBaris dua\nBaris tiga\nBaris empat");
+    }
+
     public function test_only_admin_reaches_channel_settings(): void
     {
         $this->actingInTenant($this->member($this->tenant, Role::Agent), $this->tenant);
