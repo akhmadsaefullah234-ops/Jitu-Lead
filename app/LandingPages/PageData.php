@@ -29,16 +29,15 @@ class PageData
         $tenantId = $tenant->getKey();
 
         $number = self::digits($page->whatsapp_number) ?: self::agencyNumber();
-        $firstCta = collect($sections)->firstWhere('type', 'cta');
-        $message = (string) ($firstCta['props']['buttons'][0]['wa_message'] ?? $firstCta['props']['message'] ?? 'Halo, saya tertarik dengan '.$page->title);
-        $message = Buttons::fill($message, ['judul' => (string) $page->title, 'produk' => (string) ($page->property?->name ?? ''), 'halaman' => '']) ?: 'Halo, saya tertarik dengan '.$page->title;
         $hero = collect($sections)->firstWhere('type', 'hero');
 
         $description = $page->description
             ?: ($hero['props']['subheadline'] ?? null)
             ?: $page->title;
 
-        $og = Embeds::image($page->og_image, $tenantId) ?? Embeds::image($hero['props']['image'] ?? null, $tenantId) ?? Embeds::image($page->logo, $tenantId);
+        $product = collect($sections)->firstWhere('type', 'product');
+        $og = Embeds::image($page->og_image, $tenantId) ?? Embeds::image($hero['props']['image'] ?? null, $tenantId)
+            ?? (Embeds::images($product['props']['images'] ?? [], $tenantId)[0] ?? null) ?? Embeds::image($page->logo, $tenantId);
 
         $tracking = $preview ? null : TrackingSetting::active();
         $formIds = collect($sections)->where('type', 'form')->map(fn ($s) => (int) ($s['props']['form_id'] ?? 0))->filter()->all();
@@ -47,6 +46,16 @@ class PageData
         // The agency's main form fills in where no other form is chosen, and below pages without a form block.
         $needsPrimary = ! in_array('form', $types, true)
             || collect($sections)->where('type', 'form')->contains(fn ($s) => ! $forms->has((int) ($s['props']['form_id'] ?? 0)));
+
+        $btnCtx = [
+            'tenant' => $tenant,
+            'wa' => $number ?: null,
+            'vars' => ['judul' => (string) $page->title, 'produk' => $page->productName(), 'halaman' => $preview ? '' : $page->publicUrl()],
+            'anchor' => '#daftar',
+        ];
+        $nav = Navigation::resolve($page->navigation, $btnCtx);
+        $autoForm = Navigation::of($page->navigation)['auto_form'];
+        $hasForm = in_array('form', $types, true);
 
         return [
             'tenant' => $tenant,
@@ -60,21 +69,17 @@ class PageData
             'metaTitle' => $page->meta_title ?: $page->title.' - '.$tenant->name,
             'metaDescription' => Str::limit(trim(strip_tags((string) $description)), 200),
             'waNumber' => $number,
-            'waLink' => $number ? self::waLink($number, $message) : null,
-            'hasForm' => in_array('form', $types, true),
-            'usesScript' => (bool) array_intersect($types, ['kpr', 'countdown', 'video']),
+            'hasForm' => $hasForm,
+            'showPrimaryForm' => ! $hasForm && $autoForm,
+            'nav' => $nav,
+            'usesScript' => (bool) array_intersect($types, ['kpr', 'countdown', 'video', 'product']),
             'tenantId' => $tenantId,
             'preview' => $preview,
             'tracking' => $tracking,
             'pagePx' => $pagePx ? json_encode($pagePx, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
             'forms' => $forms,
-            'primaryForm' => $needsPrimary ? LeadForm::primary() : null,
-            'btnCtx' => [
-                'tenant' => $tenant,
-                'wa' => $number ?: null,
-                'vars' => ['judul' => (string) $page->title, 'produk' => (string) ($page->property?->name ?? ''), 'halaman' => $preview ? '' : $page->publicUrl()],
-                'anchor' => '#daftar',
-            ],
+            'primaryForm' => $needsPrimary && ($hasForm || $autoForm) ? LeadForm::primary() : null,
+            'btnCtx' => $btnCtx,
         ];
     }
 

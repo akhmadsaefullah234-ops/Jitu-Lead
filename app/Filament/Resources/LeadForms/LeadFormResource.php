@@ -13,6 +13,7 @@ use App\LeadForms\FormTemplates;
 use App\Models\LandingPage;
 use App\Models\LeadForm;
 use App\Support\CurrentTenant;
+use App\Support\Industry;
 use App\Tracking\PixelEvents;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -84,8 +85,8 @@ class LeadFormResource extends Resource
                 ->description('Pilih titik awal. Semua kolom, tampilan, dan aksi setelah kirim bisa diubah setelahnya.')
                 ->schema([
                     Radio::make('template')->label('Mulai dari')->required()->default(FormTemplates::BLANK)
-                        ->options(array_map(fn ($t) => $t['name'], FormTemplates::options()))
-                        ->descriptions(array_map(fn ($t) => $t['description'], FormTemplates::options())),
+                        ->options(fn () => array_map(fn ($t) => $t['name'], FormTemplates::options(Industry::current()->key)))
+                        ->descriptions(fn () => array_map(fn ($t) => $t['description'], FormTemplates::options(Industry::current()->key))),
                     self::nameField(),
                     self::slugField(),
                 ]),

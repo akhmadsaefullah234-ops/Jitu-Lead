@@ -64,7 +64,7 @@ class LandingBuilderTest extends TestCase
 
     public function test_there_are_five_templates_plus_a_blank_page(): void
     {
-        $keys = array_keys(Templates::options());
+        $keys = array_keys(Templates::options('properti'));
 
         $this->assertEqualsCanonicalizing(['kosong', 'kpr', 'cluster', 'villa', 'kavling', 'second'], $keys);
 
@@ -92,7 +92,7 @@ class LandingBuilderTest extends TestCase
         $this->setPlan('agensi'); // unlimited pages, so all six can be made in one go
         $this->admin();
 
-        foreach (array_keys(Templates::options()) as $key) {
+        foreach (array_keys(Templates::options('properti')) as $key) {
             Livewire::test(CreateLandingPage::class)->fillForm(['template' => $key, 'title' => "Halaman $key", 'slug' => "halaman-$key"])
                 ->call('create')->assertHasNoFormErrors();
 

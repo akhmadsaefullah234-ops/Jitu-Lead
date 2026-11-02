@@ -7,9 +7,11 @@ use App\Billing\PlanLimits;
 use App\Filament\Resources\LandingPages\Pages\CreateLandingPage;
 use App\Filament\Resources\LandingPages\Pages\EditLandingPage;
 use App\Filament\Resources\LandingPages\Pages\ListLandingPages;
+use App\LandingPages\Navigation;
 use App\LandingPages\Sections;
 use App\LandingPages\Templates;
 use App\Models\LandingPage;
+use App\Models\LeadForm;
 use App\Models\Property;
 use App\Support\CurrentTenant;
 use App\Support\Industry;
@@ -29,6 +31,9 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -69,8 +74,6 @@ class LandingPageResource extends Resource
 
     public static function form(Schema $schema): Schema
     {
-        $templates = Templates::options();
-
         return $schema->components([
             // New page: pick a starting point; the editor opens right after.
             Section::make('Panduan: membuat halaman dalam 10 menit')->collapsible()->collapsed(fn (string $operation) => $operation === 'edit')->columnSpanFull()
@@ -78,44 +81,60 @@ class LandingPageResource extends Resource
             Section::make('Buat halaman baru')->columnSpanFull()->visibleOn('create')
                 ->description('Pilih template. Isinya contoh yang tinggal Anda ganti, jadi halaman pertama bisa selesai dalam sekitar 10 menit.')
                 ->schema([
-                    Radio::make('template')->label('Mulai dari')->required()->default(Templates::BLANK)
-                        ->options(array_map(fn ($t) => $t['name'], $templates))
-                        ->descriptions(array_map(fn ($t) => $t['description'], $templates)),
+                    Radio::make('template')->label('Mulai dari')->required()->default(Templates::BLANK)->live()
+                        ->options(fn () => array_map(fn ($t) => $t['name'], Templates::options(Industry::current()->key)))
+                        ->descriptions(fn () => array_map(fn ($t) => $t['description'], Templates::options(Industry::current()->key))),
+                    Select::make('product_id')->label('Ambil data produk dari katalog')->placeholder('Isi manual di editor')->native(false)->searchable()
+                        ->options(fn () => Property::query()->orderBy('name')->pluck('name', 'id'))
+                        ->visible(fn (Get $get) => Templates::sellsProduct($get('template')))
+                        ->helperText('Nama, harga, varian, ukuran, dan rincian produk diisi otomatis, jadi tidak perlu diketik ulang. Foto diunggah di editor.'),
+                    Select::make('order_form')->label('Formulir order')->native(false)->default('new')->selectablePlaceholder(false)
+                        ->options(fn () => ['new' => 'Buat formulir baru dari template "Order produk"'] + LeadForm::query()->orderBy('name')->pluck('name', 'id')->all())
+                        ->visible(fn (Get $get) => Templates::sellsProduct($get('template')))
+                        ->helperText('Satu formulir order per produk memudahkan pilihan varian dan ringkasan WhatsApp-nya.'),
                     self::titleField(),
                     self::slugField(),
                 ]),
 
             // Editing: settings and sections on the left, live preview on the right.
             Grid::make(['default' => 1, 'xl' => 2])->columnSpanFull()->visibleOn('edit')->schema([
-                Group::make([
-                    Section::make('Pengaturan halaman')->columns(2)->schema([
-                        self::titleField(),
-                        self::slugField(),
-                        Select::make('status')->label('Status')->options(['draft' => 'Draf (belum tampil)', 'published' => 'Terbit (tampil untuk umum)'])->default('draft')->required()->native(false),
-                        Select::make('font')->label('Jenis huruf')->options(array_map(fn ($f) => $f[0], LandingPage::FONTS))->default('modern')->required()->native(false),
-                        ColorPicker::make('color')->label('Warna utama')->default('#dc2626')->required()->regex(LandingPage::COLOR_PATTERN),
-                        TextInput::make('whatsapp_number')->label('Nomor WhatsApp tujuan')->tel()->maxLength(20)->placeholder('08123456789')
-                            ->helperText('Kosongkan untuk memakai nomor WhatsApp agensi.'),
-                        Sections::upload('logo', 600)->label('Logo (opsional)'),
-                        Select::make('property_id')->label('Properti yang dipromosikan')->placeholder('Tidak dipilih')
-                            ->options(fn () => Property::query()->orderBy('name')->pluck('name', 'id'))->searchable()
-                            ->helperText('Lead dari halaman ini otomatis tercatat tertarik pada '.Industry::t('catalog_item').' ini.'),
+                Tabs::make('editor')->columnSpan(1)->persistTabInQueryString()->tabs([
+                    Tab::make('Isi halaman')->icon(Heroicon::OutlinedSquares2x2)->schema([
+                        Section::make('Isi halaman')->description('Tambah, seret, atau pakai tombol naik/turun untuk mengurutkan. Gunakan ikon salin untuk menggandakan bagian.')->schema([
+                            Builder::make('blocks')->hiddenLabel()->addActionLabel('Tambah bagian')
+                                ->blocks(fn (?LandingPage $record) => Sections::blocks(Industry::current()->key, array_column(array_filter((array) ($record?->blocks ?? []), 'is_array'), 'type')))
+                                ->collapsible()->collapsed()->cloneable()->reorderable()->reorderableWithButtons()->blockNumbers(false)->blockPickerColumns(2),
+                        ]),
                     ]),
-                    Section::make('Isi halaman')->description('Tambah, seret, atau pakai tombol naik/turun untuk mengurutkan. Gunakan ikon salin untuk menggandakan bagian.')->schema([
-                        Builder::make('blocks')->hiddenLabel()->addActionLabel('Tambah bagian')->blocks(Sections::blocks())
-                            ->collapsible()->collapsed()->cloneable()->reorderable()->reorderableWithButtons()->blockNumbers(false)->blockPickerColumns(2),
+                    Tab::make('Tombol & navigasi')->icon(Heroicon::OutlinedCursorArrowRays)->schema(Navigation::schema()),
+                    Tab::make('Pengaturan')->icon(Heroicon::OutlinedCog6Tooth)->schema([
+                        Section::make('Pengaturan halaman')->columns(2)->schema([
+                            self::titleField(),
+                            self::slugField(),
+                            Select::make('status')->label('Status')->options(['draft' => 'Draf (belum tampil)', 'published' => 'Terbit (tampil untuk umum)'])->default('draft')->required()->native(false),
+                            Select::make('font')->label('Jenis huruf')->options(array_map(fn ($f) => $f[0], LandingPage::FONTS))->default('modern')->required()->native(false),
+                            ColorPicker::make('color')->label('Warna utama')->default('#dc2626')->required()->regex(LandingPage::COLOR_PATTERN),
+                            TextInput::make('whatsapp_number')->label('Nomor WhatsApp tujuan')->tel()->maxLength(20)->placeholder('08123456789')
+                                ->helperText('Kosongkan untuk memakai nomor WhatsApp agensi.'),
+                            Sections::upload('logo', 600)->label('Logo (opsional)'),
+                            Select::make('property_id')->label(Industry::t('catalog_item').' yang dipromosikan')->placeholder('Tidak dipilih')
+                                ->options(fn () => Property::query()->orderBy('name')->pluck('name', 'id'))->searchable()
+                                ->helperText('Lead dari halaman ini otomatis tercatat tertarik pada '.Industry::t('catalog_item').' ini.'),
+                        ]),
                     ]),
-                    Section::make('Pixel saat halaman dibuka')->collapsible()->collapsed()
-                        ->description('Untuk halaman terima kasih, misalnya Lead, CompleteRegistration, atau Purchase. Biarkan "Tidak ada" untuk halaman biasa; PageView tetap terkirim otomatis.')
-                        ->visible(fn () => PlanLimits::current()?->feature('pixels') ?? true)
-                        ->schema([PixelEvents::fieldset('page_events', 'Event', null)]),
-                    Section::make('SEO dan berbagi')->collapsible()->collapsed()->columns(1)->description('Tampilan saat halaman muncul di Google atau dibagikan lewat WhatsApp dan Facebook.')->schema([
-                        TextInput::make('meta_title')->label('Judul untuk Google dan pratinjau link')->maxLength(120)->helperText('Kosongkan untuk memakai judul halaman.'),
-                        Textarea::make('description')->label('Deskripsi singkat')->rows(2)->maxLength(300),
-                        Sections::upload('og_image')->label('Gambar pratinjau link (disarankan 1200 x 630)')
-                            ->helperText('Kosongkan untuk memakai foto latar bagian utama.'),
+                    Tab::make('Pixel & SEO')->icon(Heroicon::OutlinedChartBar)->schema([
+                        Section::make('Pixel saat halaman dibuka')
+                            ->description('Untuk halaman terima kasih, misalnya Lead, CompleteRegistration, atau Purchase. Biarkan "Tidak ada" untuk halaman biasa; PageView tetap terkirim otomatis.')
+                            ->visible(fn () => PlanLimits::current()?->feature('pixels') ?? true)
+                            ->schema([PixelEvents::fieldset('page_events', 'Event', null)]),
+                        Section::make('SEO dan berbagi')->columns(1)->description('Tampilan saat halaman muncul di Google atau dibagikan lewat WhatsApp dan Facebook.')->schema([
+                            TextInput::make('meta_title')->label('Judul untuk Google dan pratinjau link')->maxLength(120)->helperText('Kosongkan untuk memakai judul halaman.'),
+                            Textarea::make('description')->label('Deskripsi singkat')->rows(2)->maxLength(300),
+                            Sections::upload('og_image')->label('Gambar pratinjau link (disarankan 1200 x 630)')
+                                ->helperText('Kosongkan untuk memakai foto latar bagian utama.'),
+                        ]),
                     ]),
-                ])->columnSpan(1),
+                ]),
                 Group::make([View::make('filament.landing-live-preview')])->columnSpan(1),
             ]),
         ]);

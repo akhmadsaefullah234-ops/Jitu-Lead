@@ -4,6 +4,7 @@ namespace App\Filament\Resources\LeadForms\Pages;
 
 use App\Filament\Resources\LeadForms\LeadFormResource;
 use App\LeadForms\FormTemplates;
+use App\Support\Industry;
 use Filament\Resources\Pages\CreateRecord;
 
 class CreateLeadForm extends CreateRecord
@@ -14,6 +15,6 @@ class CreateLeadForm extends CreateRecord
     protected function mutateFormDataBeforeCreate(array $data): array
     {
         return ['name' => $data['name'], 'slug' => $data['slug'], 'status' => 'active', 'is_primary' => false]
-            + FormTemplates::attributes($data['template'] ?? null);
+            + FormTemplates::attributes(array_key_exists($data['template'] ?? '', FormTemplates::options(Industry::current()->key)) ? $data['template'] : FormTemplates::BLANK);
     }
 }
