@@ -55,6 +55,58 @@
             });
         });
     });
+    // Sliders: swiping is native (scroll snapping); arrows, dots, looping and autoplay are added here.
+    var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    document.querySelectorAll('[data-slider]').forEach(function (box) {
+        var track = box.querySelector('.sl-track'), slides = box.querySelectorAll('.slide'), dots = box.querySelectorAll('[data-dots] button');
+        var fade = box.classList.contains('fade'), loop = box.hasAttribute('data-loop'), at = 0;
+        var per = function () { return fade ? 1 : Math.max(1, parseInt(getComputedStyle(box).getPropertyValue('--pv'), 10) || 1); };
+        var last = function () { return Math.max(0, slides.length - per()); };
+        var mark = function (i) {
+            at = i;
+            dots.forEach(function (d, k) { d.setAttribute('aria-current', k === i ? 'true' : 'false'); });
+            slides.forEach(function (s, k) { s.classList.toggle('on', k === i); });
+        };
+        var go = function (i) {
+            if (i > last()) { i = loop ? 0 : last(); }
+            if (i < 0) { i = loop ? last() : 0; }
+            if (!fade) { track.scrollTo({ left: slides[i].offsetLeft - track.offsetLeft, behavior: still ? 'auto' : 'smooth' }); }
+            mark(i);
+        };
+        if (!fade) {
+            var t; track.addEventListener('scroll', function () {
+                clearTimeout(t); t = setTimeout(function () {
+                    var w = slides[0].getBoundingClientRect().width + parseFloat(getComputedStyle(track).columnGap || 0);
+                    mark(Math.min(last(), Math.round(track.scrollLeft / (w || 1))));
+                }, 80);
+            });
+        } else {
+            var x0 = null;
+            track.addEventListener('touchstart', function (e) { x0 = e.touches[0].clientX; }, { passive: true });
+            track.addEventListener('touchend', function (e) { if (x0 === null) { return; } var dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 40) { go(at + (dx < 0 ? 1 : -1)); } x0 = null; });
+        }
+        var prev = box.querySelector('[data-prev]'), next = box.querySelector('[data-next]');
+        if (prev) { prev.addEventListener('click', function () { go(at - 1); }); }
+        if (next) { next.addEventListener('click', function () { go(at + 1); }); }
+        dots.forEach(function (d, k) { d.addEventListener('click', function () { go(k); }); });
+        var auto = parseInt(box.getAttribute('data-auto'), 10);
+        if (auto && !still) {
+            var paused = false;
+            box.addEventListener('mouseenter', function () { paused = true; });
+            box.addEventListener('mouseleave', function () { paused = false; });
+            box.addEventListener('touchstart', function () { paused = true; }, { passive: true });
+            setInterval(function () { if (!paused && !document.hidden) { go(at + 1); } }, auto * 1000);
+        }
+    });
+    // Entrance animations: shown as the section scrolls into view.
+    var anim = document.querySelectorAll('.bx-anim');
+    if (anim.length) {
+        if (!('IntersectionObserver' in window) || still) { anim.forEach(function (el) { el.classList.add('in'); }); }
+        else {
+            var io = new IntersectionObserver(function (es) { es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }); }, { threshold: 0.12 });
+            anim.forEach(function (el) { io.observe(el); });
+        }
+    }
     document.querySelectorAll('[data-yt]').forEach(function (a) {
         a.addEventListener('click', function (e) {
             e.preventDefault();

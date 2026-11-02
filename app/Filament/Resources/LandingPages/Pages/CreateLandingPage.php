@@ -62,10 +62,16 @@ class CreateLandingPage extends CreateRecord
                 }
             }
 
-            $product = collect($blocks)->firstWhere('type', 'product')['props'] ?? [];
+            $product = (array) (collect($blocks)->firstWhere('type', 'product')['props'] ?? []);
             $choice = $data['order_form'] ?? 'new';
             $formId = is_numeric($choice) ? LeadForm::query()->whereKey((int) $choice)->value('id') : null;
-            $formId ??= FormTemplates::createOrderForm($catalog['name'] ?? '', array_column((array) ($product['variants'] ?? []), 'name'))->getKey();
+            $formId ??= FormTemplates::createOrderForm($catalog['name'] ?? '', array_column((array) ($product['variants'] ?? []), 'name') ?: ($catalog['variants'] ?? []))->getKey();
+
+            if ($catalog) {
+                // The product's name where the template says [Nama produk].
+                $name = substr(json_encode($catalog['name'], JSON_UNESCAPED_UNICODE), 1, -1);
+                $blocks = json_decode(str_replace('[Nama produk]', $name, json_encode($blocks, JSON_UNESCAPED_UNICODE)), true);
+            }
 
             foreach ($blocks as $i => $block) {
                 if ($block['type'] === 'form') {

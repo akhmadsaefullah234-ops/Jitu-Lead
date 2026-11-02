@@ -7,6 +7,7 @@ use App\Billing\PlanLimits;
 use App\Filament\Resources\LandingPages\Pages\CreateLandingPage;
 use App\Filament\Resources\LandingPages\Pages\EditLandingPage;
 use App\Filament\Resources\LandingPages\Pages\ListLandingPages;
+use App\LandingPages\BlockStyle;
 use App\LandingPages\Navigation;
 use App\LandingPages\Sections;
 use App\LandingPages\Templates;
@@ -103,7 +104,8 @@ class LandingPageResource extends Resource
                         Section::make('Isi halaman')->description('Tambah, seret, atau pakai tombol naik/turun untuk mengurutkan. Gunakan ikon salin untuk menggandakan bagian.')->schema([
                             Builder::make('blocks')->hiddenLabel()->addActionLabel('Tambah bagian')
                                 ->blocks(fn (?LandingPage $record) => Sections::blocks(Industry::current()->key, array_column(array_filter((array) ($record?->blocks ?? []), 'is_array'), 'type')))
-                                ->collapsible()->collapsed()->cloneable()->reorderable()->reorderableWithButtons()->blockNumbers(false)->blockPickerColumns(2),
+                                ->collapsible()->collapsed()->cloneable()->reorderable()->reorderableWithButtons()->blockNumbers(false)->blockPickerColumns(2)
+                                ->extraItemActions(self::styleActions()),
                         ]),
                     ]),
                     Tab::make('Tombol & navigasi')->icon(Heroicon::OutlinedCursorArrowRays)->schema(Navigation::schema()),
@@ -138,6 +140,50 @@ class LandingPageResource extends Resource
                 Group::make([View::make('filament.landing-live-preview')])->columnSpan(1),
             ]),
         ]);
+    }
+
+    public const STYLE_CLIPBOARD = 'landing.style_clipboard';
+
+    /** "Salin gaya", "Tempel gaya" and "Gaya bawaan" on every section: the copied style is kept for this login, so it also pastes onto other pages. */
+    private static function styleActions(): array
+    {
+        $setStyle = function (Builder $component, string $item, array $style): void {
+            $state = $component->getRawState();
+
+            if (! isset($state[$item])) {
+                return;
+            }
+
+            if (isset($style['bg_image'])) {
+                $style['bg_image'] = [(string) Str::uuid() => $style['bg_image']];
+            }
+
+            $state[$item]['data']['style'] = $style;
+            $component->rawState($state);
+        };
+
+        return [
+            Action::make('copyStyle')->label('Salin gaya')->tooltip('Salin gaya')->icon(Heroicon::OutlinedClipboardDocument)->color('gray')->iconButton()
+                ->action(function (array $arguments, Builder $component) {
+                    session([self::STYLE_CLIPBOARD => BlockStyle::clean($component->getRawState()[$arguments['item']]['data']['style'] ?? [])]);
+                    Notification::make()->success()->title('Gaya disalin. Tempel di bagian lain dengan ikon tempel gaya.')->send();
+                }),
+            Action::make('pasteStyle')->label('Tempel gaya')->tooltip('Tempel gaya')->icon(Heroicon::OutlinedClipboardDocumentCheck)->color('gray')->iconButton()
+                ->action(function (array $arguments, Builder $component) use ($setStyle) {
+                    $clip = session(self::STYLE_CLIPBOARD);
+
+                    if (! is_array($clip)) {
+                        Notification::make()->warning()->title('Belum ada gaya yang disalin.')->send();
+
+                        return;
+                    }
+
+                    $setStyle($component, $arguments['item'], $clip);
+                }),
+            Action::make('resetStyle')->label('Kembalikan gaya bawaan')->tooltip('Kembalikan gaya bawaan')->icon(Heroicon::OutlinedArrowUturnLeft)->color('gray')->iconButton()
+                ->requiresConfirmation()->modalDescription('Semua pengaturan Gaya bagian ini dikosongkan.')
+                ->action(fn (array $arguments, Builder $component) => $setStyle($component, $arguments['item'], [])),
+        ];
     }
 
     public static function previewUrl(LandingPage $page): string

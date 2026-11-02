@@ -13,6 +13,7 @@ use Filament\Forms\Components\Builder\Block;
 use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
@@ -20,7 +21,10 @@ use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Group;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Str;
@@ -36,6 +40,12 @@ class Sections
     /** type => label. The order here is the order of the "add section" picker. */
     public const TYPES = [
         'hero' => 'Judul utama (hero)',
+        'problem_solution' => 'Masalah & solusi',
+        'benefits' => 'Manfaat',
+        'social_proof' => 'Bukti sosial (testimoni, logo, angka)',
+        'closing' => 'Penutup & ajakan utama',
+        'slider' => 'Slider gambar',
+        'icon_list' => 'Ikon + keterangan',
         'product' => 'Produk (foto, harga promo, varian, stok)',
         'specs' => 'Spesifikasi produk',
         'shop_perks' => 'Keunggulan belanja (ongkir, COD, retur)',
@@ -47,7 +57,7 @@ class Sections
         'location' => 'Lokasi, peta & akses terdekat',
         'kpr' => 'Simulasi KPR',
         'testimonials' => 'Testimoni',
-        'faq' => 'Tanya jawab',
+        'faq' => 'Tanya jawab (atasi keraguan)',
         'legal' => 'Legalitas',
         'video' => 'Video YouTube',
         'cta' => 'Ajakan + tombol WhatsApp',
@@ -125,7 +135,7 @@ class Sections
 
                     return $label.($hint !== '' ? ': '.Str::limit($hint, 36) : '').$hidden;
                 })
-                ->schema([...self::fields($type), ...self::common($type)]);
+                ->schema([...self::fields($type), ...self::common($type), BlockStyle::section()]);
         }
 
         return $blocks;
@@ -139,6 +149,8 @@ class Sections
             'kpr' => Heroicon::OutlinedCalculator, 'testimonials' => Heroicon::OutlinedChatBubbleBottomCenterText, 'faq' => Heroicon::OutlinedQuestionMarkCircle,
             'legal' => Heroicon::OutlinedShieldCheck, 'video' => Heroicon::OutlinedPlayCircle, 'cta' => Heroicon::OutlinedChatBubbleLeftRight,
             'form' => Heroicon::OutlinedClipboardDocumentList, 'countdown' => Heroicon::OutlinedClock, 'highlights' => Heroicon::OutlinedStar,
+            'problem_solution' => Heroicon::OutlinedLightBulb, 'benefits' => Heroicon::OutlinedHandThumbUp, 'social_proof' => Heroicon::OutlinedUserGroup,
+            'closing' => Heroicon::OutlinedFlag, 'slider' => Heroicon::OutlinedRectangleStack, 'icon_list' => Heroicon::OutlinedListBullet,
             'details', 'specs' => Heroicon::OutlinedTableCells, 'product' => Heroicon::OutlinedShoppingBag, 'shop_perks' => Heroicon::OutlinedTruck,
             'reviews' => Heroicon::OutlinedChatBubbleLeftEllipsis, 'buttons' => Heroicon::OutlinedCursorArrowRays, default => Heroicon::OutlinedBars3BottomLeft,
         };
@@ -175,10 +187,90 @@ class Sections
     {
         return match ($type) {
             'hero' => [
-                TextInput::make('headline')->label('Judul besar')->required()->maxLength(120),
-                TextInput::make('subheadline')->label('Kalimat pendukung')->maxLength(200),
-                self::upload('image')->label('Foto latar'),
-                Buttons::repeater('buttons', 'Tombol', [['label' => 'Daftar sekarang', 'action' => 'scroll', 'color' => 'light', 'size' => 'lg', 'icon' => 'none']]),
+                TextInput::make('headline')->label('Judul besar (nilai utama)')->required()->maxLength(120),
+                TextInput::make('subheadline')->label('Kalimat pendukung (untuk siapa + manfaatnya)')->maxLength(200),
+                Select::make('visual')->label('Visual utama')->options(['image' => 'Gambar (latar)', 'video' => 'Video', 'slider' => 'Slider / galeri gambar'])
+                    ->default('image')->native(false)->selectablePlaceholder(false)->live(),
+                self::upload('image')->label('Foto latar')->visible(fn (Get $get) => ($get('visual') ?? 'image') === 'image'),
+                Grid::make(['default' => 1, 'sm' => 2])->visible(fn (Get $get) => $get('visual') === 'video')->schema([
+                    TextInput::make('video_url')->label('Tautan video YouTube atau file MP4')->url()->maxLength(500)->placeholder('https://www.youtube.com/watch?v=...')
+                        ->rule(fn () => fn (string $attribute, mixed $value, Closure $fail) => ($value === null || $value === '' || Embeds::youtubeId($value) || Embeds::videoUrl($value)) ?: $fail('Pakai tautan YouTube atau alamat file .mp4 (https).')),
+                    FileUpload::make('video_file')->label('atau unggah video MP4')->disk('public')->visibility('public')
+                        ->directory(fn () => 'landing/'.app(CurrentTenant::class)->id())->acceptedFileTypes(['video/mp4', 'video/webm'])->maxSize(30720)
+                        ->helperText('Maksimal 30 MB. Video pendek (di bawah 30 detik) lebih cepat dimuat.'),
+                ]),
+                Group::make(Slider::fields('slider_'))->visible(fn (Get $get) => $get('visual') === 'slider'),
+                Buttons::repeater('buttons', 'Tombol (utama + kedua opsional)', [['label' => 'Daftar sekarang', 'action' => 'scroll', 'color' => 'light', 'size' => 'lg', 'icon' => 'none']]),
+                TextInput::make('assurance')->label('Baris penegas di bawah tombol')->maxLength(120)->placeholder('Gratis ongkir • Bisa COD'),
+            ],
+            'problem_solution' => [
+                self::heading('[Masalah yang sering dialami pembeli]'),
+                Grid::make(['default' => 1, 'sm' => 2])->schema([
+                    TextInput::make('problem_title')->label('Judul kolom masalah')->default('Sering mengalami ini?')->maxLength(80),
+                    TextInput::make('solution_title')->label('Judul kolom solusi')->default('Dengan kami')->maxLength(80),
+                ]),
+                Repeater::make('problems')->label('Masalah')->maxItems(8)->defaultItems(0)->columns(['default' => 1, 'sm' => 4])->schema([
+                    TextInput::make('icon')->label('Ikon / emoji')->default('✕')->maxLength(4),
+                    TextInput::make('text')->label('Masalah')->required()->maxLength(160)->columnSpan(['sm' => 3]),
+                ]),
+                Repeater::make('solutions')->label('Solusi')->maxItems(8)->defaultItems(0)->columns(['default' => 1, 'sm' => 4])->schema([
+                    TextInput::make('icon')->label('Ikon / emoji')->default('✓')->maxLength(4),
+                    TextInput::make('text')->label('Solusi')->required()->maxLength(160)->columnSpan(['sm' => 3]),
+                ]),
+            ],
+            'benefits' => [
+                self::heading('Manfaat untuk Anda'),
+                TextInput::make('intro')->label('Kalimat pengantar')->maxLength(200),
+                Repeater::make('items')->label('Manfaat')->maxItems(9)->defaultItems(0)->collapsible()
+                    ->helperText('Tulis sebagai manfaat yang dirasakan pembeli, bukan fitur teknis. Contoh: "Tidur lebih nyenyak", bukan "Busa 30 cm".')
+                    ->itemLabel(fn (array $state) => $state['title'] ?? null)->schema(self::iconItem()),
+            ],
+            'social_proof' => [
+                self::heading('Kata mereka'),
+                Placeholder::make('real_data')->hiddenLabel()->content('Gunakan data asli; jangan menampilkan angka/testimoni karangan.'),
+                Repeater::make('testimonials')->label('Testimoni')->maxItems(9)->defaultItems(0)->collapsible()
+                    ->itemLabel(fn (array $state) => $state['name'] ?? null)->schema([
+                        self::upload('photo', 800)->label('Foto'),
+                        Grid::make(['default' => 1, 'sm' => 3])->schema([
+                            TextInput::make('name')->label('Nama')->required()->maxLength(80),
+                            TextInput::make('role')->label('Kota / peran')->maxLength(80)->placeholder('Bandung'),
+                            Select::make('rating')->label('Bintang')->options([5 => '5', 4 => '4', 3 => '3', 2 => '2', 1 => '1'])->placeholder('Tanpa bintang')->native(false),
+                        ]),
+                        Textarea::make('quote')->label('Kutipan')->required()->rows(2)->maxLength(300),
+                    ]),
+                TextInput::make('logos_title')->label('Judul deretan logo')->maxLength(80)->placeholder('Telah diliput / bekerja sama dengan'),
+                self::upload('logos', 600)->label('Logo mitra / media')->multiple()->reorderable()->maxFiles(12),
+                Repeater::make('stats')->label('Angka statistik')->maxItems(4)->defaultItems(0)->columns(2)->schema([
+                    TextInput::make('number')->label('Angka')->required()->maxLength(20)->placeholder('[1.200+]'),
+                    TextInput::make('label')->label('Keterangan')->required()->maxLength(60)->placeholder('[pembeli puas]'),
+                ]),
+            ],
+            'closing' => [
+                self::heading('[Ajakan penutup]', 'Judul ajakan'),
+                TextInput::make('text')->label('Kalimat pendukung')->maxLength(200),
+                TagsInput::make('assurances')->label('Penawaran penegas')->placeholder('Ketik lalu Enter, mis. Garansi 7 hari')
+                    ->helperText('Ditampilkan sebagai poin kecil, misalnya garansi, retur, atau COD.'),
+                Buttons::repeater('buttons', 'Tombol', [['label' => 'Pesan sekarang', 'action' => 'scroll', 'color' => 'brand', 'size' => 'lg', 'icon' => 'none']]),
+            ],
+            'slider' => [
+                self::heading(''),
+                ...Slider::fields(),
+            ],
+            'icon_list' => [
+                self::heading(''),
+                Repeater::make('items')->label('Item')->maxItems(12)->defaultItems(0)->collapsible()
+                    ->itemLabel(fn (array $state) => $state['title'] ?? null)->schema([...self::iconItem(), TextInput::make('link')->label('Tautan (opsional)')->url()->maxLength(500)]),
+                Fieldset::make('Tampilan ikon')->columns(['default' => 2, 'sm' => 3])->schema([
+                    Select::make('layout')->label('Tata letak')->options(['list' => 'Daftar (ikon di kiri)', 'grid' => 'Kotak (ikon di atas)'])->default('list')->native(false),
+                    Select::make('cols_desktop')->label('Kolom di PC')->options([1 => '1', 2 => '2', 3 => '3', 4 => '4'])->default(2)->native(false),
+                    Select::make('cols_mobile')->label('Kolom di HP')->options([1 => '1', 2 => '2', 3 => '3', 4 => '4'])->default(1)->native(false),
+                    Select::make('icon_pos')->label('Posisi ikon')->options(['left' => 'Kiri', 'top' => 'Atas', 'right' => 'Kanan'])->placeholder('Ikuti tata letak')->native(false),
+                    TextInput::make('icon_size')->label('Ukuran ikon')->numeric()->minValue(16)->maxValue(96)->default(28)->suffix('px'),
+                    Select::make('icon_shape')->label('Latar ikon')->options(['circle' => 'Lingkaran', 'square' => 'Kotak', 'none' => 'Tanpa latar'])->default('circle')->native(false),
+                    ColorPicker::make('icon_color')->label('Warna ikon'),
+                    ColorPicker::make('icon_bg')->label('Warna latar ikon'),
+                    Toggle::make('divider')->label('Garis pemisah')->inline(false),
+                ]),
             ],
             'product' => [
                 Select::make('property_id')->label('Ambil data dari katalog Produk')->placeholder('Isi manual')->native(false)->searchable()->live()
@@ -446,5 +538,20 @@ class Sections
     public static function rupiah(int $amount): string
     {
         return 'Rp '.number_format($amount, 0, ',', '.');
+    }
+
+    /** One item with an icon from the set, an emoji, or an uploaded picture. */
+    private static function iconItem(): array
+    {
+        return [
+            Grid::make(['default' => 1, 'sm' => 3])->schema([
+                Select::make('icon_type')->label('Jenis ikon')->options(['icon' => 'Ikon bawaan', 'emoji' => 'Emoji', 'image' => 'Gambar sendiri'])->default('icon')->native(false)->live(),
+                Select::make('icon')->label('Ikon')->options(Icons::options())->default('check')->native(false)->visible(fn (Get $get) => ($get('icon_type') ?? 'icon') === 'icon'),
+                TextInput::make('emoji')->label('Emoji')->maxLength(8)->placeholder('🚚')->visible(fn (Get $get) => $get('icon_type') === 'emoji'),
+                self::upload('icon_image', 256)->label('Gambar ikon')->visible(fn (Get $get) => $get('icon_type') === 'image'),
+                TextInput::make('title')->label('Judul')->required()->maxLength(80)->columnSpan(['sm' => 2]),
+            ]),
+            TextInput::make('text')->label('Keterangan (opsional)')->maxLength(200),
+        ];
     }
 }

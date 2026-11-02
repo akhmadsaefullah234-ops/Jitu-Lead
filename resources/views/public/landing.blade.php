@@ -133,9 +133,70 @@
         .rev img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: .7rem; margin-bottom: .6rem; }
         .rev .stars { color: #f59e0b; letter-spacing: .1em; } .rev .stars span { color: var(--line); }
         figure.rev { margin: 0; }
+        .hero .assure { font-size: .9rem; margin: .9rem 0 0; opacity: .9; }
+        .mx { display: grid; gap: 1.5rem; grid-template-columns: minmax(0, 1fr); align-items: center; }
+        .mx > * { min-width: 0; }
+        @media (min-width: 900px) { .hero-m .mx { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+        .hero-m .wrap { padding-top: 2.5rem; padding-bottom: 2.5rem; }
+        .hero-vid { width: 100%; border-radius: 1rem; background: #000; display: block; }
+        .sld { position: relative; --pv: var(--pvm); }
+        @media (min-width: 640px) { .sld { --pv: var(--pvt); } }
+        @media (min-width: 1024px) { .sld { --pv: var(--pvd); } }
+        .sl-track { display: flex; gap: var(--sg); overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+        .sl-track::-webkit-scrollbar { display: none; }
+        .slide { margin: 0; flex: 0 0 calc((100% - (var(--pv) - 1) * var(--sg)) / var(--pv)); scroll-snap-align: start; position: relative; min-width: 0; }
+        .slide a { display: block; }
+        .sl-img { width: 100%; aspect-ratio: var(--sar, auto); object-fit: var(--sf); border-radius: var(--sr); background: var(--soft); }
+        .slide figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 1rem; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.65)); border-radius: 0 0 var(--sr) var(--sr); display: grid; gap: .25rem; text-align: left; }
+        .slide figcaption strong { font-size: 1.1rem; }
+        .sld.fade .sl-track { display: grid; overflow: hidden; }
+        .sld.fade .slide { grid-area: 1 / 1; opacity: 0; visibility: hidden; transition: opacity .5s; }
+        .sld.fade .slide.on { opacity: 1; visibility: visible; }
+        .sl-arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 2.5rem; height: 2.5rem; border-radius: 50%; border: 0; background: rgba(255,255,255,.9); color: #111827; font-size: 1.6rem; line-height: 1; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+        .sl-arrow.prev { left: .5rem; } .sl-arrow.next { right: .5rem; }
+        .sl-dots { display: flex; justify-content: center; gap: .1rem; margin-top: .4rem; }
+        .sl-dots button { width: 1.6rem; height: 1.6rem; border: 0; background: none; cursor: pointer; padding: 0; display: grid; place-items: center; }
+        .sl-dots button::before { content: ""; width: .5rem; height: .5rem; border-radius: 50%; background: var(--line); }
+        .sl-dots button[aria-current="true"]::before { background: var(--c); }
+        .ps ul { list-style: none; padding: 0; margin: .4rem 0 0; display: grid; gap: .55rem; }
+        .ps li { display: flex; gap: .6rem; align-items: flex-start; color: var(--ink); }
+        .ps-i { flex: none; width: 1.6rem; height: 1.6rem; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: .9rem; }
+        .ps-bad .ps-i { background: #fee2e2; color: #b91c1c; } .ps-good .ps-i { background: #dcfce7; color: #15803d; }
+        .ps-good { border-color: color-mix(in srgb, var(--c) 40%, var(--line)); }
+        .ic-i { flex: none; width: calc(var(--ics, 28px) * 1.75); height: calc(var(--ics, 28px) * 1.75); display: inline-grid; place-items: center; font-size: var(--ics, 28px); line-height: 1; color: var(--icc, var(--c)); background: var(--icb, color-mix(in srgb, var(--c) 14%, #fff)); border-radius: .7rem; }
+        .ic-i svg { width: var(--ics, 22px); height: var(--ics, 22px); }
+        .ic-i .ic-img { width: var(--ics, 28px); height: var(--ics, 28px); object-fit: contain; }
+        .ben .ic-i { margin-bottom: .6rem; --ics: 22px; }
+        .ic { list-style: none; padding: 0; margin: 0; display: grid; gap: 1rem; grid-template-columns: repeat(var(--icm), minmax(0, 1fr)); }
+        @media (min-width: 768px) { .ic { grid-template-columns: repeat(var(--icd), minmax(0, 1fr)); } }
+        .ic li, .ic-a { display: flex; gap: .8rem; align-items: flex-start; min-width: 0; text-decoration: none; color: inherit; }
+        .ic-pos-top li, .ic-pos-top .ic-a { flex-direction: column; }
+        .ic-pos-right li, .ic-pos-right .ic-a { flex-direction: row-reverse; }
+        .ic-grid li { background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 1rem; padding: 1rem; }
+        .ic-circle .ic-i { border-radius: 50%; } .ic-none .ic-i { background: none; width: auto; height: auto; }
+        .ic-div li { border-bottom: 1px solid var(--line); padding-bottom: 1rem; }
+        .ic-t { display: grid; gap: .15rem; min-width: 0; overflow-wrap: anywhere; } .ic-t span { color: var(--mute); font-size: .92rem; }
+        .stats { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem; }
+        .stats div { flex: 1 1 8rem; text-align: center; background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 1rem; padding: .9rem; }
+        .stats b { display: block; font-family: var(--fh); font-size: clamp(1.6rem, 6vw, 2.4rem); color: var(--c); line-height: 1.1; }
+        .stats span { font-size: .9rem; color: var(--mute); }
+        .who-row { display: flex; gap: .6rem; align-items: center; margin-top: .6rem; } .who-row small { display: block; color: var(--mute); }
+        img.ava { width: 2.75rem; height: 2.75rem; border-radius: 50%; object-fit: cover; margin: 0; aspect-ratio: 1; }
+        .logos-t { text-align: center; margin: 1.75rem 0 .75rem; }
+        .logos { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 1.25rem 2rem; }
+        .logos img { height: 2.5rem; width: auto; max-width: 8rem; object-fit: contain; filter: grayscale(1); opacity: .8; }
+        .assures { list-style: none; padding: 0; margin: 0 0 1.2rem; display: flex; flex-wrap: wrap; justify-content: center; gap: .4rem .9rem; font-weight: 600; }
+        .assures li::before { content: "\2713  "; color: var(--c); }
+        .bg-brand .assures li::before, .bg-dark .assures li::before { color: inherit; }
+        .js .bx-anim { opacity: 0; transition: opacity .7s ease, transform .7s ease; }
+        .js .bx-slide { transform: translateY(1.5rem); }
+        .js .bx-anim.in { opacity: 1; transform: none; }
+        @media (prefers-reduced-motion: reduce) { .js .bx-anim { opacity: 1; transform: none; transition: none; } }
         .preview-tag { background: #111827; color: #fff; text-align: center; font-size: .8125rem; padding: .35rem; }
         @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
     </style>
+    @if ($blockCss !== '')<style>{!! $blockCss !!}</style>@endif
+    @if ($animated)<script>document.documentElement.classList.add('js');</script>@endif
     @include('public.partials.button-styles')
     @include('public.partials.tracking')
 </head>
@@ -154,7 +215,11 @@
             if (! $isHero) { $n++; }
             $cls = 'blk '.(match ($bg) { 'light' => 'bg-light', 'dark' => 'bg-dark', 'brand' => 'bg-brand', default => ($n % 2 === 0 ? 'alt' : '') });
         @endphp
-        @include('public.sections.'.$section['type'], ['p' => $p, 'cls' => $cls, 'isFirst' => $loop->first])
+        @if (isset($styled[$loop->index]))
+            <div class="bx {{ $styled[$loop->index] }}" id="bx-{{ $loop->iteration }}">@include('public.sections.'.$section['type'], ['p' => $p, 'cls' => $cls, 'isFirst' => $loop->first])</div>
+        @else
+            @include('public.sections.'.$section['type'], ['p' => $p, 'cls' => $cls, 'isFirst' => $loop->first])
+        @endif
     @endforeach
 
     @if ($showPrimaryForm && $primaryForm)
