@@ -83,7 +83,7 @@ class SubmitLeadForm
     /** Lead columns, extra fields, the answers as a note, and stored photos. A returning lead keeps what it had. */
     private function applyAnswers(Lead $lead, bool $created, LeadForm $form, array $result, Tenant $tenant): void
     {
-        foreach (['variant', 'quantity', 'shipping_address', 'shipping_province', 'payment_type'] as $column) {
+        foreach (['variant', 'quantity', 'shipping_address', 'shipping_province', 'shipping_address_parts', 'payment_type'] as $column) {
             if (isset($result['lead'][$column]) && ($created || blank($lead->{$column}))) {
                 $lead->{$column} = $result['lead'][$column];
             }

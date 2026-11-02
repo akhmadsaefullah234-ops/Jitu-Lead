@@ -20,7 +20,7 @@ class Regions
         'Kepulauan Bangka Belitung' => ['babel', 'bangka belitung'],
         'Bengkulu' => [],
         'Lampung' => [],
-        'DKI Jakarta' => ['jakarta', 'dki'],
+        'DKI Jakarta' => ['jakarta', 'dki', 'daerah khusus ibukota jakarta', 'daerah khusus jakarta', 'dki jakarta raya'],
         'Jawa Barat' => ['jabar'],
         'Banten' => [],
         'Jawa Tengah' => ['jateng'],
@@ -135,7 +135,7 @@ class Regions
     /** "Kab. Bekasi", "KOTA  Bekasi" => "bekasi": how cities are compared. */
     public static function city(?string $text): string
     {
-        return trim(preg_replace('/^(kota\s+administrasi|kabupaten|kab\.?|kota|kec\.?|kecamatan)\s+/', '', self::key($text)));
+        return trim(preg_replace('/^(kota\s+administrasi|kabupaten\s+administrasi|kabupaten|kab\.?|kota|kec\.?|kecamatan)\s+/', '', self::key($text)));
     }
 
     private static function key(?string $text): string

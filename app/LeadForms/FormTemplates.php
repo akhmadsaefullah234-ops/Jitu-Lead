@@ -132,7 +132,7 @@ class FormTemplates
                 'design' => ['title' => 'Form order', 'description' => 'Isi data pesanan. Setelah dikirim, Anda tersambung ke WhatsApp admin untuk konfirmasi total dan ongkir.'],
                 'fields' => [
                     $name, $phone,
-                    self::f('alamat', 'address', 'Alamat lengkap', ['required' => true, 'maps_to' => 'shipping_address',
+                    self::f('alamat', 'address', 'Alamat lengkap', ['required' => true, 'maps_to' => 'shipping_address', 'mode' => 'region',
                         'parts' => ['street', 'landmark', 'rt_rw', 'kelurahan', 'kecamatan', 'kota', 'provinsi', 'kode_pos'],
                         'required_parts' => ['street', 'landmark', 'rt_rw', 'kecamatan', 'kota']]),
                     self::f('varian', 'select', 'Varian / warna', ['required' => true, 'options' => ['Hitam', 'Putih'], 'maps_to' => 'variant']),

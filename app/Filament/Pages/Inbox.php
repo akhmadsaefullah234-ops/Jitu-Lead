@@ -19,6 +19,7 @@ use App\Models\MediaFolder;
 use App\Models\Property;
 use App\Models\WaConversation;
 use App\Models\WaTemplate;
+use App\Regions\RegionDirectory;
 use App\Shipping\Regions;
 use App\Shipping\Shipping;
 use App\Shipping\ShippingQuote;
@@ -311,7 +312,8 @@ class Inbox extends Page
                     TextInput::make('varian')->label('Varian')->maxLength(60)->columnSpan(2),
                     TextInput::make('jumlah')->label('Jumlah')->numeric()->integer()->minValue(1)->maxValue(1000)->default(1)->required(),
                 ]),
-                TextInput::make('kota')->label('Kota/kabupaten tujuan')->required()->maxLength(80)->placeholder('Mis. Kab. Bandung'),
+                TextInput::make('kota')->label('Kota/kabupaten tujuan')->required()->maxLength(80)->placeholder('Mis. Kab. Bandung')
+                    ->datalist(fn () => RegionDirectory::cityNames()),
                 Select::make('provinsi')->label('Provinsi')->options(Regions::options())->searchable()
                     ->helperText('Boleh dikosongkan untuk kota yang dikenal.'),
             ])

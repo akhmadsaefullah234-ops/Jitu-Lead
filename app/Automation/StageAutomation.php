@@ -18,6 +18,7 @@ use App\Models\User;
 use App\Models\WaConversation;
 use App\Models\WaMessage;
 use App\Push\Alerts;
+use App\Regions\RegionDirectory;
 use App\Shipping\Regions;
 use App\Support\CurrentTenant;
 use App\WhatsApp\RouteSelector;
@@ -287,7 +288,7 @@ class StageAutomation
         return $province !== null && in_array($province, self::JAVA, true);
     }
 
-    /** The province written in an address: its name or short name, else that of a known city in it. */
+    /** The province written in an address: its name or short name, else that of a known city (or imported region) in it. */
     public static function provinceIn(string $address): ?string
     {
         $parts = array_reverse(array_map('trim', preg_split('/[,\n]+/', $address)));
@@ -297,6 +298,13 @@ class StageAutomation
 
             if ($province = Regions::province($part) ?? Regions::provinceOfCity($part)) {
                 return $province;
+            }
+        }
+
+        // Any city, regency or district of the imported regions.
+        foreach ($parts as $part) {
+            if ($match = RegionDirectory::matchCity(trim(preg_replace('/\s*\d{5}\s*$/', '', $part)))) {
+                return $match['province'];
             }
         }
 

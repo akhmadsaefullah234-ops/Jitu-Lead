@@ -27,7 +27,7 @@ use LogicException;
     'budget_min', 'budget_max', 'payment_method', 'property_id', 'survey_at',
     'survey_location', 'unit', 'deal_value', 'lost_reason_id', 'custom_fields', 'stage_entered_at',
     'variant', 'quantity', 'shipping_address', 'courier', 'shipping_cost', 'order_items',
-    'payment_type', 'payment_proof_at', 'paid_at', 'shipping_province', 'tracking_number', 'shipped_at',
+    'payment_type', 'payment_proof_at', 'paid_at', 'shipping_province', 'tracking_number', 'shipped_at', 'shipping_address_parts',
 ])]
 class Lead extends Model
 {
@@ -80,6 +80,7 @@ class Lead extends Model
             'assigned_at' => 'datetime',
             'custom_fields' => 'array',
             'order_items' => 'array',
+            'shipping_address_parts' => 'array',
             'payment_proof_at' => 'datetime',
             'paid_at' => 'datetime',
             'shipped_at' => 'datetime',
