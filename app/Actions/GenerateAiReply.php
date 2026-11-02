@@ -115,6 +115,11 @@ class GenerateAiReply
             return $this->handoffTo($inbound, 'AI menyebut ongkir atau total yang tidak berasal dari cek ongkir', true);
         }
 
+        // Only a person who checked the account may tell a buyer the payment arrived (Otomatisasi tahap, rule 3).
+        if ($tenant->industry()->key === 'retail' && ShopTools::claimsPaymentReceived($answer)) {
+            return $this->handoffTo($inbound, 'AI hampir menyatakan pembayaran diterima; pembayaran harus dicek agen', true);
+        }
+
         $actions = array_map(fn (array $order) => ['type' => 'order', 'input' => $order['input'], 'result' => $order['result']], $shop?->orders() ?? []);
 
         [$answer, $assetIds] = $this->splitAttachments($answer, $library);

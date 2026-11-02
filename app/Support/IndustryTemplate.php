@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Automation\RetailStages;
 use App\Enums\StageType;
 use App\Models\Lead;
 use App\Models\Tenant;
@@ -59,7 +60,9 @@ class IndustryTemplate
     {
         $have = $tenant->stages()->pluck('name')->map(fn ($n) => mb_strtolower($n))->all();
 
-        foreach ($industry->config('stages') as [$name, $type, $requirement, $action, $hours]) {
+        foreach ($industry->config('stages') as $template) {
+            [$name, $type, $requirement, $action, $hours] = $template;
+
             if (! in_array(mb_strtolower($name), $have, true)) {
                 $tenant->stages()->create([
                     'name' => $name, 'position' => 0, 'type' => $type, 'requirement' => $requirement,
@@ -68,6 +71,7 @@ class IndustryTemplate
             }
         }
         $this->orderStages($tenant, $industry);
+        $this->markTemplateStages($tenant, $industry);
 
         $reasons = $tenant->lostReasons()->pluck('label')->map(fn ($n) => mb_strtolower($n))->all();
         foreach ($industry->config('lost_reasons') as $label) {
@@ -106,6 +110,25 @@ class IndustryTemplate
 
         foreach ($stages as $i => $stage) {
             $stage->position === $i + 1 ?: $stage->forceFill(['position' => $i + 1])->save();
+        }
+    }
+
+    /**
+     * Remembers which step of the template each stage is (stages.template_key), so automatic moves still find
+     * "Menunggu pembayaran" after the agency renames it. Stages that already have a key keep it.
+     */
+    private function markTemplateStages(Tenant $tenant, Industry $industry): void
+    {
+        if ($industry->key !== 'retail') {
+            return;
+        }
+
+        $stages = $tenant->stages()->orderBy('position')->orderBy('id')->get();
+        $taken = $stages->pluck('template_key')->filter()->all();
+        $found = RetailStages::match($stages->whereNull('template_key')->map(fn ($s) => ['id' => $s->id, 'name' => $s->name, 'type' => $s->type->value])->values()->all());
+
+        foreach ($found as $key => $id) {
+            in_array($key, $taken, true) ?: $stages->firstWhere('id', $id)->forceFill(['template_key' => $key])->save();
         }
     }
 

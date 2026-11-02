@@ -19,6 +19,8 @@ class ShopTools
 
     public const RECORD = 'catat_pesanan';
 
+    public const PAYMENTS = ['transfer', 'cod'];
+
     /** How many catalogue products the model is shown. */
     public const MAX_PRODUCTS = 60;
 
@@ -67,15 +69,19 @@ class ShopTools
             ],
             [
                 'name' => self::RECORD,
-                'description' => 'Catat pesanan yang sudah dipastikan pembeli (produk, varian, jumlah, alamat lengkap, kurir) ke data lead, dengan ongkir dan total '
-                    .'dari tabel tarif, lalu pindahkan lead ke tahap Menunggu pembayaran.',
+                'description' => 'Catat pesanan ke data lead. status "draft": data pesanan sudah lengkap (nama, alamat dengan RT/RW dan nomor rumah atau patokan, '
+                    .'produk, warna/varian, jumlah) tapi pembeli belum konfirmasi; lead pindah ke Order masuk. status "konfirmasi": pembeli sudah memastikan pesanan, '
+                    .'kurir, dan cara bayar; ongkir dan total dihitung dari tabel tarif, lalu lead pindah ke Menunggu pembayaran (transfer) atau Dikemas & dikirim (cod).',
                 'input_schema' => [
                     'type' => 'object',
                     'properties' => ['items' => $items] + $destination + [
-                        'alamat' => ['type' => 'string', 'description' => 'Alamat kirim lengkap: nama jalan, nomor, RT/RW, kelurahan.'],
-                        'kurir' => ['type' => 'string', 'description' => 'Kurir yang dipilih pembeli, persis seperti di hasil cek_ongkir.'],
+                        'status' => ['type' => 'string', 'enum' => ['draft', 'konfirmasi'], 'description' => 'draft bila belum dikonfirmasi pembeli, konfirmasi bila sudah.'],
+                        'nama' => ['type' => 'string', 'description' => 'Nama penerima.'],
+                        'alamat' => ['type' => 'string', 'description' => 'Alamat kirim lengkap: nama jalan, nomor rumah atau patokan, RT/RW, kelurahan.'],
+                        'kurir' => ['type' => 'string', 'description' => 'Kurir yang dipilih pembeli, persis seperti di hasil cek_ongkir. Wajib untuk konfirmasi.'],
+                        'pembayaran' => ['type' => 'string', 'enum' => self::PAYMENTS, 'description' => 'Cara bayar yang dipilih pembeli: transfer atau cod (bayar di tempat). Bawaan transfer.'],
                     ],
-                    'required' => ['items', 'kota', 'alamat', 'kurir'],
+                    'required' => ['items', 'kota', 'alamat', 'status'],
                 ],
             ],
         ];
@@ -101,6 +107,17 @@ class ShopTools
             return $quote->toArray();
         }
 
+        if (($input['status'] ?? null) === 'draft') {
+            if ($problem = self::orderProblem($input)) {
+                return ['status' => 'data_belum_lengkap', 'pesan' => $problem];
+            }
+
+            $result = ['status' => 'draft_tercatat', 'pesan' => 'Data pesanan dicatat. Rangkum pesanannya lalu minta pembeli konfirmasi, pilih kurir, dan cara bayar (transfer atau COD).'];
+            $this->orders[] = ['name' => $name, 'input' => $input, 'result' => $result];
+
+            return $result;
+        }
+
         $option = $quote->option((string) ($input['kurir'] ?? ''));
 
         if ($option === null) {
@@ -114,7 +131,9 @@ class ShopTools
         $total = $quote->subtotal() !== null ? $quote->subtotal() + $option->price : null;
         $result = array_filter([
             'status' => 'tercatat',
-            'pesan' => 'Pesanan dicatat. Minta pembeli melakukan pembayaran.',
+            'pesan' => ($input['pembayaran'] ?? null) === 'cod'
+                ? 'Pesanan dicatat, bayar di tempat (COD). Sampaikan total yang dibayar saat paket diterima dan bahwa pesanan segera dikemas.'
+                : 'Pesanan dicatat. Minta pembeli transfer sebesar total. Jangan menyatakan pembayaran diterima.',
             'kurir' => $option->courier,
             'ongkir' => $option->price,
             'ongkir_teks' => ShippingQuote::rupiah($option->price),
@@ -125,6 +144,40 @@ class ShopTools
         $this->orders[] = ['name' => $name, 'input' => $input, 'result' => $result];
 
         return $result;
+    }
+
+    /**
+     * What is still missing before a draft order may be written: the buyer's name, the colour or
+     * size and quantity of every item, and an address with RT/RW plus a house number or landmark.
+     */
+    public static function orderProblem(array $input): ?string
+    {
+        if (blank($input['nama'] ?? null)) {
+            return 'Tanyakan nama penerima.';
+        }
+
+        foreach ((array) ($input['items'] ?? []) as $item) {
+            if (blank($item['varian'] ?? null) || (int) ($item['jumlah'] ?? 0) < 1) {
+                return 'Tanyakan warna/ukuran dan jumlah setiap produk.';
+            }
+        }
+
+        return self::addressProblem((string) ($input['alamat'] ?? ''));
+    }
+
+    /** An address needs its RT/RW and a house number or a landmark ("dekat masjid") to reach the door. */
+    public static function addressProblem(string $address): ?string
+    {
+        $rtRw = '/\bRT\.?\s*\d{1,3}\s*(?:\/|,)?\s*(?:RW\.?\s*)?\d{1,3}\b|\bRT\s*\/\s*RW\s*\d{1,3}\s*\/\s*\d{1,3}\b/iu';
+
+        if (! preg_match($rtRw, $address)) {
+            return 'Tanyakan RT/RW alamat kirim.';
+        }
+
+        $rest = preg_replace($rtRw, ' ', $address);
+        $house = '/\b(?:no|nomor|nmr)\.?\s*\d+|\bblok\s*\w+|\b(?:dekat|depan|samping|sebelah|belakang|seberang|patokan|gang|gg)\b|\b\d{1,4}[a-z]?\b(?!\s*\d)/iu';
+
+        return preg_match($house, preg_replace('/\b\d{5}\b/', ' ', $rest)) ? null : 'Tanyakan nomor rumah atau patokan alamat kirim.';
     }
 
     /** @return list<array{name: string, input: array, result: array}> the orders the AI recorded in this answer */
@@ -147,7 +200,9 @@ class ShopTools
             'Untuk ongkir WAJIB memanggil tool '.self::CHECK.'. Jangan menghitung, menjumlahkan, mengalikan, atau menebak ongkir maupun total sendiri. Sebut hanya angka yang tertulis di hasil tool, apa adanya.',
             'Bila kota/kabupaten tujuan belum jelas, tanyakan kota atau kecamatannya dulu, jangan memanggil tool.',
             'Bila hasil tool berstatus '.ShippingQuote::NEEDS_ADMIN.' atau '.ShippingQuote::NOT_AVAILABLE.', balas hanya dengan kata HANDOFF.',
-            'Setelah pembeli memastikan produk, varian, jumlah, alamat lengkap, dan kurir, panggil '.self::RECORD.', lalu sampaikan total dari hasil tool dan minta pembeli membayar.',
+            'Begitu data pesanan lengkap (nama penerima, alamat dengan RT/RW dan nomor rumah atau patokan, kota, produk, warna/ukuran, jumlah) tapi pembeli belum konfirmasi, panggil '.self::RECORD.' dengan status draft, lalu rangkum pesanannya dan minta pembeli konfirmasi, pilih kurir, dan cara bayar (transfer atau COD).',
+            'Setelah pembeli memastikan pesanan, kurir, dan cara bayar, panggil '.self::RECORD.' dengan status konfirmasi dan pembayaran transfer atau cod, lalu sampaikan total dari hasil tool. Untuk transfer minta pembeli membayar; untuk COD sampaikan pesanan segera dikemas.',
+            'Jangan pernah menyatakan pembayaran sudah diterima, sudah masuk, atau lunas. Bila pembeli mengirim atau menyebut bukti transfer, katakan admin akan mengeceknya dulu.',
             'Saat memakai tool, kamu boleh menulis satu kalimat singkat dulu. Bila tidak ada tool yang cocok untuk permintaan pembeli, katakan begitu, jangan menebak. Jangan menulis tag XML atau tag sistem apa pun di jawaban.',
             $settings->origin() ? 'Barang dikirim dari '.$settings->origin().'.' : null,
             $products !== '' ? "PRODUK (id | nama | harga | berat):\n".$products : null,
@@ -176,6 +231,15 @@ class ShopTools
         $allowed = array_merge(self::amounts($given), ...array_map(fn (array $c) => self::amounts(json_encode($c['result'], JSON_UNESCAPED_UNICODE)), $calls));
 
         return array_diff($amounts, $allowed) !== [];
+    }
+
+    /**
+     * True when the answer tells the buyer their payment arrived ("pembayaran sudah kami terima", "sudah lunas").
+     * Only a person who checked the account may say that, so such an answer goes to an agent.
+     */
+    public static function claimsPaymentReceived(string $answer): bool
+    {
+        return (bool) preg_match('/\b(?:pembayaran|transfer(?:an)?|dana|uang|bayaran)\b[^.!?\n]{0,40}?\b(?:sudah|telah|udah)\s+(?:kami\s+)?(?:terima|diterima|masuk|kami\s+terima|ma?suk)\b|\b(?:sudah|telah)\s+kami\s+terima\b|(?<!belum\s)(?<!tidak\s)\blunas\b/iu', $answer);
     }
 
     /** True when any shipping check in this answer came back "konfirmasi admin" (or not available). */

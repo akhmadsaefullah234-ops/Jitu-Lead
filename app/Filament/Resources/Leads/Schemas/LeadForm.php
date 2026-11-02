@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Leads\Schemas;
 
+use App\Automation\StageAutomationSettings;
 use App\Enums\Interest;
 use App\Enums\Need;
 use App\Enums\PaymentMethod;
@@ -103,6 +104,14 @@ class LeadForm
                             ->numeric()
                             ->minValue(0)
                             ->prefix('Rp'),
+                        Select::make('payment_type')
+                            ->options(['transfer' => 'Transfer', 'cod' => 'Bayar di tempat (COD)']),
+                        TextInput::make('tracking_number')
+                            ->maxLength(60)
+                            ->regex('/^[A-Za-z0-9\-\s]{4,60}$/')
+                            ->helperText(fn () => StageAutomationSettings::appliesTo(app(CurrentTenant::class)->get()) && StageAutomationSettings::of(app(CurrentTenant::class)->get())->enabled('tracking')
+                                ? 'Saat disimpan, kurir dan nomor resi dikirim ke pembeli lewat WhatsApp dan lead pindah ke Dikemas & dikirim.' : null)
+                            ->hiddenOn('create'),
                         Textarea::make('shipping_address')
                             ->rows(2)
                             ->maxLength(500)

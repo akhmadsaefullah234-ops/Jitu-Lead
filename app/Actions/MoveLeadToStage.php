@@ -20,8 +20,9 @@ class MoveLeadToStage
 {
     /**
      * @param  array{survey_at?: mixed, survey_location?: string, unit?: string, deal_value?: int|string, lost_reason_id?: int|string}  $details
+     * @param  ?string  $auto  Why the app moved the lead by itself (App\Automation\StageAutomation); null for a person's move.
      */
-    public function __invoke(Lead $lead, Stage $stage, User $actor, array $details = []): Lead
+    public function __invoke(Lead $lead, Stage $stage, ?User $actor, array $details = [], ?string $auto = null): Lead
     {
         if (PlanLimits::current()?->readOnly()) {
             throw ValidationException::withMessages(['stage' => 'Langganan hanya-baca, lead tidak bisa dipindah. Perpanjang paket di menu Langganan.']);
@@ -37,7 +38,7 @@ class MoveLeadToStage
 
         $changes = $this->requiredDetails($lead, $stage, $details);
 
-        return DB::transaction(function () use ($lead, $stage, $actor, $changes) {
+        return DB::transaction(function () use ($lead, $stage, $actor, $changes, $auto) {
             $from = $lead->stage;
 
             $lead->fill($changes);
@@ -55,10 +56,10 @@ class MoveLeadToStage
             $lead->save();
 
             $lead->activities()->create([
-                'user_id' => $actor->getKey(),
+                'user_id' => $auto === null ? $actor?->getKey() : null,
                 'type' => 'stage_changed',
-                'body' => "Pindah dari {$from?->name} ke {$stage->name}",
-                'meta' => ['from' => $from?->getKey(), 'to' => $stage->getKey()] + $changes,
+                'body' => $auto === null ? "Pindah dari {$from?->name} ke {$stage->name}" : "Pindah otomatis dari {$from?->name} ke {$stage->name}: {$auto}",
+                'meta' => ['from' => $from?->getKey(), 'to' => $stage->getKey()] + ($auto === null ? [] : ['auto' => $auto]) + $changes,
             ]);
 
             return $lead;

@@ -88,12 +88,12 @@ return [
             'description' => 'Jualan produk lewat WhatsApp, Instagram, TikTok, atau marketplace. Ada order, pembayaran, dan pengiriman.',
 
             'stages' => [
-                ['Tanya produk', StageType::Open, null, 'Balas pertanyaan, kirim foto dan harga', 1],
-                ['Order masuk', StageType::Open, null, 'Konfirmasi pesanan, ongkir, dan total bayar', 4],
-                ['Menunggu pembayaran', StageType::Open, null, 'Ingatkan pembayaran', 24],
-                ['Dikemas & dikirim', StageType::Open, null, 'Kirim nomor resi', 48],
-                ['Selesai', StageType::Won, StageRequirement::Booking, 'Minta ulasan dan tawarkan order ulang', 168],
-                ['Batal', StageType::Lost, StageRequirement::LostReason, null, null],
+                ['Tanya produk', StageType::Open, null, 'Balas pertanyaan, kirim foto dan harga', 1, 'inquiry'],
+                ['Order masuk', StageType::Open, null, 'Konfirmasi pesanan, ongkir, dan total bayar', 4, 'order'],
+                ['Menunggu pembayaran', StageType::Open, null, 'Ingatkan pembayaran', 24, 'payment'],
+                ['Dikemas & dikirim', StageType::Open, null, 'Kirim nomor resi', 48, 'shipping'],
+                ['Selesai', StageType::Won, StageRequirement::Booking, 'Minta ulasan dan tawarkan order ulang', 168, 'done'],
+                ['Batal', StageType::Lost, StageRequirement::LostReason, null, null, 'cancelled'],
             ],
             'lost_reasons' => [
                 'Ongkir mahal', 'Stok/ukuran habis', 'Tidak ada respons', 'Beli di marketplace', 'Hanya tanya', 'Batal setelah order',
@@ -128,6 +128,8 @@ TXT,
                 'shipping_address' => 'Alamat kirim',
                 'courier' => 'Kurir',
                 'shipping_cost' => 'Ongkir',
+                'payment_type' => 'Cara bayar',
+                'tracking_number' => 'Nomor resi',
             ],
 
             'terms' => [
