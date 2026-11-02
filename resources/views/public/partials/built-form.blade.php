@@ -42,7 +42,7 @@
         @elseif ($f['type'] === 'address')
                 <fieldset class="lf-g lf-addr"><legend>{{ $f['label'] }}{{ $mark }}</legend>
                     @foreach ($f['parts'] as $part)
-                        @php $partReq = $req($f) && in_array($part, \App\LeadForms\FormFields::ADDRESS_REQUIRED, true); @endphp
+                        @php $partReq = $req($f) && in_array($part, \App\LeadForms\FormFields::requiredParts($f), true); @endphp
                         <label class="lf-f {{ in_array($part, ['street', 'landmark'], true) ? 'wide' : '' }}"><span>{{ \App\LeadForms\FormFields::ADDRESS_PARTS[$part] }}{{ $partReq ? ' *' : '' }}</span>
                             @if ($part === 'provinsi')
                                 <select name="{{ $name }}[provinsi]" @if ($partReq) required @endif><option value="">Pilih provinsi</option>@foreach (\App\Shipping\Regions::options() as $p)<option value="{{ $p }}">{{ $p }}</option>@endforeach</select>

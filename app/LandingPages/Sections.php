@@ -2,18 +2,26 @@
 
 namespace App\LandingPages;
 
+use App\LeadForms\FormTemplates;
+use App\Models\LandingPage;
 use App\Models\LeadForm;
+use App\Models\Property;
 use App\Support\CurrentTenant;
+use App\Support\Industry;
 use Closure;
 use Filament\Forms\Components\Builder\Block;
+use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Str;
 
@@ -28,6 +36,10 @@ class Sections
     /** type => label. The order here is the order of the "add section" picker. */
     public const TYPES = [
         'hero' => 'Judul utama (hero)',
+        'product' => 'Produk (foto, harga promo, varian, stok)',
+        'specs' => 'Spesifikasi produk',
+        'shop_perks' => 'Keunggulan belanja (ongkir, COD, retur)',
+        'reviews' => 'Ulasan pembeli',
         'price' => 'Harga mulai dari + cicilan',
         'gallery' => 'Galeri foto',
         'amenities' => 'Fasilitas',
@@ -46,6 +58,26 @@ class Sections
         'details' => 'Rincian & harga',
         'text' => 'Teks bebas',
     ];
+
+    /** Sections that only make sense for one kind of business; the rest are for everyone. */
+    public const ONLY = [
+        'price' => 'properti', 'kpr' => 'properti',
+        'product' => 'retail', 'specs' => 'retail', 'shop_perks' => 'retail', 'reviews' => 'retail',
+    ];
+
+    public const STOCK = ['ready' => 'Ready stok', 'low' => 'Sisa sedikit', 'preorder' => 'Pre-order'];
+
+    /**
+     * The sections an agency of this industry can add (null: all). Types already on the page stay editable.
+     *
+     * @param  list<string>  $keep
+     * @return array<string, string>
+     */
+    public static function types(?string $industry = null, array $keep = []): array
+    {
+        return array_filter(self::TYPES, fn ($label, $type) => $industry === null || in_array($type, $keep, true)
+            || (self::ONLY[$type] ?? $industry) === $industry, ARRAY_FILTER_USE_BOTH);
+    }
 
     public const LEGAL_DOCS = ['SHM (Sertifikat Hak Milik)', 'SHGB / HGB (Hak Guna Bangunan)', 'PBG (Persetujuan Bangunan Gedung)', 'IMB (izin lama)', 'AJB (Akta Jual Beli)', 'Izin lokasi', 'Pecah sertifikat', 'Bebas sengketa'];
 
@@ -76,15 +108,18 @@ class Sections
         return isset(self::TYPES[$type]);
     }
 
-    /** @return list<Block> */
-    public static function blocks(): array
+    /**
+     * @param  list<string>  $keep  types already on the page
+     * @return list<Block>
+     */
+    public static function blocks(?string $industry = null, array $keep = []): array
     {
         $blocks = [];
 
-        foreach (self::TYPES as $type => $label) {
+        foreach (self::types($industry, $keep) as $type => $label) {
             $blocks[] = Block::make($type)->icon(self::icon($type))
                 ->label(function (?array $state) use ($label) {
-                    $hint = $state['heading'] ?? $state['headline'] ?? $state['price'] ?? null;
+                    $hint = $state['heading'] ?? $state['headline'] ?? $state['name'] ?? $state['price'] ?? null;
                     $hint = is_string($hint) ? trim($hint) : '';
                     $hidden = ! empty($state['hidden']) ? ' (disembunyikan)' : '';
 
@@ -104,7 +139,8 @@ class Sections
             'kpr' => Heroicon::OutlinedCalculator, 'testimonials' => Heroicon::OutlinedChatBubbleBottomCenterText, 'faq' => Heroicon::OutlinedQuestionMarkCircle,
             'legal' => Heroicon::OutlinedShieldCheck, 'video' => Heroicon::OutlinedPlayCircle, 'cta' => Heroicon::OutlinedChatBubbleLeftRight,
             'form' => Heroicon::OutlinedClipboardDocumentList, 'countdown' => Heroicon::OutlinedClock, 'highlights' => Heroicon::OutlinedStar,
-            'details' => Heroicon::OutlinedTableCells, 'buttons' => Heroicon::OutlinedCursorArrowRays, default => Heroicon::OutlinedBars3BottomLeft,
+            'details', 'specs' => Heroicon::OutlinedTableCells, 'product' => Heroicon::OutlinedShoppingBag, 'shop_perks' => Heroicon::OutlinedTruck,
+            'reviews' => Heroicon::OutlinedChatBubbleLeftEllipsis, 'buttons' => Heroicon::OutlinedCursorArrowRays, default => Heroicon::OutlinedBars3BottomLeft,
         };
     }
 
@@ -143,6 +179,63 @@ class Sections
                 TextInput::make('subheadline')->label('Kalimat pendukung')->maxLength(200),
                 self::upload('image')->label('Foto latar'),
                 Buttons::repeater('buttons', 'Tombol', [['label' => 'Daftar sekarang', 'action' => 'scroll', 'color' => 'light', 'size' => 'lg', 'icon' => 'none']]),
+            ],
+            'product' => [
+                Select::make('property_id')->label('Ambil data dari katalog Produk')->placeholder('Isi manual')->native(false)->searchable()->live()
+                    ->options(fn () => Property::query()->orderBy('name')->pluck('name', 'id'))
+                    ->afterStateUpdated(fn ($state, Set $set) => self::fillFromCatalog($state, $set))
+                    ->helperText('Nama, harga, varian, dan ukuran diisi dari katalog (rincian "Warna", "Varian", atau "Ukuran"). Foto diunggah di sini.'),
+                TextInput::make('name')->label('Nama produk')->required()->maxLength(120),
+                self::upload('images')->label('Foto produk (pengunjung bisa menggeser)')->multiple()->reorderable()->maxFiles(10),
+                Grid::make(['default' => 1, 'sm' => 2])->schema([
+                    TextInput::make('price')->label('Harga normal (Rp)')->numeric()->minValue(0)->maxValue(1000000000)->prefix('Rp'),
+                    TextInput::make('promo_price')->label('Harga promo (Rp)')->numeric()->minValue(0)->maxValue(1000000000)->prefix('Rp')
+                        ->helperText('Kosongkan bila tidak promo. Harga normal dicoret dan badge diskon % dihitung otomatis.'),
+                    Select::make('stock')->label('Status stok')->options(self::STOCK)->default('ready')->native(false),
+                    TextInput::make('stock_note')->label('Keterangan stok')->maxLength(60)->placeholder('Sisa 7 pcs / dikirim 7 hari'),
+                ]),
+                TextInput::make('variant_label')->label('Nama pilihan varian')->default('Warna')->maxLength(30),
+                Repeater::make('variants')->label('Varian')->maxItems(12)->defaultItems(0)->collapsible()
+                    ->itemLabel(fn (array $state) => $state['name'] ?? null)->schema([
+                        Grid::make(['default' => 1, 'sm' => 2])->schema([
+                            TextInput::make('name')->label('Nama varian')->required()->maxLength(40)->placeholder('Hitam'),
+                            ColorPicker::make('swatch')->label('Warna contoh (swatch)')->regex(LandingPage::COLOR_PATTERN),
+                        ]),
+                        self::upload('images')->label('Foto khusus varian ini (opsional)')->multiple()->reorderable()->maxFiles(6),
+                    ]),
+                TagsInput::make('sizes')->label('Ukuran (opsional)')->placeholder('Ketik ukuran lalu Enter, mis. S, M, L'),
+                Repeater::make('points')->label('Poin keunggulan')->maxItems(8)->defaultItems(0)->simple(
+                    TextInput::make('text')->required()->maxLength(120)->placeholder('Bahan adem dan tidak menerawang'),
+                ),
+                Buttons::repeater('buttons', 'Tombol', [['label' => 'Pesan Sekarang', 'action' => 'scroll', 'color' => 'brand', 'size' => 'lg', 'icon' => 'cart']]),
+            ],
+            'specs' => [
+                self::heading('Spesifikasi'),
+                Repeater::make('rows')->label('Baris')->maxItems(15)->defaultItems(0)->columns(2)->schema([
+                    TextInput::make('label')->label('Nama')->required()->maxLength(60)->datalist(['Ukuran', 'Bahan', 'Kapasitas', 'Berat', 'Isi paket', 'Garansi']),
+                    TextInput::make('value')->label('Isi')->required()->maxLength(160),
+                ]),
+            ],
+            'shop_perks' => [
+                self::heading('Belanja aman di sini'),
+                Repeater::make('items')->label('Keunggulan')->maxItems(8)->defaultItems(0)->columns(3)->schema([
+                    Select::make('icon')->label('Ikon')->options(Icons::options())->default('truck')->native(false),
+                    TextInput::make('title')->label('Judul')->required()->maxLength(60),
+                    TextInput::make('text')->label('Keterangan')->maxLength(120),
+                ]),
+            ],
+            'reviews' => [
+                self::heading('Ulasan pembeli'),
+                Repeater::make('items')->label('Ulasan')->maxItems(9)->defaultItems(0)->collapsible()
+                    ->helperText('Isi dengan ulasan asli dari pembeli Anda (dengan izin mereka). Ulasan karangan bisa menyesatkan pembeli dan melanggar aturan iklan.')
+                    ->itemLabel(fn (array $state) => $state['name'] ?? null)->schema([
+                        self::upload('photo', 800)->label('Foto pembeli atau foto produk yang diterima'),
+                        Grid::make(['default' => 1, 'sm' => 2])->schema([
+                            TextInput::make('name')->label('Nama')->required()->maxLength(80),
+                            Select::make('rating')->label('Bintang')->options([5 => '5', 4 => '4', 3 => '3', 2 => '2', 1 => '1'])->default(5)->native(false),
+                        ]),
+                        Textarea::make('quote')->label('Isi ulasan')->required()->rows(2)->maxLength(300),
+                    ]),
             ],
             'price' => [
                 TextInput::make('label')->label('Keterangan kecil')->default('Harga mulai dari')->maxLength(60),
@@ -237,7 +330,14 @@ class Sections
             'form' => [
                 Select::make('form_id')->label('Formulir yang dipakai')->placeholder('Formulir utama')->native(false)
                     ->options(fn () => LeadForm::query()->orderByDesc('is_primary')->orderBy('name')->pluck('name', 'id'))
-                    ->helperText('Buat dan atur kolomnya di menu Formulir.'),
+                    ->helperText('Atur kolomnya di menu Formulir.')
+                    ->createOptionForm(fn () => Industry::current()->key === 'retail' ? [
+                        TextInput::make('product')->label('Nama produk')->required()->maxLength(60)
+                            ->helperText('Dibuat dari template "Order produk": varian, jumlah, alamat lengkap, Transfer/COD, lalu ke WhatsApp admin.'),
+                        TagsInput::make('variants')->label('Varian / warna')->placeholder('Ketik lalu Enter'),
+                    ] : null)
+                    ->createOptionModalHeading('Buat formulir "Order produk"')
+                    ->createOptionUsing(fn (array $data) => FormTemplates::createOrderForm((string) ($data['product'] ?? ''), (array) ($data['variants'] ?? []))->getKey()),
                 TextInput::make('heading')->label('Judul formulir')->default('Daftar dan dapatkan info lengkap')->maxLength(100),
                 TextInput::make('intro')->label('Kalimat pengantar')->maxLength(200),
                 TextInput::make('button')->label('Teks tombol (opsional)')->maxLength(40)->helperText('Kosongkan untuk memakai teks tombol dari formulirnya.'),
@@ -267,5 +367,84 @@ class Sections
                     ->helperText('Hanya tebal, miring, daftar, dan tautan yang ditampilkan.'),
             ],
         };
+    }
+
+    /** Name, price, variants and sizes of a catalog product, for the product section. */
+    public static function fromCatalog(mixed $propertyId): ?array
+    {
+        $product = is_numeric($propertyId) ? Property::query()->find((int) $propertyId) : null;
+
+        if ($product === null) {
+            return null;
+        }
+
+        $variants = [];
+        $sizes = [];
+        $specs = [];
+
+        foreach ((array) $product->details as $label => $value) {
+            $list = array_values(array_filter(array_map('trim', preg_split('/[,;\/]+/', (string) $value)), 'strlen'));
+
+            if (preg_match('/warna|varian|color|motif/i', (string) $label)) {
+                $variants = [...$variants, ...$list];
+            } elseif (preg_match('/ukuran|size/i', (string) $label) && count($list) > 1) {
+                $sizes = [...$sizes, ...$list];
+            } else {
+                $specs[] = ['label' => (string) $label, 'value' => (string) $value];
+            }
+        }
+
+        return [
+            'name' => $product->name,
+            'price' => $product->price_from !== null ? (int) $product->price_from : null,
+            'variants' => array_values(array_unique($variants)),
+            'sizes' => array_values(array_unique($sizes)),
+            'specs' => $specs,
+        ];
+    }
+
+    private static function fillFromCatalog(mixed $propertyId, Set $set): void
+    {
+        if (! $data = self::fromCatalog($propertyId)) {
+            return;
+        }
+
+        $set('name', $data['name']);
+
+        if ($data['price'] !== null) {
+            $set('price', $data['price']);
+        }
+
+        if ($data['variants'] !== []) {
+            $set('variants', collect($data['variants'])->mapWithKeys(fn ($v) => [(string) Str::uuid() => ['name' => $v, 'swatch' => null, 'images' => []]])->all());
+        }
+
+        if ($data['sizes'] !== []) {
+            $set('sizes', $data['sizes']);
+        }
+    }
+
+    /**
+     * Prices of a product section: what is paid now, the struck-through normal price and the discount badge.
+     *
+     * @return array{now: ?int, was: ?int, off: int}
+     */
+    public static function prices(array $props): array
+    {
+        $price = is_numeric($props['price'] ?? null) ? (int) $props['price'] : 0;
+        $promo = is_numeric($props['promo_price'] ?? null) ? (int) $props['promo_price'] : 0;
+
+        if ($promo > 0 && $price > $promo) {
+            return ['now' => $promo, 'was' => $price, 'off' => (int) round(($price - $promo) / $price * 100)];
+        }
+
+        $now = $promo > 0 ? $promo : $price;
+
+        return ['now' => $now > 0 ? $now : null, 'was' => null, 'off' => 0];
+    }
+
+    public static function rupiah(int $amount): string
+    {
+        return 'Rp '.number_format($amount, 0, ',', '.');
     }
 }

@@ -11,13 +11,25 @@ class Templates
 {
     public const BLANK = 'kosong';
 
-    /** @return array<string, array{name: string, description: string}> */
-    public static function options(): array
+    /**
+     * The templates an agency of this industry can start from (null: all); templates without an industry are for everyone.
+     *
+     * @return array<string, array{name: string, description: string}>
+     */
+    public static function options(?string $industry = null): array
     {
-        return array_map(fn ($t) => ['name' => $t['name'], 'description' => $t['description']], self::all());
+        $templates = array_filter(self::all(), fn ($t) => $industry === null || ($t['industry'] ?? $industry) === $industry);
+
+        return array_map(fn ($t) => ['name' => $t['name'], 'description' => $t['description']], $templates);
     }
 
-    /** @return array{name: string, description: string, color: string, font: string, meta: string, blocks: list<array<string, mixed>>} */
+    /** A shop template built around one product, whose product and order form can be picked when the page is made. */
+    public static function sellsProduct(?string $key): bool
+    {
+        return ! empty(self::all()[$key ?? '']['product']);
+    }
+
+    /** @return array{name: string, description: string, color: string, font: string, meta: string, blocks: list<array<string, mixed>>, page_events?: array<string, string>, navigation?: array<string, mixed>} */
     public static function get(?string $key): array
     {
         return self::all()[$key] ?? self::all()[self::BLANK];
@@ -40,6 +52,26 @@ class Templates
     public static function all(): array
     {
         $form = self::b('form', ['heading' => 'Daftar dan dapatkan info lengkap', 'intro' => 'Isi nama dan nomor WhatsApp, tim kami akan menghubungi Anda.', 'button' => 'Kirim']);
+        $perks = self::b('shop_perks', ['heading' => 'Belanja aman di sini', 'items' => [
+            ['icon' => 'truck', 'title' => 'Gratis / diskon ongkir', 'text' => 'Tulis syarat ongkir Anda, misalnya untuk pembelian minimal tertentu.'],
+            ['icon' => 'cash', 'title' => 'Bisa COD', 'text' => 'Bayar di tempat saat paket sampai.'],
+            ['icon' => 'return', 'title' => 'Retur dengan video unboxing', 'text' => 'Rekam video saat membuka paket agar klaim retur mudah diproses.'],
+            ['icon' => 'box', 'title' => 'Dikirim dengan JNE', 'text' => 'Nomor resi dikirim lewat WhatsApp.'],
+            ['icon' => 'clock', 'title' => 'Jam layanan', 'text' => 'Setiap hari 08.00 - 21.00 WIB.'],
+        ]]);
+        $specs = self::b('specs', ['heading' => 'Spesifikasi', 'rows' => [
+            ['label' => 'Ukuran', 'value' => 'Tulis ukuran produk'], ['label' => 'Bahan', 'value' => 'Tulis bahan produk'],
+            ['label' => 'Kapasitas', 'value' => 'Tulis kapasitas atau berat'], ['label' => 'Isi paket', 'value' => 'Tulis isi paket'],
+        ]]);
+        $reviews = self::b('reviews', ['heading' => 'Ulasan pembeli', 'items' => [
+            ['name' => 'Nama pembeli', 'rating' => 5, 'quote' => 'Ganti dengan ulasan asli pembeli Anda.', 'photo' => null],
+        ]]);
+        $shopFaq = self::b('faq', ['heading' => 'Tanya jawab', 'items' => [
+            ['q' => 'Apakah bisa COD?', 'a' => 'Bisa, untuk wilayah yang dijangkau kurir. Pilih COD di formulir order.'],
+            ['q' => 'Berapa lama pengiriman?', 'a' => 'Biasanya 2-5 hari kerja untuk Pulau Jawa dan lebih lama untuk luar Jawa.'],
+            ['q' => 'Bagaimana jika barang rusak atau tidak sesuai?', 'a' => 'Kirim video unboxing ke admin, kami bantu proses retur atau tukar.'],
+        ]]);
+        $orderForm = self::b('form', ['heading' => 'Form order', 'intro' => 'Isi data pesanan, admin kami langsung konfirmasi lewat WhatsApp.', 'button' => 'Pesan Sekarang']);
         $cta = self::b('cta', ['heading' => 'Tertarik? Tanyakan langsung', 'text' => 'Tim kami siap menjawab pertanyaan Anda.', 'label' => 'Chat via WhatsApp', 'message' => 'Halo, saya tertarik dengan unit yang ditawarkan.']);
 
         return [
@@ -50,6 +82,7 @@ class Templates
             ],
 
             'kpr' => [
+                'industry' => 'properti',
                 'name' => 'Rumah KPR / subsidi', 'description' => 'Fokus cicilan, uang muka, dan syarat KPR. Cocok untuk rumah pertama.',
                 'color' => '#16a34a', 'font' => 'ramah', 'meta' => 'Rumah dengan cicilan ringan dan proses KPR dibantu. Daftar untuk simulasi gratis.',
                 'blocks' => [
@@ -74,6 +107,7 @@ class Templates
             ],
 
             'cluster' => [
+                'industry' => 'properti',
                 'name' => 'Cluster / perumahan premium', 'description' => 'Fokus fasilitas, tipe unit, dan lokasi. Tampilan elegan.',
                 'color' => '#1d4ed8', 'font' => 'elegan', 'meta' => 'Hunian cluster dengan fasilitas lengkap dan lokasi strategis. Jadwalkan kunjungan.',
                 'blocks' => [
@@ -100,6 +134,7 @@ class Templates
             ],
 
             'villa' => [
+                'industry' => 'properti',
                 'name' => 'Villa / properti investasi', 'description' => 'Fokus lokasi, potensi sewa, dan legalitas. Tanpa janji angka keuntungan.',
                 'color' => '#0f766e', 'font' => 'elegan', 'meta' => 'Villa di lokasi wisata dengan legalitas jelas. Hubungi kami untuk informasi dan kunjungan.',
                 'blocks' => [
@@ -130,6 +165,7 @@ class Templates
             ],
 
             'kavling' => [
+                'industry' => 'properti',
                 'name' => 'Kavling / tanah', 'description' => 'Fokus ukuran kavling, harga per meter, legalitas, dan lokasi.',
                 'color' => '#b45309', 'font' => 'modern', 'meta' => 'Kavling siap bangun dengan legalitas jelas dan cicilan fleksibel. Daftar untuk survei lokasi.',
                 'blocks' => [
@@ -156,6 +192,7 @@ class Templates
             ],
 
             'second' => [
+                'industry' => 'properti',
                 'name' => 'Listing rumah second', 'description' => 'Satu unit: foto besar, harga jelas, rincian, dan tombol hubungi.',
                 'color' => '#dc2626', 'font' => 'modern', 'meta' => 'Rumah dijual dengan foto lengkap dan harga jelas. Hubungi untuk jadwal melihat rumah.',
                 'blocks' => [
@@ -170,6 +207,62 @@ class Templates
                     self::b('text', ['heading' => 'Tentang rumah ini', 'html' => '<p>Tulis kondisi rumah, alasan dijual, dan hal yang membuat rumah ini menarik.</p>']),
                     self::b('location', ['heading' => 'Lokasi', 'address' => 'Alamat atau patokan lokasi', 'nearby' => []]),
                     $form, $cta,
+                ],
+            ],
+
+            'produk_promo' => [
+                'industry' => 'retail', 'product' => true,
+                'name' => 'Produk tunggal – promo', 'description' => 'Foto produk, harga coret dan harga promo, keunggulan belanja, spesifikasi, ulasan, tanya jawab, dan formulir order.',
+                'color' => '#ea580c', 'font' => 'ramah', 'meta' => 'Promo spesial: pesan sekarang, bisa COD dan gratis ongkir untuk wilayah tertentu.',
+                'blocks' => [
+                    self::b('product', ['name' => 'Nama produk Anda', 'images' => [], 'price' => 199000, 'promo_price' => 149000, 'stock' => 'low', 'stock_note' => 'Promo terbatas',
+                        'variant_label' => 'Warna', 'variants' => [], 'sizes' => [],
+                        'points' => ['Tulis keunggulan utama produk', 'Bahan dan kualitas yang membuat pembeli yakin', 'Manfaat yang dirasakan pembeli'],
+                        'buttons' => [['label' => 'Pesan Sekarang', 'action' => 'scroll', 'color' => 'brand', 'size' => 'lg', 'icon' => 'cart']]]),
+                    $perks,
+                    $specs,
+                    $reviews,
+                    $shopFaq,
+                    $orderForm,
+                ],
+            ],
+
+            'produk_varian' => [
+                'industry' => 'retail', 'product' => true,
+                'name' => 'Produk dengan varian warna', 'description' => 'Seperti produk tunggal, ditambah pilihan warna dengan contoh warna (swatch), galeri foto per warna, dan pilihan ukuran.',
+                'color' => '#7c3aed', 'font' => 'modern', 'meta' => 'Tersedia banyak pilihan warna dan ukuran. Pesan sekarang, bisa COD.',
+                'blocks' => [
+                    self::b('product', ['name' => 'Nama produk Anda', 'images' => [], 'price' => 179000, 'promo_price' => 139000, 'stock' => 'ready', 'stock_note' => '',
+                        'variant_label' => 'Warna', 'variants' => [
+                            ['name' => 'Hitam', 'swatch' => '#111827', 'images' => []],
+                            ['name' => 'Putih', 'swatch' => '#f9fafb', 'images' => []],
+                            ['name' => 'Navy', 'swatch' => '#1e3a8a', 'images' => []],
+                        ], 'sizes' => ['S', 'M', 'L', 'XL'],
+                        'points' => ['Unggah foto tiap warna di bagian Varian', 'Tulis bahan dan ukuran yang tersedia', 'Sebutkan bonus atau garansi bila ada'],
+                        'buttons' => [['label' => 'Pesan Sekarang', 'action' => 'scroll', 'color' => 'brand', 'size' => 'lg', 'icon' => 'cart']]]),
+                    $perks,
+                    $specs,
+                    $reviews,
+                    $shopFaq,
+                    $orderForm,
+                ],
+            ],
+
+            'terima_kasih' => [
+                'industry' => 'retail',
+                'name' => 'Halaman terima kasih', 'description' => 'Untuk dibuka setelah order: ucapan, langkah berikutnya, satu tombol WhatsApp, dan event pixel Lead saat dibuka.',
+                'color' => '#16a34a', 'font' => 'ramah', 'meta' => 'Terima kasih, pesanan Anda sudah kami terima.',
+                'page_events' => ['meta' => 'Lead', 'tiktok' => 'Lead', 'google' => 'generate_lead'],
+                'navigation' => ['auto_form' => false],
+                'blocks' => [
+                    self::b('text', ['heading' => 'Terima kasih, pesanan Anda sudah kami terima!', 'html' => '<p>Admin kami akan segera menghubungi Anda lewat WhatsApp untuk konfirmasi pesanan.</p>']),
+                    self::b('highlights', ['heading' => 'Langkah berikutnya', 'items' => [
+                        ['title' => '1. Konfirmasi pesanan', 'text' => 'Admin mengecek varian, jumlah, dan alamat kirim Anda.'],
+                        ['title' => '2. Total dan ongkir', 'text' => 'Anda menerima total harga termasuk ongkir lewat WhatsApp.'],
+                        ['title' => '3. Pembayaran dan pengiriman', 'text' => 'Transfer sesuai total, atau bayar di tempat bila memilih COD. Nomor resi kami kirim setelah paket dikirim.'],
+                    ]]),
+                    self::b('buttons', ['heading' => 'Belum dihubungi?', 'text' => 'Chat admin kami langsung.', 'align' => 'center',
+                        'buttons' => [['label' => 'Chat admin via WhatsApp', 'action' => 'whatsapp', 'wa_target' => 'rotate', 'wa_message' => 'Halo admin, saya baru order {produk}. Mohon dicek ya.', 'color' => 'wa', 'size' => 'lg', 'icon' => 'whatsapp']]]),
                 ],
             ],
         ];

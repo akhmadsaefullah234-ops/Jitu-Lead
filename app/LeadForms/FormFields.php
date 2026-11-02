@@ -55,6 +55,7 @@ class FormFields
         'variant' => 'Varian / pilihan produk',
         'quantity' => 'Jumlah',
         'shipping_address' => 'Alamat kirim',
+        'payment_type' => 'Cara bayar (Transfer / COD)',
         'note' => 'Catatan',
         'custom' => 'Kolom tambahan lead',
     ];
@@ -70,8 +71,17 @@ class FormFields
         'kode_pos' => 'Kode pos',
     ];
 
-    /** Required when the address is required. */
+    /** Required when the address is required, unless the field picks its own (required_parts). */
     public const ADDRESS_REQUIRED = ['street', 'kecamatan', 'kota'];
+
+    /** Which parts of a required address must be filled in. */
+    public static function requiredParts(array $field): array
+    {
+        $parts = (array) ($field['parts'] ?? array_keys(self::ADDRESS_PARTS));
+        $own = array_values(array_intersect($parts, (array) ($field['required_parts'] ?? [])));
+
+        return $own !== [] ? $own : array_values(array_intersect($parts, self::ADDRESS_REQUIRED));
+    }
 
     public const HIDDEN_SOURCES = [
         'utm_source' => 'utm_source', 'utm_medium' => 'utm_medium', 'utm_campaign' => 'utm_campaign', 'utm_content' => 'utm_content', 'utm_term' => 'utm_term',
@@ -114,6 +124,9 @@ class FormFields
                         ->helperText(fn (Get $get) => $get('type') === 'checkbox' ? 'Kosongkan untuk satu kotak centang, misalnya "Saya setuju dihubungi".' : null),
                     Select::make('parts')->label('Sub-isian alamat')->multiple()->options(self::ADDRESS_PARTS)->default(array_keys(self::ADDRESS_PARTS))->columnSpanFull()
                         ->visible($has(['address'])),
+                    Select::make('required_parts')->label('Sub-isian yang wajib (bila alamat wajib diisi)')->multiple()->options(self::ADDRESS_PARTS)
+                        ->default(self::ADDRESS_REQUIRED)->columnSpanFull()->visible($has(['address']))
+                        ->helperText('Kosongkan untuk memakai bawaan: alamat, kecamatan, dan kota/kabupaten.'),
                     Select::make('source')->label('Isi otomatis dari')->options(self::HIDDEN_SOURCES)->default('utm_source')->native(false)->live()->visible($has(['hidden'])),
                     TextInput::make('value')->label(fn (Get $get) => $get('source') === 'query' ? 'Nama parameter URL' : 'Nilai')->maxLength(100)
                         ->visible(fn (Get $get) => $get('type') === 'hidden' && in_array($get('source'), ['query', 'static'], true)),
@@ -165,6 +178,8 @@ class FormFields
                 'required' => $type !== 'hidden' && ! empty($f['required']),
                 'options' => in_array($type, self::WITH_OPTIONS, true) ? array_values(array_filter(array_map(fn ($o) => trim((string) $o), (array) ($f['options'] ?? [])), 'strlen')) : null,
                 'parts' => $type === 'address' ? array_values(array_intersect(array_keys(self::ADDRESS_PARTS), (array) ($f['parts'] ?? array_keys(self::ADDRESS_PARTS)))) ?: array_keys(self::ADDRESS_PARTS) : null,
+                'required_parts' => $type === 'address' && filled($f['required_parts'] ?? null)
+                    ? (array_values(array_intersect(array_keys(self::ADDRESS_PARTS), (array) $f['required_parts'])) ?: null) : null,
                 'source' => $type === 'hidden' ? (isset(self::HIDDEN_SOURCES[$f['source'] ?? '']) ? $f['source'] : 'utm_source') : null,
                 'value' => $type === 'hidden' && filled($f['value'] ?? null) ? (string) $f['value'] : null,
                 'maps_to' => isset(self::MAPS[$f['maps_to'] ?? '']) && ($f['maps_to'] ?? '') !== '' ? $f['maps_to'] : null,
@@ -192,7 +207,7 @@ class FormFields
             $problems[] = 'Formulir perlu kolom yang disimpan ke "Telepon / WhatsApp lead" atau "Email lead".';
         }
 
-        foreach (['name', 'phone', 'email', 'quantity'] as $single) {
+        foreach (['name', 'phone', 'email', 'quantity', 'payment_type'] as $single) {
             if (count(array_keys($maps, $single, true)) > 1) {
                 $problems[] = 'Hanya satu kolom yang boleh disimpan ke "'.self::MAPS[$single].'".';
             }
@@ -225,8 +240,9 @@ class FormFields
             switch ($f['type']) {
                 case 'address':
                     $rules[$name] = [$req, 'array'];
+                    $mustFill = self::requiredParts($f);
                     foreach ($f['parts'] as $part) {
-                        $partReq = $req === 'required' && in_array($part, self::ADDRESS_REQUIRED, true) ? 'required' : 'nullable';
+                        $partReq = $req === 'required' && in_array($part, $mustFill, true) ? 'required' : 'nullable';
                         $rules[$name.'.'.$part] = match ($part) {
                             'kode_pos' => [$partReq, 'regex:/^\d{5}$/'],
                             'provinsi' => [$partReq, 'string', 'max:60'],
@@ -325,6 +341,13 @@ class FormFields
             $answers[] = ['key' => $f['key'], 'label' => $f['label'], 'value' => $value];
             $vars[$f['key']] = $value;
 
+            if ($f['type'] === 'address' && ($f['maps_to'] ?? null) === 'shipping_address' && is_array($raw)) {
+                $province = Regions::province((string) ($raw['provinsi'] ?? '')) ?? Regions::provinceOfCity((string) ($raw['kota'] ?? ''));
+                if ($province !== null) {
+                    $lead['shipping_province'] = $province;
+                }
+            }
+
             match ($f['maps_to'] ?? null) {
                 'name' => $lead['name'] = mb_substr($value, 0, 120),
                 'phone' => $lead['phone'] = $value,
@@ -332,6 +355,7 @@ class FormFields
                 'variant' => $variants[] = $value,
                 'quantity' => $lead['quantity'] = max(1, min(100000, (int) $value)),
                 'shipping_address' => $lead['shipping_address'] = mb_substr($value, 0, 500),
+                'payment_type' => $lead['payment_type'] = self::paymentType($value),
                 'note' => $lead['note'] = trim(($lead['note'] ?? '')."\n".$value),
                 default => $custom[$f['label']] = mb_substr($value, 0, 500),
             };
@@ -348,6 +372,12 @@ class FormFields
         ]);
 
         return ['lead' => $lead, 'custom' => $custom, 'answers' => $answers, 'vars' => $vars, 'photos' => $photos];
+    }
+
+    /** "Transfer", "Transfer bank", "COD", "Bayar di tempat (COD)" => transfer | cod */
+    public static function paymentType(string $answer): string
+    {
+        return preg_match('/\bcod\b|bayar di tempat|cash on delivery/i', $answer) ? 'cod' : 'transfer';
     }
 
     /** One answer as text. */

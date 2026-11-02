@@ -4,6 +4,7 @@ namespace App\Filament\Resources\LandingPages\Pages;
 
 use App\Filament\Resources\LandingPages\LandingPageResource;
 use App\LandingPages\BlockFormat;
+use App\LandingPages\Navigation;
 use App\LandingPages\PageData;
 use App\Models\Tenant;
 use App\Support\CurrentTenant;
@@ -43,6 +44,7 @@ class EditLandingPage extends EditRecord
     protected function mutateFormDataBeforeFill(array $data): array
     {
         $data['blocks'] = BlockFormat::toForm($data['blocks'] ?? []);
+        $data['navigation'] = Navigation::of($data['navigation'] ?? null);
 
         return $data;
     }
@@ -50,6 +52,7 @@ class EditLandingPage extends EditRecord
     protected function mutateFormDataBeforeSave(array $data): array
     {
         $data['blocks'] = BlockFormat::fromForm($data['blocks'] ?? []);
+        $data['navigation'] = Navigation::clean($data['navigation'] ?? null);
 
         return static::withPublishing($data, $this->record->published_at !== null);
     }
@@ -65,7 +68,7 @@ class EditLandingPage extends EditRecord
             $state = $this->form->getRawState();
             $page = $this->record->replicate();
             $page->forceFill(array_merge(
-                Arr::only($state, ['title', 'color', 'font', 'description', 'meta_title', 'whatsapp_number', 'logo', 'og_image']),
+                Arr::only($state, ['title', 'color', 'font', 'description', 'meta_title', 'whatsapp_number', 'logo', 'og_image', 'navigation']),
                 ['blocks' => BlockFormat::fromForm($state['blocks'] ?? []), 'slug' => $this->record->slug],
             ));
             $page->setRelation('tenant', $this->record->tenant);

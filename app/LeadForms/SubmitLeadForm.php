@@ -83,7 +83,7 @@ class SubmitLeadForm
     /** Lead columns, extra fields, the answers as a note, and stored photos. A returning lead keeps what it had. */
     private function applyAnswers(Lead $lead, bool $created, LeadForm $form, array $result, Tenant $tenant): void
     {
-        foreach (['variant', 'quantity', 'shipping_address'] as $column) {
+        foreach (['variant', 'quantity', 'shipping_address', 'shipping_province', 'payment_type'] as $column) {
             if (isset($result['lead'][$column]) && ($created || blank($lead->{$column}))) {
                 $lead->{$column} = $result['lead'][$column];
             }
@@ -131,7 +131,7 @@ class SubmitLeadForm
     {
         $after = (array) $form->after_submit;
         $message = trim((string) ($after['message'] ?? '')) ?: 'Terima kasih! Tim kami akan segera menghubungi Anda.';
-        $vars += ['judul' => $page?->title ?? $form->name, 'produk' => $vars['produk'] ?? ($page?->property?->name ?? '')];
+        $vars += ['judul' => $page?->title ?? $form->name, 'produk' => $vars['produk'] ?? ($page?->productName() ?? '')];
 
         if (($after['type'] ?? 'message') === 'redirect') {
             $url = ($after['page_kind'] ?? 'landing') === 'url'

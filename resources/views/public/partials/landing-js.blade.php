@@ -25,6 +25,36 @@
         };
         tick();
     });
+    // Product: a variant shows its own photos, and every pick is filled in on the order form when it has that choice.
+    var pickInForm = function (value) {
+        var v = value.toLowerCase();
+        document.querySelectorAll('#daftar select').forEach(function (sel) {
+            Array.prototype.forEach.call(sel.options, function (o) { if (o.value.toLowerCase() === v) { sel.value = o.value; sel.dispatchEvent(new Event('change', { bubbles: true })); } });
+        });
+        document.querySelectorAll('#daftar input[type=radio]').forEach(function (r) {
+            if (r.value.toLowerCase() === v) { r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); }
+        });
+    };
+    document.querySelectorAll('[data-product]').forEach(function (box) {
+        box.querySelectorAll('.chips').forEach(function (group) {
+            group.addEventListener('click', function (e) {
+                var chip = e.target.closest('.chip');
+                if (!chip) { return; }
+                group.querySelectorAll('.chip').forEach(function (c) { c.setAttribute('aria-pressed', c === chip ? 'true' : 'false'); });
+                var label = group.parentNode.querySelector('[data-vname]');
+                if (label) { label.textContent = chip.getAttribute('data-pick'); }
+                var v = chip.getAttribute('data-v');
+                if (v !== null && (box.querySelector('[data-gal="' + v + '"]') || box.querySelector('[data-gal="all"]'))) {
+                    var own = box.querySelector('[data-gal="' + v + '"]');
+                    box.querySelectorAll('[data-gal]').forEach(function (g) {
+                        g.hidden = own ? g !== own : g.getAttribute('data-gal') !== 'all';
+                    });
+                    if (own) { own.scrollLeft = 0; }
+                }
+                pickInForm(chip.getAttribute('data-pick'));
+            });
+        });
+    });
     document.querySelectorAll('[data-yt]').forEach(function (a) {
         a.addEventListener('click', function (e) {
             e.preventDefault();

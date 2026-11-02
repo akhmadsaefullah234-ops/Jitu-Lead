@@ -25,12 +25,21 @@ class Icons
         'hospital' => 'M5 4h14v17H5zM12 8v6M9 11h6',
         'pin' => 'M12 21s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12zM12 11.5h.01',
         'check' => 'M5 12l5 5 9-10',
+        'truck' => 'M3 6h11v10H3zM14 10h4l3 3v3h-7M7 19.5h.01M17.5 19.5h.01',
+        'cash' => 'M3 7h18v10H3zM12 12h.01M6 10v4M18 10v4',
+        'return' => 'M4 9h11a5 5 0 0 1 0 10H9M4 9l4-4M4 9l4 4',
+        'video' => 'M3 7h12v10H3zM15 10l6-3v10l-6-3',
+        'clock' => 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2',
+        'tag' => 'M3 12V4h8l10 10-8 8zM7.5 7.5h.01',
+        'box' => 'M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10',
     ];
 
     private const LABELS = [
         'home' => 'Rumah', 'shield' => 'Keamanan', 'tree' => 'Taman / hijau', 'water' => 'Air bersih', 'road' => 'Jalan / akses',
         'wifi' => 'Internet', 'car' => 'Carport / parkir', 'pool' => 'Kolam renang', 'school' => 'Sekolah', 'store' => 'Pertokoan',
         'cctv' => 'CCTV', 'bolt' => 'Listrik', 'worship' => 'Tempat ibadah', 'hospital' => 'Kesehatan', 'pin' => 'Lokasi', 'check' => 'Centang',
+        'truck' => 'Kurir / ongkir', 'cash' => 'COD / bayar di tempat', 'return' => 'Retur / tukar', 'video' => 'Video unboxing',
+        'clock' => 'Jam layanan', 'tag' => 'Diskon / promo', 'box' => 'Paket / kemasan',
     ];
 
     /** @return array<string, string> */

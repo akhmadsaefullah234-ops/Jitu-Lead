@@ -2,6 +2,9 @@
 
 namespace App\LeadForms;
 
+use App\Models\LeadForm;
+use Illuminate\Support\Str;
+
 /**
  * Starting points for a new form: fields, look and what happens after sending. All of it is editable.
  */
@@ -9,10 +12,48 @@ class FormTemplates
 {
     public const BLANK = 'kosong';
 
-    /** @return array<string, array{name: string, description: string}> */
-    public static function options(): array
+    public const ORDER = 'order';
+
+    /**
+     * The templates an agency of this industry can start from (null: all). Templates without an industry are for everyone.
+     *
+     * @return array<string, array{name: string, description: string}>
+     */
+    public static function options(?string $industry = null): array
     {
-        return array_map(fn ($t) => ['name' => $t['name'], 'description' => $t['description']], self::all());
+        $templates = array_filter(self::all(), fn ($t) => $industry === null || ($t['industry'] ?? $industry) === $industry);
+
+        return array_map(fn ($t) => ['name' => $t['name'], 'description' => $t['description']], $templates);
+    }
+
+    /**
+     * A new "Order produk" form for one product: its variants become the choices and its name goes into the WhatsApp
+     * summary. Must run inside the tenant.
+     *
+     * @param  list<string>  $variants
+     */
+    public static function createOrderForm(string $productName, array $variants = []): LeadForm
+    {
+        $name = 'Order '.(trim($productName) !== '' ? Str::limit(trim($productName), 60, '') : 'produk');
+        $base = Str::slug($name) ?: 'order-produk';
+        $slug = $base;
+
+        for ($i = 2; LeadForm::query()->where('slug', $slug)->exists(); $i++) {
+            $slug = $base.'-'.$i;
+        }
+
+        $attributes = self::attributes(self::ORDER);
+        $variants = array_values(array_filter(array_map(fn ($v) => trim((string) $v), $variants), 'strlen'));
+
+        if ($variants !== []) {
+            $attributes['fields'] = array_map(fn ($f) => $f['key'] === 'varian' ? ['options' => $variants] + $f : $f, $attributes['fields']);
+        }
+
+        if (trim($productName) !== '') {
+            $attributes['after_submit']['wa_message'] = str_replace('{produk}', trim($productName), $attributes['after_submit']['wa_message']);
+        }
+
+        return LeadForm::create(['name' => $name, 'slug' => $slug, 'status' => 'active', 'is_primary' => false] + $attributes);
     }
 
     /** @return array<string, mixed> the form's attributes for this template */
@@ -84,6 +125,25 @@ class FormTemplates
                 'submit' => ['label' => 'Pesan sekarang', 'icon' => 'whatsapp', 'color' => 'wa'],
                 'after' => ['type' => 'whatsapp', 'wa_target' => 'rotate',
                     'wa_message' => "Halo admin, saya {nama} mau pesan:\n{produk} warna {warna} ukuran {ukuran}, jumlah {jumlah}.\nAlamat: {alamat}\nMohon info ongkir dan totalnya."],
+            ],
+            self::ORDER => [
+                'industry' => 'retail',
+                'name' => 'Order produk', 'description' => 'Untuk satu produk: varian, jumlah, alamat kirim lengkap, dan Transfer/COD, lalu langsung ke WhatsApp admin dengan ringkasan order.',
+                'design' => ['title' => 'Form order', 'description' => 'Isi data pesanan. Setelah dikirim, Anda tersambung ke WhatsApp admin untuk konfirmasi total dan ongkir.'],
+                'fields' => [
+                    $name, $phone,
+                    self::f('alamat', 'address', 'Alamat lengkap', ['required' => true, 'maps_to' => 'shipping_address',
+                        'parts' => ['street', 'landmark', 'rt_rw', 'kelurahan', 'kecamatan', 'kota', 'provinsi', 'kode_pos'],
+                        'required_parts' => ['street', 'landmark', 'rt_rw', 'kecamatan', 'kota']]),
+                    self::f('varian', 'select', 'Varian / warna', ['required' => true, 'options' => ['Hitam', 'Putih'], 'maps_to' => 'variant']),
+                    self::f('jumlah', 'number', 'Jumlah', ['required' => true, 'maps_to' => 'quantity', 'placeholder' => '1']),
+                    self::f('pembayaran', 'radio', 'Pembayaran', ['required' => true, 'options' => ['Transfer', 'COD (bayar di tempat)'], 'maps_to' => 'payment_type']),
+                    self::f('catatan', 'textarea', 'Catatan (opsional)', ['maps_to' => 'note', 'placeholder' => 'Misalnya ukuran, warna cadangan, atau waktu kirim']),
+                    ...$utm,
+                ],
+                'submit' => ['label' => 'Pesan Sekarang', 'icon' => 'whatsapp', 'color' => 'wa'],
+                'after' => ['type' => 'whatsapp', 'wa_target' => 'rotate',
+                    'wa_message' => "Halo admin, saya {nama} mau order:\n{produk} varian {varian}, jumlah {jumlah}.\nPembayaran: {pembayaran}\nAlamat: {alamat}\nMohon info total dan ongkirnya."],
             ],
             'janji' => [
                 'name' => 'Janji temu / survei', 'description' => 'Pengunjung memilih tanggal dan waktu kunjungan.',

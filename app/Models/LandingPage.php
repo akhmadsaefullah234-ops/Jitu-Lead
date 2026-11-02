@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['title', 'slug', 'status', 'color', 'description', 'property_id', 'blocks', 'published_at', 'font', 'logo', 'whatsapp_number', 'meta_title', 'og_image', 'template', 'page_events'])]
+#[Fillable(['title', 'slug', 'status', 'color', 'description', 'property_id', 'blocks', 'published_at', 'font', 'logo', 'whatsapp_number', 'meta_title', 'og_image', 'template', 'page_events', 'navigation'])]
 class LandingPage extends Model
 {
     use BelongsToTenant;
@@ -28,6 +28,7 @@ class LandingPage extends Model
             'blocks' => 'array',
             'published_at' => 'datetime',
             'page_events' => 'array',
+            'navigation' => 'array',
         ];
     }
 
@@ -40,6 +41,22 @@ class LandingPage extends Model
     public function sections(): array
     {
         return BlockFormat::normalize($this->blocks);
+    }
+
+    /** The product the page sells: its catalog product, else the name in its first product section. */
+    public function productName(): string
+    {
+        if (filled($this->property?->name)) {
+            return (string) $this->property->name;
+        }
+
+        foreach ($this->sections() as $section) {
+            if ($section['type'] === 'product' && filled($section['props']['name'] ?? null)) {
+                return (string) $section['props']['name'];
+            }
+        }
+
+        return '';
     }
 
     public function isPublished(): bool

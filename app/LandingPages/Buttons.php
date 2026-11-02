@@ -58,7 +58,7 @@ class Buttons
     }
 
     /** @return list<mixed> */
-    public static function fields(bool $withScroll = true): array
+    public static function fields(bool $withScroll = true, bool $withSize = true): array
     {
         $is = fn (string $action) => fn (Get $get) => $get('action') === $action;
 
@@ -68,7 +68,7 @@ class Buttons
                 Select::make('action')->label('Aksi saat diklik')->options($withScroll ? self::ACTIONS : array_diff_key(self::ACTIONS, ['scroll' => 1]))
                     ->default('whatsapp')->required()->native(false)->live(),
                 Select::make('color')->label('Warna')->options(self::COLORS)->default('brand')->native(false),
-                Select::make('size')->label('Ukuran')->options(self::SIZES)->default('md')->native(false),
+                Select::make('size')->label('Ukuran')->options(self::SIZES)->default('md')->native(false)->visible($withSize),
                 Select::make('icon')->label('Ikon')->options(array_map(fn ($i) => $i[0], self::ICONS))->default('none')->native(false),
             ]),
             Grid::make(['default' => 1, 'sm' => 2])->visible($is('whatsapp'))->schema([

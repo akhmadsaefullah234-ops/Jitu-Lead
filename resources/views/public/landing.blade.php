@@ -22,7 +22,8 @@
         :root { --c: {{ $color }}; --ink: #111827; --mute: #4b5563; --line: #e5e7eb; --soft: #f9fafb; --f: {!! $bodyFont !!}; --fh: {!! $headingFont !!}; }
         * { box-sizing: border-box; }
         html { scroll-behavior: smooth; }
-        body { margin: 0; font-family: var(--f); color: var(--ink); background: #fff; line-height: 1.6; padding-bottom: 4.5rem; }
+        body { margin: 0; font-family: var(--f); color: var(--ink); background: #fff; line-height: 1.6; }
+        html, body { overflow-x: clip; }
         img { max-width: 100%; display: block; height: auto; }
         a { color: inherit; }
         .wrap { max-width: 64rem; margin: 0 auto; padding: 0 1.25rem; }
@@ -98,20 +99,51 @@
         .count { display: flex; gap: .6rem; flex-wrap: wrap; } .count div { min-width: 4.5rem; text-align: center; background: #fff; color: var(--ink); border-radius: .8rem; padding: .6rem .5rem; border: 1px solid var(--line); }
         .count b { display: block; font-size: 1.6rem; color: var(--c); line-height: 1.1; }
         .foot { padding: 2rem 0; text-align: center; color: var(--mute); font-size: .8125rem; }
+        .top .jb { flex: none; }
         .dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: flex; gap: .6rem; padding: .6rem .8rem calc(.6rem + env(safe-area-inset-bottom)); background: #fff; border-top: 1px solid var(--line); }
-        .dock .btn { flex: 1; }
-        @media (min-width: 900px) { body { padding-bottom: 0; } .dock { display: none; } }
+        .dock .jb { flex: 1 1 0; min-width: 0; padding-left: .6rem; padding-right: .6rem; }
+        body.has-dock { padding-bottom: 4.5rem; }
+        .waf { position: fixed; right: 1rem; bottom: calc(1rem + env(safe-area-inset-bottom)); z-index: 31; width: 3.5rem; height: 3.5rem; border-radius: 50%; background: #16a34a; color: #fff; display: grid; place-items: center; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+        body.has-dock .waf { bottom: calc(5rem + env(safe-area-inset-bottom)); }
+        @media (min-width: 900px) { body.has-dock { padding-bottom: 0; } .dock { display: none; } body.has-dock .waf { bottom: 1.5rem; } }
+        .prd-g { display: grid; gap: 1.25rem; grid-template-columns: minmax(0, 1fr); }
+        @media (min-width: 800px) { .prd-g { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: 2rem; } }
+        .prd-media, .prd-info { min-width: 0; }
+        .sl { display: flex; gap: .5rem; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; border-radius: 1rem; -webkit-overflow-scrolling: touch; }
+        .sl::-webkit-scrollbar { display: none; }
+        .sl[hidden] { display: none; }
+        .sl img { flex: 0 0 100%; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; scroll-snap-align: center; border-radius: 1rem; background: var(--soft); }
+        .sl-hint { margin: .4rem 0 0; font-size: .8rem; color: var(--mute); text-align: center; }
+        .prd-name { font-family: var(--fh); font-size: clamp(1.5rem, 5vw, 2.2rem); line-height: 1.2; margin: .3rem 0 .5rem; letter-spacing: -.01em; overflow-wrap: anywhere; }
+        .prd-name::after { display: none; }
+        .off { display: inline-block; background: #dc2626; color: #fff; font-weight: 800; font-size: .85rem; padding: .2rem .6rem; border-radius: 999px; }
+        .prc { display: flex; flex-wrap: wrap; align-items: baseline; gap: .2rem .7rem; margin-bottom: .5rem; }
+        .prc s { color: var(--mute); font-size: 1rem; }
+        .prc strong { font-size: clamp(1.6rem, 6vw, 2.1rem); color: var(--c); line-height: 1.15; }
+        .bg-dark .prc strong, .bg-brand .prc strong, .bg-dark .prc s, .bg-brand .prc s { color: inherit; }
+        .stk { display: inline-block; margin: 0 0 .8rem; font-weight: 700; font-size: .9rem; padding: .15rem .6rem; border-radius: .5rem; background: #dcfce7; color: #166534; }
+        .stk-low { background: #fef3c7; color: #92400e; } .stk-preorder { background: #e0e7ff; color: #3730a3; }
+        .opt { margin: 0 0 .9rem; } .opt-l { margin: 0 0 .4rem; font-size: .9rem; }
+        .chips { display: flex; flex-wrap: wrap; gap: .45rem; }
+        .chip { font: inherit; font-size: .9rem; display: inline-flex; align-items: center; gap: .4rem; padding: .45rem .8rem; min-height: 2.5rem; border-radius: .7rem; border: 2px solid var(--line); background: #fff; color: var(--ink); cursor: pointer; }
+        .chip i { width: 1.1rem; height: 1.1rem; border-radius: 50%; border: 1px solid rgba(0,0,0,.2); flex: none; }
+        .chip[aria-pressed="true"] { border-color: var(--c); box-shadow: 0 0 0 1px var(--c); }
+        .pts { list-style: none; padding: 0; margin: 0 0 1rem; display: grid; gap: .35rem; }
+        .pts li { display: flex; gap: .5rem; } .pts li::before { content: "\2713"; color: var(--c); font-weight: 800; flex: none; }
+        .rev img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: .7rem; margin-bottom: .6rem; }
+        .rev .stars { color: #f59e0b; letter-spacing: .1em; } .rev .stars span { color: var(--line); }
+        figure.rev { margin: 0; }
         .preview-tag { background: #111827; color: #fff; text-align: center; font-size: .8125rem; padding: .35rem; }
         @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
     </style>
     @include('public.partials.button-styles')
     @include('public.partials.tracking')
 </head>
-<body>
+<body @if ($nav['dock']) class="has-dock" @endif>
     @if ($preview)<div class="preview-tag">Pratinjau - halaman ini belum tentu sudah terbit</div>@endif
     <header class="top"><div class="wrap">
         <span class="brand">@if ($logo)<img src="{{ $logo }}" alt="{{ $tenant->name }}">@else{{ $tenant->name }}@endif</span>
-        <a class="btn sm" href="#daftar">Daftar</a>
+        @if ($nav['header'])@include('public.partials.button', ['b' => $nav['header'], 'ctx' => $btnCtx, 'tracking' => $tracking])@endif
     </div></header>
 
     @foreach ($sections as $section)
@@ -122,23 +154,29 @@
             if (! $isHero) { $n++; }
             $cls = 'blk '.(match ($bg) { 'light' => 'bg-light', 'dark' => 'bg-dark', 'brand' => 'bg-brand', default => ($n % 2 === 0 ? 'alt' : '') });
         @endphp
-        @include('public.sections.'.$section['type'], ['p' => $p, 'cls' => $cls])
+        @include('public.sections.'.$section['type'], ['p' => $p, 'cls' => $cls, 'isFirst' => $loop->first])
     @endforeach
 
-    @unless ($hasForm)
+    @if ($showPrimaryForm && $primaryForm)
         <section class="blk" id="daftar"><div class="wrap"><div class="formbox">
             <h2>{{ $primaryForm->design('title', 'Daftar') }}</h2>
             @if (filled($primaryForm->design('description')))<p class="intro">{{ $primaryForm->design('description') }}</p>@endif
             @include('public.partials.built-form', \App\LeadForms\FormView::block($primaryForm, $tenant, $tracking, $page->getKey(), 'daftar-form', null, $btnCtx['vars']['halaman'] ?? null, $btnCtx['vars']))
         </div></div></section>
-    @endunless
+    @endif
 
     <footer class="foot"><div class="wrap">&copy; {{ now()->year }} {{ $tenant->name }} · <a href="{{ url('/kebijakan-privasi') }}" rel="noopener" target="_blank" style="color:inherit">Kebijakan Privasi</a> · <a href="{{ url('/syarat-layanan') }}" rel="noopener" target="_blank" style="color:inherit">Syarat Layanan</a></div></footer>
 
-    <nav class="dock" aria-label="Aksi cepat">
-        @if ($waLink)<a class="btn wa" href="{{ $waLink }}" rel="noopener">WhatsApp</a>@endif
-        <a class="btn" href="#daftar">Daftar</a>
-    </nav>
+    @if ($nav['dock'])
+        <nav class="dock" aria-label="Aksi cepat">@foreach ($nav['dock'] as $b)@include('public.partials.button', ['b' => $b, 'ctx' => $btnCtx, 'tracking' => $tracking])@endforeach</nav>
+    @endif
+    @if ($nav['float'])
+        @php
+            $wf = \App\LandingPages\Buttons::link($nav['float'], $btnCtx);
+            $wfPx = \App\LandingPages\Buttons::pixel($nav['float'], $tracking);
+        @endphp
+        <a class="waf" href="{{ $wf['href'] }}" rel="noopener" data-action="whatsapp" aria-label="Chat WhatsApp" @if ($wfPx) data-px="{{ $wfPx }}" @endif><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ \App\LandingPages\Buttons::iconPath('whatsapp') }}"/></svg></a>
+    @endif
 
     @include('public.partials.form-assets')
     @include('public.partials.pixel-js', ['pagePx' => $pagePx])
