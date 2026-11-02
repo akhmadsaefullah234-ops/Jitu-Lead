@@ -54,6 +54,15 @@ maks. 1600 px (logo 600 px), orientasi EXIF dirapikan, dikonversi ke WebP bila P
 ada atau gambar tak bisa dibaca, berkas asli disimpan. Di halaman publik gambar `loading="lazy"`.
 `deploy/install.sh` memasang `php8.3-gd` dan menaikkan `upload_max_filesize` PHP ke 10M (bawaan PHP hanya 2M).
 
+## Jarak antar bagian
+
+- **Tab Tampilan > Jarak antar bagian** (`landing_pages.layout`, `PageLayout`): Rapat 24 px, Normal 48 px, Lega 80 px,
+  atau angka (0–200 px), terpisah untuk PC dan HP. Berlaku untuk semua bagian kecuali hero. Kosong = 48 px seperti sebelumnya,
+  dan tidak ada CSS tambahan sama sekali, jadi halaman lama tidak berubah.
+- **Panel Gaya** tiap bagian: Jarak atas/bawah (padding, 0–240 px) dan Margin atas/bawah (−120 sampai 120 px; negatif =
+  menumpang ke bagian di atasnya), masing-masing dengan nilai HP sendiri. Pengaturan bagian menimpa pengaturan halaman.
+- Tombol cepat di tiap bagian: **Hapus jarak atas** / **Hapus jarak bawah** (padding 0 di PC dan HP, margin di sisi itu dihapus).
+
 ## Halaman publik
 
 CSS satu berkas kecil di dalam halaman, tanpa pustaka JS. Skrip kecil (kalkulator KPR, hitung mundur, putar video)

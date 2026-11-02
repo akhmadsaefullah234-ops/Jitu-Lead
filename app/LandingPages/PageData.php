@@ -57,7 +57,7 @@ class PageData
         $autoForm = Navigation::of($page->navigation)['auto_form'];
         $hasForm = in_array('form', $types, true);
 
-        $blockCss = '';
+        $blockCss = PageLayout::css($page->layout);
         $styled = [];
         foreach ($sections as $i => $section) {
             if (BlockStyle::has($section['props']['style'] ?? null)) {

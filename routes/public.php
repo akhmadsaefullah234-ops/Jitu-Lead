@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Public\LandingPageController;
 use App\Http\Controllers\Public\LeadFormController;
+use App\Http\Controllers\Public\RegionController;
 use Illuminate\Support\Facades\Route;
 
 // Pages and forms agencies publish for their own visitors. No session or cookies are
@@ -14,6 +15,10 @@ Route::middleware('throttle:public-pages')->group(function () {
     Route::get('f/{tenant}/{form}/pratinjau', [LeadFormController::class, 'preview'])->name('form.preview')->middleware('signed');
     Route::get('w/{tenant}', [LeadFormController::class, 'whatsapp'])->name('go.wa');
 });
+
+// Address dropdowns: the regions under a Kemendagri code, one level at a time.
+Route::get('wilayah/{code?}', [RegionController::class, 'children'])->where('code', '\d{2}(\.\d{2}){0,2}')
+    ->middleware('throttle:regions')->name('regions.children');
 
 Route::post('f/{tenant}/{form}', [LeadFormController::class, 'submit'])->middleware('throttle:form-submit')->name('form.submit');
 

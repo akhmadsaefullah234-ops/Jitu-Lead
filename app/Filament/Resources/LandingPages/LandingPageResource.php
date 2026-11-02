@@ -9,6 +9,7 @@ use App\Filament\Resources\LandingPages\Pages\EditLandingPage;
 use App\Filament\Resources\LandingPages\Pages\ListLandingPages;
 use App\LandingPages\BlockStyle;
 use App\LandingPages\Navigation;
+use App\LandingPages\PageLayout;
 use App\LandingPages\Sections;
 use App\LandingPages\Templates;
 use App\Models\LandingPage;
@@ -114,15 +115,20 @@ class LandingPageResource extends Resource
                             self::titleField(),
                             self::slugField(),
                             Select::make('status')->label('Status')->options(['draft' => 'Draf (belum tampil)', 'published' => 'Terbit (tampil untuk umum)'])->default('draft')->required()->native(false),
-                            Select::make('font')->label('Jenis huruf')->options(array_map(fn ($f) => $f[0], LandingPage::FONTS))->default('modern')->required()->native(false),
-                            ColorPicker::make('color')->label('Warna utama')->default('#dc2626')->required()->regex(LandingPage::COLOR_PATTERN),
                             TextInput::make('whatsapp_number')->label('Nomor WhatsApp tujuan')->tel()->maxLength(20)->placeholder('08123456789')
                                 ->helperText('Kosongkan untuk memakai nomor WhatsApp agensi.'),
-                            Sections::upload('logo', 600)->label('Logo (opsional)'),
                             Select::make('property_id')->label(Industry::t('catalog_item').' yang dipromosikan')->placeholder('Tidak dipilih')
                                 ->options(fn () => Property::query()->orderBy('name')->pluck('name', 'id'))->searchable()
                                 ->helperText('Lead dari halaman ini otomatis tercatat tertarik pada '.Industry::t('catalog_item').' ini.'),
                         ]),
+                    ]),
+                    Tab::make('Tampilan')->icon(Heroicon::OutlinedSwatch)->schema([
+                        Section::make('Warna dan huruf')->columns(2)->schema([
+                            Select::make('font')->label('Jenis huruf')->options(array_map(fn ($f) => $f[0], LandingPage::FONTS))->default('modern')->required()->native(false),
+                            ColorPicker::make('color')->label('Warna utama')->default('#dc2626')->required()->regex(LandingPage::COLOR_PATTERN),
+                            Sections::upload('logo', 600)->label('Logo (opsional)'),
+                        ]),
+                        PageLayout::section(),
                     ]),
                     Tab::make('Pixel & SEO')->icon(Heroicon::OutlinedChartBar)->schema([
                         Section::make('Pixel saat halaman dibuka')
@@ -144,7 +150,7 @@ class LandingPageResource extends Resource
 
     public const STYLE_CLIPBOARD = 'landing.style_clipboard';
 
-    /** "Salin gaya", "Tempel gaya" and "Gaya bawaan" on every section: the copied style is kept for this login, so it also pastes onto other pages. */
+    /** "Hapus jarak atas/bawah", "Salin gaya", "Tempel gaya" and "Gaya bawaan" on every section: the copied style is kept for this login, so it also pastes onto other pages. */
     private static function styleActions(): array
     {
         $setStyle = function (Builder $component, string $item, array $style): void {
@@ -162,7 +168,27 @@ class LandingPageResource extends Resource
             $component->rawState($state);
         };
 
+        // "Hapus jarak atas/bawah": no padding on that side (PC and HP) and no margin, e.g. so the next section sits right under the hero.
+        $clearSpace = function (Builder $component, string $item, string $side): void {
+            $state = $component->getRawState();
+
+            if (! isset($state[$item])) {
+                return;
+            }
+
+            $style = (array) ($state[$item]['data']['style'] ?? []);
+            $style['pad_'.$side] = 0;
+            $style['margin_'.$side] = null;
+            $style['mobile'] = array_merge((array) ($style['mobile'] ?? []), ['pad_'.$side => 0, 'margin_'.$side => null]);
+            $state[$item]['data']['style'] = $style;
+            $component->rawState($state);
+        };
+
         return [
+            Action::make('clearTop')->label('Hapus jarak atas')->tooltip('Hapus jarak atas')->icon(Heroicon::OutlinedBarsArrowUp)->color('gray')->iconButton()
+                ->action(fn (array $arguments, Builder $component) => $clearSpace($component, $arguments['item'], 'top')),
+            Action::make('clearBottom')->label('Hapus jarak bawah')->tooltip('Hapus jarak bawah')->icon(Heroicon::OutlinedBarsArrowDown)->color('gray')->iconButton()
+                ->action(fn (array $arguments, Builder $component) => $clearSpace($component, $arguments['item'], 'bottom')),
             Action::make('copyStyle')->label('Salin gaya')->tooltip('Salin gaya')->icon(Heroicon::OutlinedClipboardDocument)->color('gray')->iconButton()
                 ->action(function (array $arguments, Builder $component) {
                     session([self::STYLE_CLIPBOARD => BlockStyle::clean($component->getRawState()[$arguments['item']]['data']['style'] ?? [])]);

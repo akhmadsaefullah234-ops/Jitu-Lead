@@ -21,10 +21,10 @@ use Filament\Schemas\Components\Utilities\Get;
  *
  *     {align, heading_align, button_align, heading_size, heading_px, text_size, text_px, heading_weight, text_color,
  *      heading_color, line_height, bg_type: color|gradient|image, bg_color, bg_color2, bg_angle, bg_image, overlay,
- *      bg_position, pad_top, pad_bottom, gap, width, columns, media_pos, valign, img_width, img_max_h, ratio, fit,
+ *      bg_position, pad_top, pad_bottom, margin_top, margin_bottom, gap, width, columns, media_pos, valign, img_width, img_max_h, ratio, fit,
  *      radius, shadow, img_align, btn_size, btn_full_mobile, btn_style, btn_color, btn_radius, btn_icon_pos,
  *      hide_mobile, hide_desktop, animation, mobile: {align, heading_size, heading_px, text_size, text_px, pad_top,
- *      pad_bottom, gap, columns, media_pos, img_width, img_max_h, ratio, btn_size}}
+ *      pad_bottom, margin_top, margin_bottom, gap, columns, media_pos, img_width, img_max_h, ratio, btn_size}}
  */
 class BlockStyle
 {
@@ -60,6 +60,9 @@ class BlockStyle
 
     public const ANIMATIONS = ['' => 'Tanpa animasi', 'fade' => 'Muncul perlahan (fade)', 'slide' => 'Naik perlahan (slide)'];
 
+    /** Margins may be a little negative, so a section can overlap the one before it. */
+    public const MARGIN = [-120, 120];
+
     private const JUSTIFY = ['left' => 'flex-start', 'center' => 'center', 'right' => 'flex-end'];
 
     // ---- Editor ---------------------------------------------------------------------------------------------------
@@ -94,8 +97,10 @@ class BlockStyle
                         Sections::upload('bg_image')->label('Gambar latar')->visible(fn (Get $get) => $get('bg_type') === 'image'),
                         $px('overlay', 'Lapisan gelap', 0, 90, '%')->visible(fn (Get $get) => $get('bg_type') === 'image'),
                         $pick('bg_position', 'Posisi gambar latar', self::POSITIONS)->visible(fn (Get $get) => $get('bg_type') === 'image'),
-                        $px('pad_top', 'Jarak atas', 0, 240),
-                        $px('pad_bottom', 'Jarak bawah', 0, 240),
+                        $px('pad_top', 'Jarak atas (padding)', 0, 240),
+                        $px('pad_bottom', 'Jarak bawah (padding)', 0, 240),
+                        $px('margin_top', 'Margin atas', self::MARGIN[0], self::MARGIN[1])->helperText('Negatif kecil membuat bagian ini menumpang ke bagian di atasnya.'),
+                        $px('margin_bottom', 'Margin bawah', self::MARGIN[0], self::MARGIN[1]),
                         $px('gap', 'Jarak antar elemen', 0, 80),
                         $pick('width', 'Lebar konten', self::WIDTHS),
                     ])]),
@@ -128,8 +133,10 @@ class BlockStyle
                             $px('heading_px', 'atau ukuran judul (px)', 12, 96),
                             $pick('text_size', 'Ukuran teks', self::HEADING),
                             $px('text_px', 'atau ukuran teks (px)', 10, 40),
-                            $px('pad_top', 'Jarak atas', 0, 240),
-                            $px('pad_bottom', 'Jarak bawah', 0, 240),
+                            $px('pad_top', 'Jarak atas (padding)', 0, 240),
+                            $px('pad_bottom', 'Jarak bawah (padding)', 0, 240),
+                            $px('margin_top', 'Margin atas', self::MARGIN[0], self::MARGIN[1]),
+                            $px('margin_bottom', 'Margin bawah', self::MARGIN[0], self::MARGIN[1]),
                             $px('gap', 'Jarak antar elemen', 0, 80),
                             $pick('media_pos', 'Posisi gambar/media', ['top' => 'Di atas teks', 'bottom' => 'Di bawah teks']),
                             $px('img_width', 'Lebar gambar', 10, 100, '%'),
@@ -194,6 +201,8 @@ class BlockStyle
             'text_px' => $num('text_px', 10, 40),
             'pad_top' => $num('pad_top', 0, 240),
             'pad_bottom' => $num('pad_bottom', 0, 240),
+            'margin_top' => $num('margin_top', self::MARGIN[0], self::MARGIN[1]),
+            'margin_bottom' => $num('margin_bottom', self::MARGIN[0], self::MARGIN[1]),
             'gap' => $num('gap', 0, 80),
             'columns' => $enum('columns', $cols),
             'media_pos' => $enum('media_pos', $mobile ? ['top' => 1, 'bottom' => 1] : self::MEDIA),
@@ -359,6 +368,12 @@ class BlockStyle
         }
         if (isset($st['pad_bottom'])) {
             $r[] = "$sec:not(.hero),$s .hero>.wrap{padding-bottom:".$pxv($st['pad_bottom']).'px}';
+        }
+        if (isset($st['margin_top'])) {
+            $r[] = "$s{margin-top:".$pxv($st['margin_top']).'px'.($st['margin_top'] < 0 ? ';position:relative;z-index:2' : '').'}';
+        }
+        if (isset($st['margin_bottom'])) {
+            $r[] = "$s{margin-bottom:".$pxv($st['margin_bottom']).'px}';
         }
         if (isset($st['gap'])) {
             $r[] = "$s .grid,$s .gal,$s .jbs,$s .cols,$s .mx,$s .stats,$s .logos,$s .ic{gap:".$pxv($st['gap']).'px}';

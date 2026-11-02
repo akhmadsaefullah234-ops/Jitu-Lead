@@ -17,6 +17,15 @@
     .lf-addr legend { grid-column: 1 / -1; }
     .lf-addr .wide { grid-column: 1 / -1; }
     @media (max-width: 380px) { .lf-addr { grid-template-columns: 1fr; } }
+    @media (max-width: 560px) { .lf-rg { grid-template-columns: 1fr; } }
+    .rg { position: relative; display: block; }
+    .rg-q:disabled { background: #f3f4f6; color: #9ca3af; }
+    .rg-l { position: absolute; z-index: 40; left: 0; right: 0; top: calc(100% + .25rem); max-height: 15rem; overflow-y: auto; overscroll-behavior: contain; background: #fff;
+        border: 1.5px solid #d1d5db; border-radius: .75rem; box-shadow: 0 10px 30px rgba(17,24,39,.15); padding: .25rem; display: grid; }
+    .rg-l[hidden] { display: none; }
+    .rg-o { display: block; padding: .7rem .75rem; border-radius: .5rem; font-weight: 400; color: #111827; cursor: pointer; text-align: left; min-height: 2.75rem; box-sizing: border-box; }
+    .rg-o[aria-selected=true], .rg-o:hover { background: color-mix(in srgb, var(--c) 10%, #fff); }
+    .rg-none { padding: .7rem .75rem; color: #6b7280; font-weight: 400; }
     .lf-btn { width: 100%; }
     .lf-btn:disabled { opacity: .6; cursor: wait; }
     .lf-trap { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
@@ -50,6 +59,85 @@
             if (v) h.value = String(v).slice(0, 300);
         });
 
+        // Address dropdowns: province > city > district > village, each loaded when the one above is picked,
+        // searchable by typing. Changing a level empties the ones below it; a village fills in its postal code.
+        form.querySelectorAll('.lf-rg').forEach(function (box) {
+            var base = box.dataset.regions, postal = box.querySelector('input[data-postal]'), cache = {};
+            var pickers = Array.prototype.slice.call(box.querySelectorAll('.rg'));
+            var hints = ['Cari provinsi', 'Cari kota/kabupaten', 'Cari kecamatan', 'Cari kelurahan/desa'];
+            function norm(t) { return String(t).toLowerCase().replace(/^(kabupaten administrasi|kota administrasi|kabupaten|kota)\s+/, ''); }
+            function load(code, done) {
+                if (cache[code]) { done(cache[code]); return; }
+                fetch(base + '/' + code, { headers: { 'Accept': 'application/json' } })
+                    .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+                    .then(function (j) { cache[code] = j.items || []; done(cache[code]); })
+                    .catch(function () { done(null, true); });
+            }
+            function clearBelow(i) {
+                for (var j = i + 1; j < pickers.length; j++) pickers[j].reset(null);
+                if (postal && postal.dataset.auto) { postal.value = ''; delete postal.dataset.auto; }
+            }
+            pickers.forEach(function (p, i) {
+                var q = p.querySelector('.rg-q'), h = p.querySelector('input[type=hidden]'), list = p.querySelector('.rg-l');
+                var items = p.dataset.items ? JSON.parse(p.dataset.items) : [], shown = [], active = -1, waitHint = q.placeholder;
+                function close() { list.hidden = true; q.setAttribute('aria-expanded', 'false'); q.removeAttribute('aria-activedescendant'); }
+                function mark(n) {
+                    var opts = list.querySelectorAll('.rg-o');
+                    if (!opts.length) return;
+                    active = (n + opts.length) % opts.length;
+                    for (var k = 0; k < opts.length; k++) opts[k].setAttribute('aria-selected', k === active ? 'true' : 'false');
+                    q.setAttribute('aria-activedescendant', opts[active].id);
+                    opts[active].scrollIntoView({ block: 'nearest' });
+                }
+                function render() {
+                    // Every typed word must appear: "jaw bar", "kab bogor", "kota band"; provinces also by short name ("jabar", "dki").
+                    var words = q.value.toLowerCase().split(/\s+/).filter(Boolean);
+                    shown = items.filter(function (it) { var n = (it[1] + ' ' + (it[3] || '')).toLowerCase(); return words.every(function (w) { return n.indexOf(w) !== -1; }); }).slice(0, 150);
+                    list.innerHTML = '';
+                    shown.forEach(function (it, k) {
+                        var o = document.createElement('span');
+                        o.className = 'rg-o'; o.id = list.id + '-' + k; o.setAttribute('role', 'option'); o.textContent = it[1];
+                        o.addEventListener('mousedown', function (e) { e.preventDefault(); });
+                        o.addEventListener('click', function () { choose(it); });
+                        list.appendChild(o);
+                    });
+                    if (!shown.length) { var none = document.createElement('span'); none.className = 'rg-none'; none.textContent = 'Tidak ditemukan. Coba kata lain.'; list.appendChild(none); }
+                    active = -1;
+                    list.hidden = false; q.setAttribute('aria-expanded', 'true');
+                }
+                function choose(it) {
+                    var changed = h.value !== it[0];
+                    h.value = it[0]; q.value = it[1]; q.removeAttribute('aria-invalid'); close();
+                    if (!changed) return;
+                    clearBelow(i);
+                    var next = pickers[i + 1];
+                    if (next) { next.wait(); load(it[0], function (list, failed) { next.reset(list, failed); }); }
+                    if (it[2] && postal && (!postal.value || postal.dataset.auto)) { postal.value = it[2]; postal.dataset.auto = '1'; }
+                }
+                p.wait = function () { q.disabled = true; q.value = ''; h.value = ''; q.placeholder = 'Memuat...'; };
+                p.reset = function (newItems, failed) {
+                    items = newItems || []; q.value = ''; h.value = ''; close();
+                    q.disabled = !newItems;
+                    q.placeholder = failed ? 'Gagal memuat, pilih ulang di atas' : (newItems ? hints[i] : waitHint);
+                };
+                q.addEventListener('input', function () { if (h.value) { h.value = ''; clearBelow(i); } render(); });
+                q.addEventListener('focus', render);
+                q.addEventListener('blur', function () {
+                    setTimeout(close, 150);
+                    if (!h.value && q.value.trim()) {
+                        var exact = items.filter(function (it) { return norm(it[1]) === norm(q.value.trim()); });
+                        if (exact.length === 1) choose(exact[0]);
+                    }
+                });
+                q.addEventListener('keydown', function (e) {
+                    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (list.hidden) render(); mark(active + (e.key === 'ArrowDown' ? 1 : -1)); }
+                    else if (e.key === 'Enter' && !list.hidden && shown.length) { e.preventDefault(); choose(shown[active >= 0 ? active : 0]); }
+                    else if (e.key === 'Escape') { close(); }
+                });
+            });
+            if (postal) postal.addEventListener('input', function () { delete postal.dataset.auto; });
+        });
+
         function fail(msg, el) {
             err.textContent = msg; err.hidden = false;
             if (el) { el.setAttribute('aria-invalid', 'true'); try { el.focus({ preventScroll: false }); } catch (e) {} }
@@ -61,6 +149,10 @@
             var fields = form.querySelectorAll('input[required], select[required], textarea[required]');
             for (var i = 0; i < fields.length; i++) {
                 var el = fields[i];
+                if (el.classList.contains('rg-q')) {
+                    if (!el.parentNode.querySelector('input[type=hidden]').value) return [el, 'Pilih ' + el.closest('label').querySelector('span').textContent.replace(' *', '').toLowerCase() + ' dari daftar.'];
+                    continue;
+                }
                 if (el.type === 'radio') { if (!form.querySelector('input[name="' + el.name.replace(/"/g, '\\"') + '"]:checked')) return [el, 'Pilih salah satu: ' + el.closest('fieldset').querySelector('legend').textContent.replace(' *', '') + '.']; continue; }
                 if (el.type === 'checkbox' ? !el.checked : String(el.value).trim() === '') {
                     var label = (el.closest('label') && el.closest('label').querySelector('span')) ? el.closest('label').querySelector('span').textContent.replace(' *', '') : 'kolom wajib';

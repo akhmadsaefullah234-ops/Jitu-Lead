@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Enums\Role;
+use App\Regions\RegionDirectory;
 use App\Shipping\Regions;
 use App\Shipping\ShippingSettings;
 use App\Support\CurrentTenant;
@@ -82,9 +83,9 @@ class ShippingSettingsPage extends Page
                     ->schema([
                         TextInput::make('name')->label('Nama zona')->required()->maxLength(80),
                         Select::make('provinces')->label('Provinsi')->multiple()->options(Regions::options())->searchable(),
-                        TagsInput::make('cities')->label('Kota/kabupaten yang ikut zona ini')->placeholder('Mis. Bekasi')
+                        TagsInput::make('cities')->label('Kota/kabupaten yang ikut zona ini')->placeholder('Mis. Bekasi')->suggestions(fn () => RegionDirectory::cityNames())
                             ->helperText('Untuk zona yang lintas provinsi, mis. Bekasi dan Tangerang di Jabodetabek.'),
-                        TagsInput::make('excluded_cities')->label('Kecuali kota/kabupaten')->placeholder('Mis. Bogor'),
+                        TagsInput::make('excluded_cities')->label('Kecuali kota/kabupaten')->placeholder('Mis. Bogor')->suggestions(fn () => RegionDirectory::cityNames()),
                         Toggle::make('confirm_admin')->label('Konfirmasi admin (tanpa angka)')->live()
                             ->helperText('AI tidak menyebut ongkir untuk zona ini dan menyerahkan chat ke agen.'),
                         Grid::make(2)->hidden(fn (Get $get) => (bool) $get('confirm_admin'))->schema([

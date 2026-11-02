@@ -488,6 +488,8 @@ class StageAutomationTest extends TestCase
 
     public function test_an_automatic_move_starts_the_new_stage_follow_ups_and_agents_can_still_move_by_hand(): void
     {
+        // Mid-morning in the shop's time, so "25 hours later" is past the H+1 sending time whatever hour the suite runs.
+        $this->travelTo(now($this->shop->timezone ?: config('app.timezone'))->setTime(10, 0));
         $lead = $this->leadIn(RetailStages::ORDER);
         $this->inShop(fn () => FollowUpRule::query()->where('stage_id', $this->shopStage(RetailStages::PAYMENT)->id)->update(['active' => true]));
         $this->inShop(fn () => app(StageAutomation::class)->orderConfirmed($lead, 'transfer'));

@@ -281,6 +281,7 @@ class LandingNavigationRetailTest extends TestCase
         $address = collect($attrs['fields'])->firstWhere('key', 'alamat');
         $this->assertSame(['street', 'rt_rw', 'landmark', 'kelurahan', 'kecamatan', 'kota', 'provinsi', 'kode_pos'], $address['parts']);
         $this->assertSame(['street', 'rt_rw', 'landmark', 'kecamatan', 'kota'], $address['required_parts']);
+        $this->assertSame('region', $address['mode']);
         $this->assertSame('whatsapp', $attrs['after_submit']['type']);
 
         $this->assertArrayHasKey('order', FormTemplates::options('retail'));

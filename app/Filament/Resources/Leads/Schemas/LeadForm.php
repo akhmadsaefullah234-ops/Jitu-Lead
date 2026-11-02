@@ -6,11 +6,13 @@ use App\Automation\StageAutomationSettings;
 use App\Enums\Interest;
 use App\Enums\Need;
 use App\Enums\PaymentMethod;
+use App\LeadForms\FormFields;
 use App\Models\Lead;
 use App\Support\CurrentTenant;
 use App\Support\Industry;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Field;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -116,6 +118,12 @@ class LeadForm
                             ->rows(2)
                             ->maxLength(500)
                             ->columnSpanFull(),
+                        Placeholder::make('shipping_address_parts_view')
+                            ->label('Rincian alamat dari formulir')
+                            ->columnSpanFull()
+                            ->content(fn (?Lead $record) => collect(FormFields::ADDRESS_PARTS)
+                                ->map(fn (string $label, string $part) => filled($record?->shipping_address_parts[$part] ?? null) ? $label.': '.$record->shipping_address_parts[$part] : null)
+                                ->filter()->implode(' · ')),
                     ])),
                 Section::make('Jawaban formulir')
                     ->columnSpanFull()->collapsible()
@@ -158,8 +166,13 @@ class LeadForm
     }
 
     /** Shows the field only for the industries that use it, under that industry's label (config/industries.php). */
-    private static function industryField(Field $field): Field
+    private static function industryField(Field|Placeholder $field): Field|Placeholder
     {
+        if ($field instanceof Placeholder) {
+            // The address details a form sent, shown with the address.
+            return $field->visible(fn (?Lead $record) => Industry::current()->usesLeadField('shipping_address') && filled($record?->shipping_address_parts));
+        }
+
         return $field
             ->label(fn () => Industry::current()->leadFields()[$field->getName()] ?? $field->getName())
             ->visible(fn () => Industry::current()->usesLeadField($field->getName()));

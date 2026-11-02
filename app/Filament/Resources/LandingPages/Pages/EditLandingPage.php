@@ -6,6 +6,7 @@ use App\Filament\Resources\LandingPages\LandingPageResource;
 use App\LandingPages\BlockFormat;
 use App\LandingPages\Navigation;
 use App\LandingPages\PageData;
+use App\LandingPages\PageLayout;
 use App\Models\Tenant;
 use App\Support\CurrentTenant;
 use Filament\Actions\Action;
@@ -53,6 +54,7 @@ class EditLandingPage extends EditRecord
     {
         $data['blocks'] = BlockFormat::fromForm($data['blocks'] ?? []);
         $data['navigation'] = Navigation::clean($data['navigation'] ?? null);
+        $data['layout'] = PageLayout::clean($data['layout'] ?? null) ?: null;
 
         return static::withPublishing($data, $this->record->published_at !== null);
     }
@@ -68,7 +70,7 @@ class EditLandingPage extends EditRecord
             $state = $this->form->getRawState();
             $page = $this->record->replicate();
             $page->forceFill(array_merge(
-                Arr::only($state, ['title', 'color', 'font', 'description', 'meta_title', 'whatsapp_number', 'logo', 'og_image', 'navigation']),
+                Arr::only($state, ['title', 'color', 'font', 'description', 'meta_title', 'whatsapp_number', 'logo', 'og_image', 'navigation', 'layout']),
                 ['blocks' => BlockFormat::fromForm($state['blocks'] ?? []), 'slug' => $this->record->slug],
             ));
             $page->setRelation('tenant', $this->record->tenant);

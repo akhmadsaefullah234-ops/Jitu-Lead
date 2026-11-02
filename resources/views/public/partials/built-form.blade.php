@@ -39,6 +39,31 @@
                         <div class="lf-opts">@foreach ($f['options'] as $o)<label class="lf-o"><input type="checkbox" name="{{ $name }}[]" value="{{ $o }}"><span>{{ $o }}</span></label>@endforeach</div>
                     </fieldset>
                 @endif
+        @elseif ($f['type'] === 'address' && \App\LeadForms\FormFields::regionMode($f))
+                @php
+                    $must = $req($f) ? \App\LeadForms\FormFields::requiredParts($f) : [];
+                    $star = fn ($part) => in_array($part, $must, true) ? ' *' : '';
+                    $pickers = ['provinsi' => ['Provinsi', 'Cari provinsi'], 'kota' => ['Kota / kabupaten', 'Pilih provinsi dulu'], 'kecamatan' => ['Kecamatan', 'Pilih kota/kabupaten dulu'], 'kelurahan' => ['Kelurahan / desa', 'Pilih kecamatan dulu']];
+                @endphp
+                <fieldset class="lf-g lf-addr lf-rg" data-regions="{{ route('regions.children') }}"><legend>{{ $f['label'] }}{{ $mark }}</legend>
+                    @foreach ($pickers as $part => [$partLabel, $hint])
+                        <label class="lf-f"><span>{{ $partLabel }}{{ $star($part) }}</span>
+                            <span class="rg" data-part="{{ $part }}" @if ($part === 'provinsi') data-items="{{ json_encode(\App\Regions\RegionDirectory::children(null), JSON_UNESCAPED_UNICODE) }}" @endif>
+                                <input type="text" class="rg-q" id="{{ $id }}-{{ $part }}" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="{{ $id }}-{{ $part }}-l"
+                                       autocomplete="off" placeholder="{{ $hint }}" @if ($part !== 'provinsi') disabled @endif @if ($star($part)) required @endif>
+                                <input type="hidden" name="{{ $name }}[{{ $part }}]" value="">
+                                <span class="rg-l" id="{{ $id }}-{{ $part }}-l" role="listbox" hidden></span>
+                            </span></label>
+                    @endforeach
+                    <label class="lf-f"><span>Kode pos{{ $star('kode_pos') }}</span>
+                        <input type="text" name="{{ $name }}[kode_pos]" data-postal inputmode="numeric" maxlength="5" pattern="\d{5}" autocomplete="postal-code" placeholder="Terisi otomatis" @if ($star('kode_pos')) required @endif></label>
+                    <label class="lf-f"><span>RT/RW{{ $star('rt_rw') }}</span>
+                        <input type="text" name="{{ $name }}[rt_rw]" maxlength="100" placeholder="001/002" @if ($star('rt_rw')) required @endif></label>
+                    <label class="lf-f wide"><span>Nama jalan, blok{{ $star('street') }}</span>
+                        <input type="text" name="{{ $name }}[street]" maxlength="250" autocomplete="address-line1" placeholder="Jl. Mawar, Blok C" @if ($star('street')) required @endif></label>
+                    <label class="lf-f wide"><span>Nomor rumah / patokan{{ $star('landmark') }}</span>
+                        <input type="text" name="{{ $name }}[landmark]" maxlength="100" placeholder="No. 12, atau dekat masjid" @if ($star('landmark')) required @endif></label>
+                </fieldset>
         @elseif ($f['type'] === 'address')
                 <fieldset class="lf-g lf-addr"><legend>{{ $f['label'] }}{{ $mark }}</legend>
                     @foreach ($f['parts'] as $part)

@@ -2,6 +2,8 @@
 
 namespace App\Shipping;
 
+use App\Regions\RegionDirectory;
+
 /**
  * Prices a parcel from the agency's own zone table, with no courier API.
  *
@@ -17,7 +19,10 @@ class ZoneShippingRates implements ShippingProvider
     public function quote(ShippingRequest $request): ShippingQuote
     {
         $city = trim((string) $request->city);
-        $province = Regions::province($request->province) ?? Regions::provinceOfCity($city);
+        // The imported regions turn "Jaksel" or "Kab Bdg" into the official name and find the province of any city.
+        $match = RegionDirectory::matchCity($city, $request->province, $request->district);
+        $province = Regions::province($request->province) ?? $match['province'] ?? Regions::provinceOfCity($city);
+        $city = $match['name'] ?? $city;
 
         if ($city === '' || $province === null) {
             return new ShippingQuote(ShippingQuote::UNCLEAR_DESTINATION, $city === ''

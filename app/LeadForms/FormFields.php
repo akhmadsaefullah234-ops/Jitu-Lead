@@ -2,6 +2,7 @@
 
 namespace App\LeadForms;
 
+use App\Regions\RegionDirectory;
 use App\Shipping\Regions;
 use App\Support\PhoneNumber;
 use Closure;
@@ -20,9 +21,12 @@ use Illuminate\Support\Str;
  * The fields of a form built in "Formulir": their types, the editor for them, the server-side rules for a
  * submission, and how answers become lead data. A field is stored as
  *
- *     {key, type, label, placeholder, required, options: [..], maps_to, source, value, parts: [..]}
+ *     {key, type, label, placeholder, required, options: [..], maps_to, source, value, parts: [..], required_parts: [..], mode}
  *
- * Visitors send them as f[key] (f[key][part] for an address, f[key][] for check boxes).
+ * Visitors send them as f[key] (f[key][part] for an address, f[key][] for check boxes). An address in "region"
+ * mode sends Kemendagri codes for provinsi, kota, kecamatan and kelurahan (picked from dropdowns that load from
+ * /wilayah); they are checked to belong together and turned into names. Until the regions are imported it falls
+ * back to typed parts.
  */
 class FormFields
 {
@@ -71,16 +75,39 @@ class FormFields
         'kode_pos' => 'Kode pos',
     ];
 
+    public const ADDRESS_MODES = ['free' => 'Ketik bebas', 'region' => 'Dropdown wilayah (provinsi > kota > kecamatan > kelurahan)'];
+
+    private const REGION_CODE = ['provinsi' => '/^\d{2}$/', 'kota' => '/^\d{2}\.\d{2}$/', 'kecamatan' => '/^\d{2}\.\d{2}\.\d{2}$/', 'kelurahan' => '/^\d{2}\.\d{2}\.\d{2}\.\d{4}$/'];
+
     /** Required when the address is required, unless the field picks its own (required_parts). */
     public const ADDRESS_REQUIRED = ['street', 'kecamatan', 'kota'];
 
-    /** Which parts of a required address must be filled in. */
+    /** Which parts of a required address must be filled in. With dropdowns, a required level needs the ones above it. */
     public static function requiredParts(array $field): array
     {
-        $parts = (array) ($field['parts'] ?? array_keys(self::ADDRESS_PARTS));
+        $parts = self::addressParts($field);
         $own = array_values(array_intersect($parts, (array) ($field['required_parts'] ?? [])));
+        $required = $own !== [] ? $own : array_values(array_intersect($parts, self::ADDRESS_REQUIRED));
 
-        return $own !== [] ? $own : array_values(array_intersect($parts, self::ADDRESS_REQUIRED));
+        if (self::regionMode($field)) {
+            $chain = array_keys(RegionDirectory::CHAIN);
+            $deepest = max(array_map(fn ($p) => (int) array_search($p, $chain, true), array_intersect($required, $chain)) ?: [-1]);
+            $required = array_values(array_intersect(array_keys(self::ADDRESS_PARTS), array_unique([...$required, ...array_slice($chain, 0, $deepest + 1)])));
+        }
+
+        return $required;
+    }
+
+    /** Whether an address is drawn as region dropdowns: chosen so, and the regions are imported. */
+    public static function regionMode(array $field): bool
+    {
+        return ($field['type'] ?? null) === 'address' && ($field['mode'] ?? null) === 'region' && RegionDirectory::available();
+    }
+
+    /** The parts an address asks for; with dropdowns, all of them. */
+    public static function addressParts(array $field): array
+    {
+        return self::regionMode($field) ? array_keys(self::ADDRESS_PARTS) : (array) ($field['parts'] ?? array_keys(self::ADDRESS_PARTS));
     }
 
     public const HIDDEN_SOURCES = [
@@ -122,8 +149,14 @@ class FormFields
                     TagsInput::make('options')->label('Pilihan')->placeholder('Ketik pilihan lalu Enter')->columnSpanFull()
                         ->visible($has(self::WITH_OPTIONS))->required(fn (Get $get) => in_array($get('type'), ['select', 'radio'], true))
                         ->helperText(fn (Get $get) => $get('type') === 'checkbox' ? 'Kosongkan untuk satu kotak centang, misalnya "Saya setuju dihubungi".' : null),
+                    Select::make('mode')->label('Cara mengisi wilayah')->options(self::ADDRESS_MODES)->default('free')->native(false)->selectablePlaceholder(false)
+                        ->columnSpanFull()->visible($has(['address']))->live()
+                        ->helperText(fn (Get $get) => $get('mode') === 'region'
+                            ? (RegionDirectory::available() ? 'Pembeli memilih provinsi, kota/kabupaten, kecamatan, lalu kelurahan/desa dari daftar resmi; kode pos terisi otomatis. Semua sub-isian ditampilkan.'
+                                : 'Data wilayah belum diimpor (php artisan regions:import), jadi sementara tampil sebagai ketik bebas.')
+                            : null),
                     Select::make('parts')->label('Sub-isian alamat')->multiple()->options(self::ADDRESS_PARTS)->default(array_keys(self::ADDRESS_PARTS))->columnSpanFull()
-                        ->visible($has(['address'])),
+                        ->visible(fn (Get $get) => $get('type') === 'address' && $get('mode') !== 'region'),
                     Select::make('required_parts')->label('Sub-isian yang wajib (bila alamat wajib diisi)')->multiple()->options(self::ADDRESS_PARTS)
                         ->default(self::ADDRESS_REQUIRED)->columnSpanFull()->visible($has(['address']))
                         ->helperText('Kosongkan untuk memakai bawaan: alamat, kecamatan, dan kota/kabupaten.'),
@@ -180,6 +213,7 @@ class FormFields
                 'parts' => $type === 'address' ? array_values(array_intersect(array_keys(self::ADDRESS_PARTS), (array) ($f['parts'] ?? array_keys(self::ADDRESS_PARTS)))) ?: array_keys(self::ADDRESS_PARTS) : null,
                 'required_parts' => $type === 'address' && filled($f['required_parts'] ?? null)
                     ? (array_values(array_intersect(array_keys(self::ADDRESS_PARTS), (array) $f['required_parts'])) ?: null) : null,
+                'mode' => $type === 'address' && ($f['mode'] ?? null) === 'region' ? 'region' : null,
                 'source' => $type === 'hidden' ? (isset(self::HIDDEN_SOURCES[$f['source'] ?? '']) ? $f['source'] : 'utm_source') : null,
                 'value' => $type === 'hidden' && filled($f['value'] ?? null) ? (string) $f['value'] : null,
                 'maps_to' => isset(self::MAPS[$f['maps_to'] ?? '']) && ($f['maps_to'] ?? '') !== '' ? $f['maps_to'] : null,
@@ -239,14 +273,23 @@ class FormFields
 
             switch ($f['type']) {
                 case 'address':
+                    $region = self::regionMode($f);
                     $rules[$name] = [$req, 'array'];
+                    if ($region) {
+                        $rules[$name][] = function (string $attribute, mixed $value, Closure $fail) {
+                            if (is_array($value) && is_string($problem = RegionDirectory::resolve($value))) {
+                                $fail($problem);
+                            }
+                        };
+                    }
                     $mustFill = self::requiredParts($f);
-                    foreach ($f['parts'] as $part) {
+                    foreach (self::addressParts($f) as $part) {
                         $partReq = $req === 'required' && in_array($part, $mustFill, true) ? 'required' : 'nullable';
-                        $rules[$name.'.'.$part] = match ($part) {
-                            'kode_pos' => [$partReq, 'regex:/^\d{5}$/'],
-                            'provinsi' => [$partReq, 'string', 'max:60'],
-                            'street' => [$partReq, 'string', 'max:250'],
+                        $rules[$name.'.'.$part] = match (true) {
+                            $region && isset(self::REGION_CODE[$part]) => [$partReq, 'string', 'regex:'.self::REGION_CODE[$part]],
+                            $part === 'kode_pos' => [$partReq, 'regex:/^\d{5}$/'],
+                            $part === 'provinsi' => [$partReq, 'string', 'max:60'],
+                            $part === 'street' => [$partReq, 'string', 'max:250'],
                             default => [$partReq, 'string', 'max:100'],
                         };
                     }
@@ -288,7 +331,7 @@ class FormFields
 
         foreach ($fields as $f) {
             $out['f.'.$f['key']] = mb_strtolower($f['label']);
-            foreach ($f['parts'] ?? [] as $part) {
+            foreach ($f['type'] === 'address' ? self::addressParts($f) : [] as $part) {
                 $out['f.'.$f['key'].'.'.$part] = mb_strtolower(self::ADDRESS_PARTS[$part]);
             }
         }
@@ -332,7 +375,8 @@ class FormFields
                 continue;
             }
 
-            $value = self::display($f, $raw);
+            $parts = $f['type'] === 'address' ? self::addressValues($f, is_array($raw) ? $raw : []) : null;
+            $value = $parts !== null ? self::address($parts, self::addressParts($f), $parts['kelurahan_type'] ?? 'Kel.') : self::display($f, $raw);
 
             if ($value === '') {
                 continue;
@@ -341,11 +385,14 @@ class FormFields
             $answers[] = ['key' => $f['key'], 'label' => $f['label'], 'value' => $value];
             $vars[$f['key']] = $value;
 
-            if ($f['type'] === 'address' && ($f['maps_to'] ?? null) === 'shipping_address' && is_array($raw)) {
-                $province = Regions::province((string) ($raw['provinsi'] ?? '')) ?? Regions::provinceOfCity((string) ($raw['kota'] ?? ''));
+            if ($parts !== null && ($f['maps_to'] ?? null) === 'shipping_address') {
+                $province = isset($parts['codes']['provinsi'])
+                    ? RegionDirectory::shippingProvince($parts['provinsi'])
+                    : Regions::province((string) ($parts['provinsi'] ?? '')) ?? Regions::provinceOfCity((string) ($parts['kota'] ?? ''));
                 if ($province !== null) {
                     $lead['shipping_province'] = $province;
                 }
+                $lead['shipping_address_parts'] = array_filter(array_intersect_key($parts, self::ADDRESS_PARTS + ['codes' => 1]), fn ($v) => $v !== '' && $v !== []) ?: null;
             }
 
             match ($f['maps_to'] ?? null) {
@@ -384,7 +431,7 @@ class FormFields
     public static function display(array $field, mixed $raw): string
     {
         return match ($field['type']) {
-            'address' => self::address(is_array($raw) ? $raw : [], $field['parts'] ?? []),
+            'address' => self::address($v = self::addressValues($field, is_array($raw) ? $raw : []), self::addressParts($field), $v['kelurahan_type'] ?? 'Kel.'),
             'checkbox' => ($field['options'] ?? []) === []
                 ? (filter_var($raw, FILTER_VALIDATE_BOOLEAN) || $raw === 'on' ? 'Ya' : '')
                 : implode(', ', array_map('strval', array_filter((array) $raw, 'is_string'))),
@@ -394,8 +441,44 @@ class FormFields
         };
     }
 
+    /**
+     * The parts of an address answer as text, trimmed. With dropdowns the codes become names (kept under "codes"),
+     * and an empty postal code takes the village's.
+     *
+     * @return array<string, mixed>
+     */
+    public static function addressValues(array $field, array $raw): array
+    {
+        $parts = [];
+        foreach (self::addressParts($field) as $part) {
+            $parts[$part] = is_scalar($raw[$part] ?? null) ? trim((string) $raw[$part]) : '';
+        }
+
+        if (! self::regionMode($field)) {
+            return $parts;
+        }
+
+        $names = RegionDirectory::resolve($parts);
+        $codes = [];
+
+        foreach (array_keys(RegionDirectory::CHAIN) as $part) {
+            if (is_array($names) && isset($names[$part])) {
+                $codes[$part] = $parts[$part];
+                $parts[$part] = $names[$part];
+            } else {
+                $parts[$part] = '';
+            }
+        }
+
+        if ($parts['kode_pos'] === '' && is_array($names) && isset($names['postal'])) {
+            $parts['kode_pos'] = $names['postal'];
+        }
+
+        return $parts + ['codes' => $codes, 'kelurahan_type' => is_array($names) ? ($names['kelurahan_type'] ?? 'Kel.') : 'Kel.'];
+    }
+
     /** "Jl. Mawar 5, RT 01/RW 02, (dekat masjid), Kel. A, Kec. B, Kab. Bekasi, Jawa Barat 17520" */
-    public static function address(array $parts, array $enabled): string
+    public static function address(array $parts, array $enabled, string $villagePrefix = 'Kel.'): string
     {
         $get = fn (string $k) => in_array($k, $enabled, true) ? trim((string) ($parts[$k] ?? '')) : '';
         $province = $get('provinsi');
@@ -405,7 +488,7 @@ class FormFields
             $get('street'),
             $get('rt_rw') !== '' ? 'RT/RW '.$get('rt_rw') : '',
             $get('landmark') !== '' ? '('.$get('landmark').')' : '',
-            $get('kelurahan') !== '' ? 'Kel. '.$get('kelurahan') : '',
+            $get('kelurahan') !== '' ? $villagePrefix.' '.$get('kelurahan') : '',
             $get('kecamatan') !== '' ? 'Kec. '.$get('kecamatan') : '',
             $get('kota'),
             trim($province.' '.$get('kode_pos')),
