@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['name', 'position', 'type', 'requirement', 'default_action', 'default_due_hours'])]
+#[Fillable(['name', 'template_key', 'position', 'type', 'requirement', 'default_action', 'default_due_hours'])]
 class Stage extends Model
 {
     use BelongsToTenant;

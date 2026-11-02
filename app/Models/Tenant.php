@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
-#[Fillable(['name', 'slug', 'plan', 'status', 'timezone', 'trial_ends_at', 'ai_instructions', 'ai_handoff_keywords', 'lead_reassign_mode', 'lead_reassign_minutes', 'lead_reassign_max', 'show_property_fields', 'industry', 'shipping'])]
+#[Fillable(['name', 'slug', 'plan', 'status', 'timezone', 'trial_ends_at', 'ai_instructions', 'ai_handoff_keywords', 'lead_reassign_mode', 'lead_reassign_minutes', 'lead_reassign_max', 'show_property_fields', 'industry', 'shipping', 'stage_automation'])]
 class Tenant extends Model
 {
     protected $hidden = ['capture_token'];
@@ -24,6 +24,7 @@ class Tenant extends Model
             'capture_settings' => 'array',
             'show_property_fields' => 'boolean',
             'shipping' => 'array',
+            'stage_automation' => 'array',
         ];
     }
 

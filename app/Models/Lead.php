@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 use LogicException;
@@ -26,6 +27,7 @@ use LogicException;
     'budget_min', 'budget_max', 'payment_method', 'property_id', 'survey_at',
     'survey_location', 'unit', 'deal_value', 'lost_reason_id', 'custom_fields', 'stage_entered_at',
     'variant', 'quantity', 'shipping_address', 'courier', 'shipping_cost', 'order_items',
+    'payment_type', 'payment_proof_at', 'paid_at', 'shipping_province', 'tracking_number', 'shipped_at',
 ])]
 class Lead extends Model
 {
@@ -78,6 +80,9 @@ class Lead extends Model
             'assigned_at' => 'datetime',
             'custom_fields' => 'array',
             'order_items' => 'array',
+            'payment_proof_at' => 'datetime',
+            'paid_at' => 'datetime',
+            'shipped_at' => 'datetime',
         ];
     }
 
@@ -131,6 +136,11 @@ class Lead extends Model
     public function lostReason(): BelongsTo
     {
         return $this->belongsTo(LostReason::class);
+    }
+
+    public function conversation(): HasOne
+    {
+        return $this->hasOne(WaConversation::class);
     }
 
     public function activities(): HasMany

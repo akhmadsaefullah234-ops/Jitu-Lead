@@ -17,6 +17,13 @@ return [
         'zone' => ZoneShippingRates::class,
     ],
 
+    // Where a buyer tracks a parcel, by the courier's first word ("JNE REG" => jne). {resi} is the tracking number.
+    // Couriers not listed use "default".
+    'tracking_urls' => [
+        'jne' => 'https://www.jne.co.id/tracking-package?awb={resi}',
+        'default' => 'https://cekresi.com/?noresi={resi}',
+    ],
+
     // Used when a product in the catalogue has no weight yet
     'default_weight_grams' => 1000,
 

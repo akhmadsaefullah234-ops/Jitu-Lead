@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\Automation\StageAutomation;
 use App\Models\Lead;
 use App\Models\Stage;
 use App\Models\User;
@@ -11,18 +12,24 @@ use App\Shipping\ShippingQuote;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Writes a confirmed shop order onto its lead: items, variant, quantity, shipping address, courier, the shipping
- * cost and the total, then moves the lead to "Menunggu pembayaran". The shipping cost is always priced again
- * here, so no caller (the AI included) can set it.
+ * Writes a shop order onto its lead: items, variant, quantity, shipping address, courier, the shipping cost and
+ * the total. A confirmed order moves the lead to "Menunggu pembayaran" (transfer) or "Dikemas & dikirim" (cash
+ * on delivery); a draft (details complete, buyer not confirmed yet) moves it to "Order masuk". For shops those
+ * moves follow Pengaturan > Otomatisasi tahap (App\Automation\StageAutomation). The shipping cost is always
+ * priced again here, so no caller (the AI included) can set it.
  */
 class RecordOrder
 {
     public const PAYMENT_STAGE = 'Menunggu pembayaran';
 
-    public function __construct(private MoveLeadToStage $move) {}
+    public const DRAFT = 'draft';
+
+    public const PAYMENTS = ['transfer', 'cod'];
+
+    public function __construct(private MoveLeadToStage $move, private StageAutomation $automation) {}
 
     /**
-     * @param  array{items?: list<array>, alamat?: ?string, kecamatan?: ?string, kota?: ?string, provinsi?: ?string, kurir?: ?string}  $order
+     * @param  array{items?: list<array>, alamat?: ?string, kecamatan?: ?string, kota?: ?string, provinsi?: ?string, kurir?: ?string, status?: ?string, nama?: ?string, pembayaran?: ?string}  $order
      * @return array{status: string, pesan: string, ongkir?: int, total?: ?int, tahap?: ?string}
      */
     public function __invoke(Lead $lead, array $order, User $actor, string $by = 'agen'): array
@@ -32,6 +39,12 @@ class RecordOrder
         if (! $quote->ok()) {
             return ['status' => $quote->status, 'pesan' => $quote->message];
         }
+
+        if (($order['status'] ?? null) === self::DRAFT) {
+            return $this->draft($lead, $order, $quote, $actor, $by);
+        }
+
+        $payment = in_array($order['pembayaran'] ?? null, self::PAYMENTS, true) ? $order['pembayaran'] : 'transfer';
 
         $option = $quote->option((string) ($order['kurir'] ?? ''));
         $address = trim((string) ($order['alamat'] ?? ''));
@@ -49,10 +62,12 @@ class RecordOrder
         // The city and province are added unless the buyer already wrote them
         $fullAddress = implode(', ', [$address, ...array_filter([$order['kecamatan'] ?? null, $quote->city, $quote->province], fn ($p) => filled($p) && ! str_contains(mb_strtolower($address), mb_strtolower((string) $p)))]);
 
-        $stage = DB::transaction(function () use ($lead, $quote, $option, $fullAddress, $total, $actor, $by) {
+        $stage = DB::transaction(function () use ($lead, $quote, $option, $fullAddress, $total, $actor, $by, $order, $payment) {
             $first = $quote->items[0];
 
-            $lead->fill([
+            $lead->fill(array_filter(['name' => filled($order['nama'] ?? null) ? trim($order['nama']) : null]) + [
+                'payment_type' => $payment,
+                'shipping_province' => $quote->province,
                 'property_id' => $first->product?->getKey() ?? $lead->property_id,
                 'variant' => implode('; ', array_filter(array_map(fn (ShippingItem $i) => count($quote->items) > 1 ? trim($i->name.' '.$i->variant) : $i->variant, $quote->items))) ?: null,
                 'quantity' => array_sum(array_map(fn (ShippingItem $i) => $i->quantity, $quote->items)),
@@ -68,11 +83,12 @@ class RecordOrder
                 'user_id' => $by === 'AI' ? null : $actor->getKey(),
                 'type' => 'order_recorded',
                 'body' => "Pesanan dicatat oleh {$by}: ".implode(', ', array_map(fn (ShippingItem $i) => trim($i->name.' '.$i->variant).' x'.$i->quantity, $quote->items))
-                    .". Ongkir {$option->courier} ".ShippingQuote::rupiah($option->price).($total !== null ? ', total '.ShippingQuote::rupiah($total) : ''),
-                'meta' => ['ongkir' => $option->price, 'total' => $total, 'berat_kg' => $quote->billableKg, 'zona' => $quote->zone],
+                    .". Ongkir {$option->courier} ".ShippingQuote::rupiah($option->price).($total !== null ? ', total '.ShippingQuote::rupiah($total) : '')
+                    .($payment === 'cod' ? '. Bayar di tempat (COD)' : '. Bayar transfer'),
+                'meta' => ['ongkir' => $option->price, 'total' => $total, 'berat_kg' => $quote->billableKg, 'zona' => $quote->zone, 'pembayaran' => $payment],
             ]);
 
-            return $this->moveToPayment($lead, $actor);
+            return $this->automation->applies() ? $this->automation->orderConfirmed($lead, $payment) : $this->moveToPayment($lead, $actor);
         });
 
         return array_filter([
@@ -84,6 +100,43 @@ class RecordOrder
             'subtotal_produk' => $subtotal,
             'total' => $total,
             'total_teks' => $total !== null ? ShippingQuote::rupiah($total) : null,
+            'tahap' => $stage,
+        ], fn ($v) => $v !== null);
+    }
+
+    /**
+     * The buyer has given everything an order needs (name, full address with RT/RW and house number or landmark,
+     * product, colour or size, quantity) but has not confirmed it yet: the details go on the lead and it moves to
+     * "Order masuk". Nothing is priced into the lead yet; the courier may not be chosen.
+     */
+    private function draft(Lead $lead, array $order, ShippingQuote $quote, User $actor, string $by): array
+    {
+        $address = trim((string) ($order['alamat'] ?? ''));
+        $fullAddress = implode(', ', [$address, ...array_filter([$order['kecamatan'] ?? null, $quote->city, $quote->province], fn ($p) => filled($p) && ! str_contains(mb_strtolower($address), mb_strtolower((string) $p)))]);
+
+        $stage = DB::transaction(function () use ($lead, $order, $quote, $fullAddress, $actor, $by) {
+            $lead->fill(array_filter(['name' => filled($order['nama'] ?? null) ? trim($order['nama']) : null]) + [
+                'property_id' => $quote->items[0]->product?->getKey() ?? $lead->property_id,
+                'variant' => implode('; ', array_filter(array_map(fn (ShippingItem $i) => count($quote->items) > 1 ? trim($i->name.' '.$i->variant) : $i->variant, $quote->items))) ?: null,
+                'quantity' => array_sum(array_map(fn (ShippingItem $i) => $i->quantity, $quote->items)),
+                'shipping_address' => $fullAddress,
+                'shipping_province' => $quote->province,
+                'order_items' => array_map(fn (ShippingItem $i) => $i->toArray(), $quote->items),
+            ])->save();
+
+            $lead->activities()->create([
+                'user_id' => $by === 'AI' ? null : $actor->getKey(),
+                'type' => 'order_draft',
+                'body' => "Format order lengkap dicatat oleh {$by}, menunggu konfirmasi pembeli: "
+                    .implode(', ', array_map(fn (ShippingItem $i) => trim($i->name.' '.$i->variant).' x'.$i->quantity, $quote->items)).'. Kirim ke '.$fullAddress,
+            ]);
+
+            return $this->automation->orderDrafted($lead);
+        });
+
+        return array_filter([
+            'status' => 'draft_tercatat',
+            'pesan' => 'Data pesanan dicatat'.($stage ? ' dan lead dipindah ke tahap '.$stage : '').'. Menunggu konfirmasi pembeli.',
             'tahap' => $stage,
         ], fn ($v) => $v !== null);
     }

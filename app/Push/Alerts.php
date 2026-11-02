@@ -59,6 +59,23 @@ class Alerts
         ]);
     }
 
+    /** A buyer waiting to pay sent a picture, probably the transfer receipt: the owner and the admins check it. */
+    public function paymentProof(Lead $lead): void
+    {
+        $tenant = $this->current->get();
+
+        if ($tenant === null) {
+            return;
+        }
+
+        $this->send($this->recipients($tenant, $lead, withAdmins: true), 'notify_messages', [
+            'title' => 'Bukti transfer masuk, perlu dicek',
+            'body' => collect([$lead->name, $lead->phone])->filter()->implode(' · '),
+            'url' => Inbox::getUrl(['lead' => $lead->getKey()], tenant: $tenant),
+            'tag' => 'payment-'.$lead->getKey(),
+        ]);
+    }
+
     public function newMessage(Lead $lead, WaMessage $message): void
     {
         $tenant = $this->current->get();

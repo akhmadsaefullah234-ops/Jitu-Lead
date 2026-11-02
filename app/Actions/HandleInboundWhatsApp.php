@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\Automation\StageAutomation;
 use App\Enums\AiMode;
 use App\Enums\MessageStatus;
 use App\Enums\Role;
@@ -104,6 +105,7 @@ class HandleInboundWhatsApp
             });
 
             $this->keepImage($message, $imageBytes);
+            $isNewLead ?: $this->automate($lead, $message);
             $this->queueAiReply($channel, $message);
             $this->alert($lead, $message, $isNewLead, $incoming);
 
@@ -196,6 +198,16 @@ class HandleInboundWhatsApp
             }
         } catch (Throwable $e) {
             report($e); // A picture that cannot be kept never costs the message.
+        }
+    }
+
+    /** A shop's automatic stage moves (payment proof, a cancelled buyer writing again). Never costs the message. */
+    private function automate(Lead $lead, WaMessage $message): void
+    {
+        try {
+            app(StageAutomation::class)->inbound($lead, $message);
+        } catch (Throwable $e) {
+            report($e);
         }
     }
 

@@ -6,6 +6,8 @@ use App\Actions\GenerateAiReply;
 use App\Actions\LearnFromReply;
 use App\Actions\SendLibraryItem;
 use App\Actions\SendWhatsAppMessage;
+use App\Automation\StageAutomation;
+use App\Automation\StageAutomationSettings;
 use App\Enums\MessageStatus;
 use App\Filament\Resources\Leads\LeadResource;
 use App\Filament\Resources\MediaAssets\MediaAssetResource;
@@ -325,6 +327,43 @@ class Inbox extends Page
                 $this->draft = trim($this->draft) === '' ? $quote->summary() : rtrim($this->draft)."\n\n".$quote->summary();
                 $this->updatedDraft();
                 Notification::make()->title('Ongkir dihitung, zona '.$quote->zone)->body(nl2br(e($quote->summary())))->success()->persistent()->send();
+            });
+    }
+
+    /** A shop agent checked the transfer (Pengaturan > Otomatisasi tahap, rule 3). */
+    public function paymentReceivedAction(): Action
+    {
+        return Action::make('paymentReceived')
+            ->label('Pembayaran diterima')->icon(Heroicon::OutlinedBanknotes)->color('success')->size('sm')
+            ->visible(fn () => app(StageAutomation::class)->canConfirmPayment($this->current()?->lead))
+            ->requiresConfirmation()
+            ->modalHeading('Pembayaran sudah masuk?')
+            ->modalDescription('Pastikan dana sudah ada di rekening. Lead pindah ke tahap Dikemas & dikirim.')
+            ->action(function () {
+                app(StageAutomation::class)->paymentReceived($this->current()->lead, auth()->user());
+                Notification::make()->title('Pembayaran dicatat diterima')->success()->send();
+            });
+    }
+
+    /** Courier and tracking number: kept on the lead, sent to the buyer, lead to "Dikemas & dikirim" (rule 4). */
+    public function trackingAction(): Action
+    {
+        return Action::make('tracking')
+            ->label('Nomor resi')->icon(Heroicon::OutlinedQrCode)->color('gray')->size('sm')
+            ->visible(fn () => $this->current() !== null && app(StageAutomation::class)->applies())
+            ->modalHeading('Nomor resi')
+            ->modalDescription(fn () => StageAutomationSettings::of(app(CurrentTenant::class)->get())->enabled('tracking')
+                ? 'Kurir, nomor resi, dan tautan lacak dikirim ke pembeli lewat WhatsApp, lalu lead pindah ke Dikemas & dikirim.'
+                : 'Nomor resi disimpan di lead. Pengiriman otomatis ke pembeli sedang dimatikan di Pengaturan > Otomatisasi tahap.')
+            ->modalSubmitActionLabel('Simpan')
+            ->fillForm(fn () => ['courier' => $this->current()?->lead?->courier, 'tracking_number' => $this->current()?->lead?->tracking_number])
+            ->schema([
+                TextInput::make('courier')->label('Kurir')->required()->maxLength(60)->placeholder('JNE REG'),
+                TextInput::make('tracking_number')->label('Nomor resi')->required()->maxLength(60)->regex('/^[A-Za-z0-9\-\s]{4,60}$/'),
+            ])
+            ->action(function (array $data) {
+                $result = app(StageAutomation::class)->shipped($this->current()->lead, $data['courier'], $data['tracking_number'], auth()->user());
+                Notification::make()->title($result)->{str_contains($result, 'belum') || str_contains($result, 'gagal') ? 'warning' : 'success'}()->send();
             });
     }
 

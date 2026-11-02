@@ -22,6 +22,7 @@
         .wa-head { padding: .7rem 1rem; border-bottom: 1px solid var(--gray-200); display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
         .wa-banner { padding: .55rem 1rem; font-size: .8125rem; border-bottom: 1px solid var(--gray-200); }
         .wa-banner b { display: block; }
+        .wa-proof { font-size: .75rem; font-weight: 600; color: #92400e; background: #fef3c7; border-radius: 9999px; padding: .15rem .55rem; }
         .wa-banner.official { background: #ecfdf5; color: #065f46; }
         .wa-banner.gateway { background: #eff6ff; color: #1e40af; }
         .wa-banner.paid { background: #fffbeb; color: #92400e; }
@@ -77,6 +78,11 @@
                         <div class="p" style="font-size:.75rem;color:var(--gray-500)">{{ $conversation->phone }} · {{ $conversation->lead->stage?->name }}@if ($aiMode) · Pembalas: {{ $aiMode->getLabel() }}@endif</div>
                     </div>
                     <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;justify-content:flex-end">
+                        @if ($conversation->lead->payment_proof_at && ! $conversation->lead->paid_at)
+                            <span class="wa-proof">Bukti transfer masuk, perlu dicek</span>
+                        @endif
+                        {{ $this->paymentReceivedAction }}
+                        {{ $this->trackingAction }}
                         {{ $this->shippingQuoteAction }}
                         <a class="jl-link" style="font-size:.8rem;font-weight:600" href="{{ $leadUrl($conversation->lead) }}" wire:navigate>Buka lead</a>
                     </div>
