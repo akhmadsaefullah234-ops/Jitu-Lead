@@ -45,6 +45,7 @@ class LandingNavigationRetailTest extends TestCase
 
         foreach ([$this->tenant, $this->shop] as $t) {
             Artisan::call('plan:set', ['tenant' => $t->slug, 'plan' => 'agensi']);
+            $t->unsetRelation('subscription');
         }
     }
 
@@ -189,8 +190,8 @@ class LandingNavigationRetailTest extends TestCase
         $this->assertArrayNotHasKey('product', Sections::types('properti'));
         $this->assertArrayHasKey('price', Sections::types('retail', ['price']), 'a section already on the page stays editable');
 
-        $this->assertEqualsCanonicalizing(['kosong', 'produk_promo', 'produk_varian', 'terima_kasih'], array_keys(Templates::options('retail')));
-        $this->assertEqualsCanonicalizing(['kosong', 'kpr', 'cluster', 'villa', 'kavling', 'second'], array_keys(Templates::options('properti')));
+        $this->assertEqualsCanonicalizing(['kosong', 'produk_promo', 'produk_varian', 'terima_kasih', 'konversi_produk', 'konversi_produk_wa', 'konversi_layanan'], array_keys(Templates::options('retail')));
+        $this->assertEqualsCanonicalizing(['kosong', 'kpr', 'cluster', 'villa', 'kavling', 'second', 'konversi_properti', 'konversi_properti_wa', 'konversi_layanan'], array_keys(Templates::options('properti')));
 
         $this->actingInTenant($this->adminOf($this->tenant), $this->tenant);
         Livewire::test(CreateLandingPage::class)->fillForm(['template' => 'produk_promo', 'title' => 'X', 'slug' => 'x'])->call('create')

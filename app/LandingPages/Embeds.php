@@ -58,6 +58,28 @@ class Embeds
         return str_starts_with($url, '/') ? url($url) : $url;
     }
 
+    /** An uploaded video of this agency (mp4/webm), as a public URL. */
+    public static function video(mixed $value, int|string|null $tenantId): ?string
+    {
+        $path = self::path($value);
+
+        if ($path === null || ! preg_match('#^landing/'.preg_quote((string) $tenantId, '#').'/[A-Za-z0-9._-]+\.(mp4|webm)$#i', $path)) {
+            return null;
+        }
+
+        $url = Storage::disk('public')->url($path);
+
+        return str_starts_with($url, '/') ? url($url) : $url;
+    }
+
+    /** A video file elsewhere on the web: https and ending in .mp4 or .webm. */
+    public static function videoUrl(?string $url): ?string
+    {
+        $url = trim((string) $url);
+
+        return preg_match('#^https://[^\s<>"\']+\.(mp4|webm)(\?[^\s<>"\']*)?$#i', $url) ? $url : null;
+    }
+
     /** @return list<string> */
     public static function images(mixed $value, int|string|null $tenantId): array
     {

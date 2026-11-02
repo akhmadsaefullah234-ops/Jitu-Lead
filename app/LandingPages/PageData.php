@@ -57,8 +57,21 @@ class PageData
         $autoForm = Navigation::of($page->navigation)['auto_form'];
         $hasForm = in_array('form', $types, true);
 
+        $blockCss = '';
+        $styled = [];
+        foreach ($sections as $i => $section) {
+            if (BlockStyle::has($section['props']['style'] ?? null)) {
+                $blockCss .= BlockStyle::css('#bx-'.($i + 1), $section['props']['style'], $tenantId);
+                $styled[$i] = BlockStyle::animation($section['props']['style']) ?: 'bx-plain';
+            }
+        }
+        $animated = (bool) array_filter($styled, fn ($c) => $c !== 'bx-plain');
+
         return [
             'tenant' => $tenant,
+            'blockCss' => $blockCss,
+            'styled' => $styled,
+            'animated' => $animated,
             'page' => $page,
             'sections' => $sections,
             'color' => $color,
@@ -72,7 +85,8 @@ class PageData
             'hasForm' => $hasForm,
             'showPrimaryForm' => ! $hasForm && $autoForm,
             'nav' => $nav,
-            'usesScript' => (bool) array_intersect($types, ['kpr', 'countdown', 'video', 'product']),
+            'usesScript' => $animated || (bool) array_intersect($types, ['kpr', 'countdown', 'video', 'product', 'slider'])
+                || collect($sections)->contains(fn ($s) => $s['type'] === 'hero' && in_array($s['props']['visual'] ?? '', ['slider', 'video'], true)),
             'tenantId' => $tenantId,
             'preview' => $preview,
             'tracking' => $tracking,

@@ -265,6 +265,89 @@ class Templates
                         'buttons' => [['label' => 'Chat admin via WhatsApp', 'action' => 'whatsapp', 'wa_target' => 'rotate', 'wa_message' => 'Halo admin, saya baru order {produk}. Mohon dicek ya.', 'color' => 'wa', 'size' => 'lg', 'icon' => 'whatsapp']]]),
                 ],
             ],
+
+            'konversi_produk' => self::conversion('retail', 'Produk – konversi tinggi', 'Satu tujuan: pembeli mengisi formulir Order produk. Hero, masalah & solusi, manfaat, bukti sosial, tanya jawab, penutup.', true, 'shop', true),
+            'konversi_produk_wa' => self::conversion('retail', 'Produk – langsung WhatsApp', 'Struktur konversi yang sama, semua tombol langsung membuka WhatsApp admin dengan pesan otomatis.', false, 'shop'),
+            'konversi_properti' => self::conversion('properti', 'Properti – konversi tinggi (formulir)', 'Satu tujuan: calon pembeli mengisi formulir. Hero, masalah & solusi, manfaat, fasilitas, bukti sosial, tanya jawab, penutup.', true, 'property'),
+            'konversi_properti_wa' => self::conversion('properti', 'Properti – konversi tinggi (WhatsApp)', 'Struktur konversi yang sama, semua tombol langsung membuka WhatsApp marketing bergiliran.', false, 'property'),
+            'konversi_layanan' => self::conversion(null, 'Layanan – konversi tinggi', 'Untuk jasa: hero, masalah & solusi, manfaat, bukti sosial, tanya jawab, penutup, dan formulir.', true, 'service'),
         ];
+    }
+
+    /**
+     * A page built to convert, with one goal (the form or WhatsApp): Hero, Masalah & solusi, Manfaat, Bukti sosial,
+     * Tanya jawab, Penutup. The sample text is bracketed placeholders, never claims or numbers.
+     *
+     * @param  'shop'|'property'|'service'  $kind
+     * @return array<string, mixed>
+     */
+    private static function conversion(?string $industry, string $name, string $description, bool $form, string $kind, bool $product = false): array
+    {
+        $thing = ['shop' => '[Nama produk]', 'property' => '[Nama perumahan]', 'service' => '[Nama layanan]'][$kind];
+        $cta = $form
+            ? ['label' => ['shop' => 'Pesan Sekarang', 'property' => 'Minta info & harga', 'service' => 'Konsultasi gratis'][$kind], 'action' => 'scroll', 'color' => 'brand', 'size' => 'lg', 'icon' => $kind === 'shop' ? 'cart' : 'arrow']
+            : ['label' => 'Chat via WhatsApp', 'action' => 'whatsapp', 'wa_target' => 'rotate', 'wa_message' => 'Halo, saya tertarik dengan {judul}. Boleh minta info lengkapnya?', 'color' => 'wa', 'size' => 'lg', 'icon' => 'whatsapp'];
+        $second = $kind === 'property' && $form
+            ? [['label' => 'Chat via WhatsApp', 'action' => 'whatsapp', 'wa_target' => 'rotate', 'wa_message' => 'Halo, saya tertarik dengan {judul}.', 'color' => 'outline', 'size' => 'lg', 'icon' => 'whatsapp']]
+            : [];
+        $assure = ['shop' => '[Gratis ongkir] • [Bisa COD] • [Retur mudah]', 'property' => '[Legalitas jelas] • [Bisa KPR] • [Survei gratis]', 'service' => '[Konsultasi gratis] • [Tanpa biaya tersembunyi]'][$kind];
+
+        $hero = ['headline' => $thing.': [nilai utama dalam satu kalimat]', 'subheadline' => '[Untuk siapa] yang ingin [hasil yang diinginkan], tanpa [hambatan utama].',
+            'visual' => $kind === 'shop' ? 'slider' : 'image', 'image' => null,
+            'slider_slides' => [], 'slider_per_mobile' => 1, 'slider_per_tablet' => 1, 'slider_per_desktop' => 1, 'slider_ratio' => '1:1', 'slider_arrows' => true, 'slider_dots' => true, 'slider_loop' => true,
+            'buttons' => [$form ? ['color' => 'light'] + $cta : $cta, ...$second], 'assurance' => $assure];
+
+        $blocks = [
+            self::b('hero', $hero),
+            self::b('problem_solution', ['heading' => '[Masalah yang paling sering dialami calon pembeli]', 'problem_title' => 'Sering mengalami ini?', 'solution_title' => 'Dengan '.$thing,
+                'problems' => [['icon' => '✕', 'text' => '[Masalah pertama]'], ['icon' => '✕', 'text' => '[Masalah kedua]'], ['icon' => '✕', 'text' => '[Masalah ketiga]']],
+                'solutions' => [['icon' => '✓', 'text' => '[Solusi untuk masalah pertama]'], ['icon' => '✓', 'text' => '[Solusi untuk masalah kedua]'], ['icon' => '✓', 'text' => '[Solusi untuk masalah ketiga]']]]),
+            self::b('benefits', ['heading' => 'Yang Anda dapatkan', 'intro' => '[Satu kalimat tentang hasil yang dirasakan pembeli]', 'items' => [
+                ['icon_type' => 'icon', 'icon' => 'check', 'title' => '[Manfaat utama]', 'text' => '[Jelaskan apa yang dirasakan pembeli, bukan fitur teknis]'],
+                ['icon_type' => 'icon', 'icon' => 'shield', 'title' => '[Manfaat kedua]', 'text' => '[Penjelasan singkat]'],
+                ['icon_type' => 'icon', 'icon' => 'clock', 'title' => '[Manfaat ketiga]', 'text' => '[Penjelasan singkat]'],
+            ]]),
+        ];
+
+        if ($kind === 'shop') {
+            $blocks[] = self::b('icon_list', ['heading' => 'Keunggulan belanja', 'layout' => 'grid', 'cols_desktop' => 4, 'cols_mobile' => 2, 'icon_shape' => 'none', 'icon_size' => 32, 'items' => [
+                ['icon_type' => 'emoji', 'emoji' => '🚚', 'title' => 'Gratis ongkir', 'text' => '[Syarat gratis ongkir]'],
+                ['icon_type' => 'emoji', 'emoji' => '💵', 'title' => 'Bisa COD', 'text' => 'Bayar di tempat'],
+                ['icon_type' => 'emoji', 'emoji' => '🔄', 'title' => 'Retur dengan video unboxing', 'text' => '[Syarat retur]'],
+                ['icon_type' => 'emoji', 'emoji' => '⏰', 'title' => 'Admin 05.00–21.00', 'text' => '[Hari layanan]'],
+            ]]);
+        } elseif ($kind === 'property') {
+            $blocks[] = self::b('icon_list', ['heading' => 'Fasilitas', 'layout' => 'list', 'cols_desktop' => 3, 'cols_mobile' => 1, 'icon_shape' => 'circle', 'items' => [
+                ['icon_type' => 'icon', 'icon' => 'shield', 'title' => '[Keamanan]', 'text' => '[Keterangan]'],
+                ['icon_type' => 'icon', 'icon' => 'tree', 'title' => '[Taman / ruang hijau]', 'text' => '[Keterangan]'],
+                ['icon_type' => 'icon', 'icon' => 'road', 'title' => '[Akses jalan]', 'text' => '[Keterangan]'],
+            ]]);
+        }
+
+        $blocks[] = self::b('social_proof', ['heading' => 'Kata mereka', 'testimonials' => [
+            ['name' => '[Nama asli pembeli]', 'role' => '[Kota]', 'quote' => '[Ganti dengan testimoni asli, dengan izin pembeli]', 'rating' => null, 'photo' => null],
+        ], 'logos' => [], 'stats' => []]);
+        $blocks[] = self::b('faq', ['heading' => 'Masih ragu?', 'items' => [
+            ['q' => '[Keraguan yang paling sering ditanyakan]', 'a' => '[Jawaban yang jujur dan jelas]'],
+            ['q' => '[Pertanyaan tentang harga atau pembayaran]', 'a' => '[Jawaban]'],
+            ['q' => '[Pertanyaan tentang garansi, retur, atau proses]', 'a' => '[Jawaban]'],
+        ]]);
+        $blocks[] = self::b('closing', ['heading' => '[Ajakan penutup: ulangi nilai utama]', 'text' => '[Alasan untuk bertindak sekarang, tanpa janji palsu]',
+            'assurances' => ['shop' => ['[Garansi]', '[Retur mudah]', '[Bisa COD]'], 'property' => ['[Legalitas jelas]', '[Survei gratis]'], 'service' => ['[Garansi layanan]', '[Konsultasi gratis]']][$kind],
+            'buttons' => [$cta]]);
+
+        if ($form) {
+            $blocks[] = self::b('form', ['heading' => ['shop' => 'Form order', 'property' => 'Dapatkan info lengkap', 'service' => 'Jadwalkan konsultasi'][$kind],
+                'intro' => 'Isi data singkat ini, kami hubungi lewat WhatsApp.']);
+        }
+
+        return array_filter([
+            'industry' => $industry, 'product' => $product ?: null,
+            'name' => $name, 'description' => $description,
+            'color' => ['shop' => '#ea580c', 'property' => '#1d4ed8', 'service' => '#0f766e'][$kind], 'font' => 'modern',
+            'meta' => '[Satu kalimat ringkas tentang '.$thing.' untuk pratinjau link]',
+            'navigation' => $form ? null : ['auto_form' => false],
+            'blocks' => $blocks,
+        ], fn ($v) => $v !== null);
     }
 }
