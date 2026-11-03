@@ -28,6 +28,9 @@ use Throwable;
  */
 class PipelineConversions
 {
+    /** The trigger of an event a web form sent from the browser and the server. */
+    public const FORM = 'form';
+
     /** The Meta events a stage or "Hot" can send. */
     public const EVENTS = [
         'Lead' => 'Lead (calon pelanggan)',
@@ -110,9 +113,16 @@ class PipelineConversions
         }
     }
 
-    /** Queues one event for the lead unless it already sent it. */
+    /**
+     * Queues one event for the lead unless it already sent it: by any route (a web form's event counts too), so
+     * one person is never counted twice for the same event. A Purchase is the exception: once per order.
+     */
     public function send(Lead $lead, string $event, string $trigger, int $at, array $pipeline): ?ConversionEvent
     {
+        if ($event !== 'Purchase' && $this->alreadySent($lead, $event)) {
+            return null;
+        }
+
         $eventId = self::eventId($lead, $event);
 
         $record = ConversionEvent::query()->createOrFirst(['event_id' => $eventId], ['lead_id' => $lead->getKey(), 'event_name' => $event, 'trigger' => $trigger]);
@@ -124,6 +134,42 @@ class PipelineConversions
         SendConversionEvents::dispatch((int) $lead->tenant_id, $this->payload($lead, $event, $eventId, $at, $trigger, $pipeline, $record->getKey())->toArray());
 
         return $record;
+    }
+
+    /**
+     * Whether the lead already sent this event: a pipeline or form event on record, or, for a form lead from
+     * before forms were recorded, the form's event (Lead, or the agency's form event) which its browser sent.
+     */
+    private function alreadySent(Lead $lead, string $event): bool
+    {
+        $sent = ConversionEvent::query()->where('lead_id', $lead->getKey());
+
+        if ((clone $sent)->where('event_name', $event)->exists()) {
+            return true;
+        }
+
+        if ($lead->source?->type !== 'form' || (clone $sent)->where('trigger', self::FORM)->exists()) {
+            return false;
+        }
+
+        return in_array($event, array_unique(['Lead', TrackingSetting::active()?->eventFor('meta') ?? 'Lead']), true);
+    }
+
+    /**
+     * Notes the event a web form sent for its new lead (with the browser's event_id), so the pipeline does not
+     * send the same event for that person again.
+     */
+    public static function recordFormEvent(Lead $lead, string $eventId, ?string $event): void
+    {
+        if ($event === null || $event === '') {
+            return;
+        }
+
+        try {
+            ConversionEvent::query()->createOrFirst(['event_id' => mb_substr($eventId, 0, 120)], ['lead_id' => $lead->getKey(), 'event_name' => mb_substr($event, 0, 40), 'trigger' => self::FORM]);
+        } catch (Throwable $e) {
+            report($e);
+        }
     }
 
     /** "lead-12-Lead"; a Purchase carries its order ("lead-12-Purchase-345") so a new order counts again. */

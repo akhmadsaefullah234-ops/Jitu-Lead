@@ -26,7 +26,11 @@ Cara kerja (`App\Tracking\PipelineConversions`):
 - `event_id` stabil: `lead-{id}-{event}`. Satu lead mengirim satu event sekali saja (tabel `conversion_events`,
   unik per agensi). `Purchase` memakai id pesanan terakhir (`lead-{id}-Purchase-{aktivitas order_recorded}`),
   jadi pesanan baru boleh terhitung lagi.
-- Lead baru dari formulir web tidak dilaporkan lagi oleh tahap awalnya (formulir sudah mengirim event sendiri).
+- Satu orang tidak pernah dihitung dua kali untuk event yang sama, dari jalur mana pun: event yang dikirim formulir
+  web untuk lead baru juga dicatat di `conversion_events` (trigger `form`, event_id dari browser), dan pipeline
+  melewati event yang sudah pernah dikirim lead itu. Jadi lead formulir yang kemudian Hot tidak mengirim `Lead`
+  kedua, sedangkan tahap berikutnya (mis. `InitiateCheckout`) tetap terkirim. Lead formulir lama yang belum
+  tercatat dianggap sudah mengirim event formulirnya (`Lead` atau event formulir agensi).
 - TikTok menerima nama event TikTok yang setara (`QualifiedLead` tidak punya padanan, jadi tidak dikirim).
 
 ### Data yang dikirim

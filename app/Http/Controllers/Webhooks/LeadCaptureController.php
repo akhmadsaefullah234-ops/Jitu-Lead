@@ -67,11 +67,14 @@ class LeadCaptureController extends Controller
                 }
             }
 
-            if ($created && filled($data['event_id'] ?? null) && TrackingSetting::active()?->hasAny()) {
+            $tracking = TrackingSetting::active();
+
+            if ($created && filled($data['event_id'] ?? null) && $tracking?->hasAny()) {
                 SendConversionEvents::dispatch($tenant->getKey(), ConversionPayload::make(
                     $data['event_id'], $data['email'] ?? null, $data['phone'] ?? null, $data['source_url'] ?? null,
                     $request->ip(), $request->userAgent(), array_filter(array_intersect_key($data, array_flip(self::BROWSER_IDS))),
                 )->toArray());
+                PipelineConversions::recordFormEvent($lead, (string) $data['event_id'], $tracking->eventFor('meta'));
             }
         });
 
