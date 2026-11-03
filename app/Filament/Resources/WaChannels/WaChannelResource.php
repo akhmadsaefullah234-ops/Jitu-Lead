@@ -38,6 +38,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -168,7 +169,7 @@ class WaChannelResource extends Resource
                 ->requiresConfirmation()->modalDescription('WhatsApp di nomor ini akan keluar dari CRM. Anda bisa menyambungkannya lagi dengan scan QR.')
                 ->action(function (WaChannel $record) {
                     $problem = static::gateway($record)->logout();
-                    $problem ? Notification::make()->title('Gagal memutuskan')->body($problem)->danger()->send() : $record->markDisconnected('Diputuskan dari CRM.');
+                    $problem ? Notification::make()->title('Gagal memutuskan')->body($problem)->danger()->send() : $record->markDisconnected('Diputuskan dari CRM.', deliberate: true);
                 }),
             EditAction::make(),
             DeleteAction::make(),
@@ -203,24 +204,11 @@ class WaChannelResource extends Resource
             ->visible(fn (?WaChannel $record, Get $get) => $record !== null && static::typeOf($get('type')) === 'gateway')
             ->headerActions([
                 Action::make('loadLabels')->label('Muat label dari WhatsApp')->icon(Heroicon::OutlinedArrowPath)->link()
-                    ->action(function (?WaChannel $record) {
-                        $result = static::gateway($record)->labels();
-
-                        if ($result['error'] !== null) {
-                            Notification::make()->title('Label belum bisa dimuat')->body($result['error'])->danger()->send();
-
-                            return;
-                        }
-
-                        $names = array_values(array_unique(array_column($result['labels'], 'name')));
-                        $record->forceFill(['label_settings' => ['known' => $names] + BusinessLabels::settings($record)])->save();
-
-                        Notification::make()->title($names === [] ? 'Belum ada label yang tersinkron' : count($names).' label dimuat')
-                            ->body($names === [] ? 'Ubah atau pasang satu label sekali di HP (WhatsApp Business) agar label tersinkron ke CRM, lalu muat lagi.' : implode(', ', $names))
-                            ->success()->send();
-                    }),
+                    ->action(fn (?WaChannel $record) => static::loadLabels($record)),
             ])
             ->schema([
+                Placeholder::make('label_check')->label('Label di WhatsApp')
+                    ->content(fn (?WaChannel $record) => $record ? view('filament.wa-label-check', ['checks' => BusinessLabels::checklist($record), 'known' => BusinessLabels::settings($record)['known']]) : null),
                 Toggle::make('label_settings.enabled')->label('Aktifkan label otomatis'),
                 Toggle::make('label_settings.ads_only')->label('Hanya chat dari iklan')
                     ->helperText('Hanya lead yang datang dari iklan Klik ke WhatsApp (punya ID iklan atau data iklan).'),
@@ -229,6 +217,50 @@ class WaChannelResource extends Resource
                     ->content(fn (?WaChannel $record) => $record ? view('filament.wa-label-summary', ['summary' => BusinessLabels::summary($record), 'statuses' => WaLabelEvent::STATUSES]) : null),
                 View::make('filament.guides.wa-labels'),
             ]);
+    }
+
+    /**
+     * "Muat label dari WhatsApp": asks the gateway for every label again (a number linked before labels were kept
+     * has none until then), shows which of the rules' labels the account has, and puts on the labels that were
+     * waiting for one of them.
+     */
+    public static function loadLabels(WaChannel $record): void
+    {
+        $result = static::gateway($record)->resyncLabels();
+
+        if ($result['error'] !== null && $result['labels'] === []) {
+            Notification::make()->title('Label belum bisa dimuat')->body($result['error'])->danger()->send();
+
+            return;
+        }
+
+        $names = array_values(array_unique(array_column($result['labels'], 'name')));
+        $record->forceFill(['label_settings' => ['known' => $names] + BusinessLabels::settings($record)])->save();
+        $checks = BusinessLabels::checklist($record);
+        $missing = array_keys(array_filter($checks, fn ($found) => $found === null));
+        $retried = $names === [] ? 0 : BusinessLabels::retryWaiting($record, $names)['retried'];
+
+        $lines = array_map(fn (string $rule, ?string $found) => $found === null ? "✗ {$rule}: belum ada" : "✓ {$rule}".($found !== $rule ? " (sebagai \"{$found}\")" : ''), array_keys($checks), $checks);
+
+        if ($names !== []) {
+            $lines[] = 'Label di WhatsApp: '.implode(', ', $names).'.';
+        }
+
+        if ($missing !== []) {
+            $lines[] = 'Pasang '.implode(', ', array_map(fn ($m) => "\"{$m}\"", $missing)).' sekali di HP (WhatsApp Business: buka chat mana pun, ketuk nama kontak atau menu, pilih Label, lalu pilih atau buat label itu), lalu klik "Muat label dari WhatsApp" lagi.';
+        }
+
+        if ($retried > 0) {
+            $lines[] = "{$retried} label yang menunggu sedang dipasang sekarang.";
+        }
+
+        if ($result['error'] !== null) {
+            $lines[] = $result['error'];
+        }
+
+        Notification::make()->title($missing === [] ? 'Semua label tersedia' : 'Ada label yang belum ada di WhatsApp')
+            ->body(new HtmlString(implode('<br>', array_map('e', $lines))))
+            ->status($missing === [] ? 'success' : 'warning')->persistent()->send();
     }
 
     private static function gateway(WaChannel $channel): GatewayProvider

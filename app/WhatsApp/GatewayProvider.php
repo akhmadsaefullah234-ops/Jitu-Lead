@@ -118,10 +118,12 @@ class GatewayProvider implements WhatsAppProvider
 
             case 'session':
                 $session = in_array($request->input('status'), ['connected', 'disconnected', 'qr_required', 'needs_relink'], true) ? $request->input('status') : null;
+                // Why the login needs a new scan, e.g. "perangkat tertaut dilepas dari HP".
+                $reason = is_string($request->input('reason')) && $request->input('reason') !== '' ? mb_substr(strip_tags($request->input('reason')), 0, 200) : null;
                 break;
         }
 
-        return ['messages' => $messages, 'statuses' => $statuses, 'session' => $session];
+        return ['messages' => $messages, 'statuses' => $statuses, 'session' => $session, 'session_reason' => $reason ?? null];
     }
 
     /** Starts a pairing session; returns a problem text, or null when the gateway is ready to show a QR. */
@@ -209,9 +211,57 @@ class GatewayProvider implements WhatsAppProvider
             return ['labels' => [], 'error' => $response->status() === 404 ? 'Gateway belum mendukung label. Pasang ulang gateway.' : "Gateway menjawab HTTP {$response->status()}."];
         }
 
-        $labels = array_values(array_filter((array) $response->json('labels'), fn ($l) => is_array($l) && filled($l['name'] ?? null)));
+        return ['labels' => self::cleanLabels((array) $response->json('labels')), 'error' => null];
+    }
 
-        return ['labels' => array_map(fn (array $l) => ['id' => (string) ($l['id'] ?? ''), 'name' => mb_substr((string) $l['name'], 0, 60), 'color' => isset($l['color']) ? (int) $l['color'] : null], $labels), 'error' => null];
+    /** @return list<array{id: string, name: string, color: ?int}> */
+    private static function cleanLabels(array $labels): array
+    {
+        $labels = array_values(array_filter($labels, fn ($l) => is_array($l) && filled($l['name'] ?? null)));
+
+        return array_map(fn (array $l) => ['id' => (string) ($l['id'] ?? ''), 'name' => mb_substr((string) $l['name'], 0, 60), 'color' => isset($l['color']) ? (int) $l['color'] : null], $labels);
+    }
+
+    /**
+     * Asks the gateway to fetch every WhatsApp Business label again (a number linked before the gateway kept labels
+     * has none until then), and returns them. `retry_after`: seconds until another resync is allowed (the gateway
+     * allows one per 10 minutes); the labels are then the ones already known. An older gateway without resync
+     * answers with the labels it has and an error saying it needs reinstalling.
+     *
+     * @return array{labels: list<array{id: string, name: string, color: ?int}>, error: ?string, resynced: bool, retry_after: ?int}
+     */
+    public function resyncLabels(): array
+    {
+        if ($problem = $this->configurationProblem()) {
+            return ['labels' => [], 'error' => $problem, 'resynced' => false, 'retry_after' => null];
+        }
+
+        try {
+            $response = $this->http()->timeout(60)->post($this->url('/sessions/'.$this->channel->webhook_token.'/labels/resync'));
+        } catch (Throwable $e) {
+            return ['labels' => [], 'error' => 'Tidak bisa menghubungi gateway.', 'resynced' => false, 'retry_after' => null];
+        }
+
+        if ($response->status() === 404) {
+            $known = $this->labels();
+
+            return ['labels' => $known['labels'], 'error' => $known['error'] ?? 'Gateway belum bisa sinkron ulang label. Pasang ulang gateway.', 'resynced' => false, 'retry_after' => null];
+        }
+
+        if (! $response->successful()) {
+            return ['labels' => [], 'resynced' => false, 'retry_after' => null, 'error' => match (true) {
+                $response->json('error') === 'resync_failed' => 'WhatsApp tidak menjawab saat label diminta. Coba lagi beberapa menit lagi.',
+                $response->status() === 503 => 'Nomor ini belum terhubung. Scan QR dulu.',
+                default => "Gateway menjawab HTTP {$response->status()}.",
+            }];
+        }
+
+        return [
+            'labels' => self::cleanLabels((array) $response->json('labels')),
+            'error' => null,
+            'resynced' => (bool) $response->json('resynced'),
+            'retry_after' => is_numeric($response->json('retry_after')) ? (int) $response->json('retry_after') : null,
+        ];
     }
 
     /**

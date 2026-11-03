@@ -6,11 +6,9 @@ use App\Automation\StageAutomation;
 use App\Catalog\ProductMatcher;
 use App\Enums\AiMode;
 use App\Enums\MessageStatus;
-use App\Enums\Role;
 use App\Enums\WaChannelStatus;
 use App\Jobs\FetchWhatsAppMedia;
 use App\Jobs\GenerateAiReplyJob;
-use App\Mail\WhatsAppNeedsRelink;
 use App\Models\Lead;
 use App\Models\LeadSource;
 use App\Models\Stage;
@@ -20,12 +18,12 @@ use App\Models\WaConversation;
 use App\Models\WaMessage;
 use App\Push\Alerts;
 use App\Support\CurrentTenant;
+use App\WhatsApp\ChannelAlerts;
 use App\WhatsApp\InboundMessage;
 use App\WhatsApp\MediaStore;
 use App\WhatsApp\StatusUpdate;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 use Throwable;
 
 /**
@@ -251,38 +249,22 @@ class HandleInboundWhatsApp
         }
     }
 
-    public function session(WaChannel $channel, string $state): void
+    /** `$reason`: why the gateway says the login needs a new scan, e.g. "perangkat tertaut dilepas dari HP". */
+    public function session(WaChannel $channel, string $state, ?string $reason = null): void
     {
         if ($state === 'needs_relink') {
             $alreadyFlagged = $channel->status === WaChannelStatus::NeedsRelink;
-            $channel->markNeedsRelink();
+            $channel->markNeedsRelink($reason ? "Perlu scan QR ulang: {$reason}." : null);
 
             // Tell the admins once per incident, not on every repeated event from the gateway.
             if (! $alreadyFlagged) {
-                $this->notifyRelink($channel);
+                app(ChannelAlerts::class)->relink($channel, $reason);
             }
 
             return;
         }
 
         $state === 'connected' ? $channel->markConnected() : $channel->markDisconnected($state === 'qr_required' ? 'Perlu scan QR ulang.' : 'Sesi terputus.');
-    }
-
-    private function notifyRelink(WaChannel $channel): void
-    {
-        $tenant = Tenant::query()->find($channel->tenant_id);
-
-        if ($tenant === null) {
-            return;
-        }
-
-        foreach ($tenant->activeUsers()->wherePivot('role', Role::Admin->value)->get() as $admin) {
-            try {
-                Mail::to($admin->email)->send(new WhatsAppNeedsRelink($tenant, $channel));
-            } catch (Throwable $e) {
-                report($e);
-            }
-        }
     }
 
     /**

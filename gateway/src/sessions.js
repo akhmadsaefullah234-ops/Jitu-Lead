@@ -13,6 +13,7 @@ const LABELS = 'labels.json';
 const MAX_CHAT_LABELS = 5000; // chats whose labels are remembered, to skip putting on a label a chat already has
 const masked = (phone) => '…' + String(phone).replace(/\D/g, '').slice(-4);
 const V7 = 'baileys7'; // written once a login has connected under the current library
+const LOGGED_OUT = 'perangkat tertaut dilepas dari HP';
 
 class SessionError extends Error {
   /** `code`: a word the CRM acts on (label_not_found, not_business), sent as `error` with the text as `message`. */
@@ -35,6 +36,8 @@ class SessionManager {
     this.log = log;
     this.post = post;
     this.retryDelayMs = retryDelayMs;
+    this.resyncEveryMs = config.labelResyncEveryMs ?? 10 * 60 * 1000; // at most one label resync per session per 10 minutes
+    this.resyncDelayMs = config.labelResyncDelayMs ?? 15000; // after connecting, before the automatic resync
     this.sessions = new Map();
     this.root = path.join(config.dataDir, 'sessions');
     fs.mkdirSync(this.root, { recursive: true });
@@ -171,8 +174,17 @@ class SessionManager {
             this.log?.warn({ id, err: err.message }, 'penanda versi login gagal ditulis');
           }
           this.emit(session, { event: 'session', status: 'connected' });
+          this.scheduleLabelResync(session);
         },
-        onClose: ({ loggedOut, needsRelink }) => (needsRelink ? this.needsRelink(session, 'WhatsApp menolak login yang tersimpan') : this.closed(session, loggedOut)),
+        onClose: ({ loggedOut, needsRelink }) => {
+          // A logout asked by the CRM, or a session already replaced, is not news.
+          if (this.sessions.get(id) !== session || session.loggingOut) return;
+          clearTimeout(session.resyncTimer);
+          // A linked login removed on the phone needs a new scan; one that never finished pairing just starts over.
+          if (loggedOut && fs.existsSync(path.join(this.dir(id), V7))) return this.needsRelink(session, LOGGED_OUT);
+          if (loggedOut) return this.forget(session);
+          return needsRelink ? this.needsRelink(session, 'WhatsApp menolak login yang tersimpan') : this.closed(session);
+        },
         onDecryptOk: () => {
           session.decryptFails = 0;
         },
@@ -198,6 +210,7 @@ class SessionManager {
 
     this.log?.warn({ id: session.id, reason }, 'sesi WhatsApp tidak sehat, perlu scan ulang');
     clearTimeout(session.timer);
+    clearTimeout(session.resyncTimer);
     session.status = 'needs_relink';
     session.qr = null;
 
@@ -218,19 +231,20 @@ class SessionManager {
     this.emit(session, { event: 'session', status: 'needs_relink', reason });
   }
 
-  closed(session, loggedOut) {
+  /** Logged out before it ever connected: nothing worth keeping. */
+  forget(session) {
+    session.conn = null;
+    this.wipe(session.id);
+    this.sessions.delete(session.id);
+    this.emit(session, { event: 'session', status: 'disconnected' });
+  }
+
+  /** A dropped connection (not a logout). */
+  closed(session) {
     if (session.status === 'needs_relink') return;
 
     session.conn = null;
     session.qr = null;
-
-    if (loggedOut) {
-      this.wipe(session.id);
-      this.sessions.delete(session.id);
-      this.emit(session, { event: 'session', status: 'disconnected' });
-      return;
-    }
-
     session.status = 'qr_required';
     // A dropped connection is retried with a growing pause; the saved login is reused, so no new QR is needed.
     const delay = Math.min(this.retryDelayMs * 2 ** session.retries++, 60000);
@@ -290,6 +304,7 @@ class SessionManager {
   }
 
   rememberLabel(session, label) {
+    if (!label.deleted) session.resyncSeen?.add(String(label.id));
     const known = session.labels.get(String(label.id)) ?? {};
     session.labels.set(String(label.id), clean({ ...known, ...Object.fromEntries(Object.entries(label).filter(([, v]) => v !== undefined)) }));
 
@@ -316,6 +331,61 @@ class SessionManager {
     if (!s) throw new SessionError('Sesi WhatsApp belum terhubung.', 503);
 
     return [...(s.labels ?? new Map()).values()].filter((l) => !l.deleted).map(({ id: labelId, name, color }) => ({ id: labelId, name, color }));
+  }
+
+  /**
+   * Asks WhatsApp for every label again, for a number linked before the gateway kept labels (they are otherwise only
+   * reported when they change). At most once per 10 minutes per session: a call sooner returns the labels already
+   * known with `resynced: false` and `retry_after` (seconds). Labels the full resync no longer reports are marked
+   * deleted. Only labels are taken from it.
+   */
+  async resyncLabels(id) {
+    const s = this.get(id);
+
+    if (s?.status === 'needs_relink') throw new SessionError('Sesi WhatsApp perlu scan ulang.', 503);
+    if (!s || s.status !== 'connected' || !s.conn) throw new SessionError('Sesi WhatsApp belum terhubung.', 503);
+    if (typeof s.conn.resyncLabels !== 'function') throw new SessionError('resync_failed', 502, 'resync_failed');
+
+    const wait = (s.resyncAt ?? 0) + this.resyncEveryMs - Date.now();
+    if (wait > 0) return { labels: this.labels(id), resynced: false, retry_after: Math.ceil(wait / 1000) };
+
+    s.resyncAt = Date.now();
+    clearTimeout(s.resyncTimer);
+    const seen = (s.resyncSeen = new Set());
+
+    try {
+      await s.conn.resyncLabels();
+    } catch (err) {
+      this.log?.warn({ id, err: err.message }, 'sinkron ulang label gagal');
+      throw new SessionError('resync_failed', 502, 'resync_failed');
+    } finally {
+      s.resyncSeen = null;
+    }
+
+    if (seen.size > 0) {
+      for (const label of [...s.labels.values()]) {
+        if (!label.deleted && !seen.has(String(label.id))) this.rememberLabel(s, { ...label, deleted: true });
+      }
+    }
+
+    const labels = this.labels(id);
+    this.log?.info({ id, labels: labels.length }, 'label WhatsApp disinkron ulang');
+
+    return { labels, resynced: true };
+  }
+
+  /** Once connected, a number with no labels on record (linked before labels were kept) asks for them once. */
+  scheduleLabelResync(session) {
+    clearTimeout(session.resyncTimer);
+    if ([...session.labels.values()].some((l) => !l.deleted)) return;
+
+    session.resyncTimer = setTimeout(() => {
+      if (this.sessions.get(session.id) !== session || session.status !== 'connected' || !session.conn) return;
+      if ([...session.labels.values()].some((l) => !l.deleted) || isBusiness(session.conn.platform?.()) === false) return;
+
+      this.resyncLabels(session.id).catch(() => {});
+    }, this.resyncDelayMs);
+    session.resyncTimer.unref?.();
   }
 
   /**
@@ -350,7 +420,9 @@ class SessionManager {
     const s = this.get(id);
 
     if (s) {
+      s.loggingOut = true;
       clearTimeout(s.timer);
+      clearTimeout(s.resyncTimer);
       try {
         await s.conn?.logout();
       } catch (err) {

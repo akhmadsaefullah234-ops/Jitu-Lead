@@ -151,8 +151,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Pictures bigger than this are not sent to the CRM (the chat still shows that a picture arrived).
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+// App state collections asked for again on a label resync (labels live in "regular"; all are asked so none is half done).
+const APP_STATE = ['regular', 'regular_low', 'regular_high', 'critical_block', 'critical_unblock_low'];
 
-function connector({ log, decryptWaitMs = 45000, lookupRetryMs = 3000, loadLib = loadBaileys, download = null, maxImageBytes = MAX_IMAGE_BYTES }) {
+function connector({ log, decryptWaitMs = 45000, lookupRetryMs = 3000, loadLib = loadBaileys, download = null, maxImageBytes = MAX_IMAGE_BYTES, flushWaitMs = 500 }) {
   return ({ authDir, handlers }) => {
     let sock;
     let fetchMedia = null;
@@ -295,8 +297,14 @@ function connector({ log, decryptWaitMs = 45000, lookupRetryMs = 3000, loadLib =
           closed = true;
           clearPending();
           const code = lastDisconnect?.error?.output?.statusCode;
-          if (code && code !== DisconnectReason.loggedOut) log.warn({ code, error: lastDisconnect?.error?.message }, 'koneksi WhatsApp terputus');
-          handlers.onClose({ loggedOut: code === DisconnectReason.loggedOut, needsRelink: broken.has(code) });
+          // The linked device was removed on the phone (Linked devices > log out): a stream error with
+          // <conflict type="device_removed"/>, usually with code 401 (loggedOut), sometimes without a code (then 440).
+          const data = lastDisconnect?.error?.data;
+          const removed = data?.tag === 'conflict' && data?.attrs?.type === 'device_removed';
+          const loggedOut = code === DisconnectReason.loggedOut || removed;
+          if (code && !loggedOut) log.warn({ code, error: lastDisconnect?.error?.message }, 'koneksi WhatsApp terputus');
+          if (loggedOut) log.warn({ code, removed }, 'perangkat tertaut dilepas dari HP atau login dicabut');
+          handlers.onClose({ loggedOut, needsRelink: broken.has(code) });
         }
       });
       sock.ev.on('messages.upsert', (event) => {
@@ -347,6 +355,19 @@ function connector({ log, decryptWaitMs = 45000, lookupRetryMs = 3000, loadLib =
       async addChatLabel(jid, labelId) {
         if (!sock) throw new Error('belum terhubung');
         await sock.addChatLabel(jid, labelId);
+      },
+      /**
+       * Asks WhatsApp for the account's app state again from scratch, so every label it has is reported as a
+       * labels.edit (a linked device only hears of labels when they change). The stored versions are dropped first:
+       * Baileys only replays a collection's mutations when it starts from no version. Chats, contacts and messages
+       * see nothing new from this (the gateway only listens to labels here).
+       */
+      async resyncLabels() {
+        if (!sock) throw new Error('belum terhubung');
+        await sock.authState.keys.set({ 'app-state-sync-version': Object.fromEntries(APP_STATE.map((name) => [name, null])) });
+        await sock.resyncAppState(APP_STATE, true);
+        // Baileys hands out the buffered events a moment after the call returns.
+        await new Promise((r) => setTimeout(r, flushWaitMs));
       },
       /** The primary phone's platform ("smba"/"smbi" for WhatsApp Business), when the login says. */
       platform() {

@@ -17,6 +17,8 @@ function load(env = process.env) {
     maxSessions: Number(env.MAX_SESSIONS || 50),
     webhookTimeoutMs: Number(env.WEBHOOK_TIMEOUT_MS || 10000),
     relinkAfterFails: Number(env.RELINK_AFTER_FAILS || 3),
+    labelResyncEveryMs: Number(env.LABEL_RESYNC_EVERY_MS || 10 * 60 * 1000),
+    labelResyncDelayMs: Number(env.LABEL_RESYNC_DELAY_MS || 15000),
     logLevel: env.LOG_LEVEL || 'info',
   };
 }

@@ -18,3 +18,7 @@ Schedule::command('trial-emails:send')->dailyAt('09:00')->timezone('Asia/Jakarta
 // Promo campaigns start at the hour the owner picks, so they are checked often; the daily cap is shared with the trial emails.
 Schedule::command('campaigns:send')->everyTenMinutes()->withoutOverlapping();
 Schedule::command('backup:run')->dailyAt('02:00')->timezone('Asia/Jakarta')->withoutOverlapping();
+// QR gateway numbers: admins are emailed when one has been down 5 minutes, and when it is back (App\WhatsApp\ChannelAlerts).
+Schedule::command('whatsapp:watch')->everyFiveMinutes()->withoutOverlapping();
+// WhatsApp Business labels waiting for the label to exist on the account (tried for 7 days).
+Schedule::command('whatsapp:labels-retry')->everyTenMinutes()->withoutOverlapping();

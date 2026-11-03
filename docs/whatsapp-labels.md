@@ -17,7 +17,10 @@ tertaut), supaya admin tidak perlu memberi label manual di HP.
 - **Hanya chat dari iklan** — bawaan nyala: hanya lead yang punya ID iklan, `ctwa_clid`, atau data iklan.
   Lead lain dicatat "dilewati".
 - Tiga label, masing-masing: nama label di WhatsApp, "saat lead ditandai Hot", dan tahap pemicu.
-  "Muat label dari WhatsApp" mengambil daftar label akun (`GET /sessions/:id/labels`) sebagai pilihan nama.
+  **Muat label dari WhatsApp** meminta gateway menyinkron ulang semua label akun (`POST /sessions/:id/labels/resync`,
+  paling sering 1x per 10 menit; tanpa scan ulang), lalu menampilkan tanda centang untuk ketiga label (✓ Prospek,
+  ✓ Order baru, ✗ Lunas, termasuk padanannya Lead/New order/Paid). Label yang belum ada diberi petunjuk: pasang
+  sekali di HP, lalu klik tombol lagi. Hasilnya juga tampil tetap di bagian "Label di WhatsApp".
 
 Bawaan per industri:
 
@@ -36,14 +39,17 @@ Bawaan per industri:
 - Sekali per lead per label (`wa_label_events`, unik tenant + lead + label). Bila lead lompat ke tahap "Lunas",
   label sebelumnya yang belum terpasang (Prospek, Order baru) dipasang lebih dulu, berurutan. Bila gateway tidak
   bisa dihubungi, label berikutnya tidak dipasang dulu agar urutan tetap benar.
-- Label tidak pernah dilepas. Gateway tidak pernah membuat label baru: bila akun belum punya label itu, hasilnya
-  "label belum ada" dengan petunjuk memasang label itu sekali manual di HP agar tersinkron.
+- Label tidak pernah dilepas. Gateway tidak pernah membuat label baru.
+- Bila akun belum punya label itu, statusnya **menunggu label** (`waiting_label`), bukan gagal: aktivitas lead
+  mencatat petunjuknya sekali, lalu label dipasang otomatis begitu akun memilikinya (`whatsapp:labels-retry` tiap
+  10 menit, atau langsung setelah "Muat label dari WhatsApp"), berurutan. Setelah 7 hari tetap tidak ada, statusnya
+  gagal dengan catatan "setelah 7 hari menunggu". Akun pribadi (bukan WhatsApp Business) langsung gagal.
 - Aktivitas lead mencatat hasilnya, mis. "Label WhatsApp 'Order baru' dipasang (uji coba)", atau alasan gagal /
   dilewati (label belum ada, bukan akun bisnis, bukan dari iklan, gateway tidak bisa dihubungi). Log tanpa nomor HP.
 
 ## Menilai hasil
 
-1. Halaman nomor menampilkan ringkasan 30 hari per label (terpasang / gagal / dilewati).
+1. Halaman nomor menampilkan ringkasan 30 hari per label (terpasang / menunggu label / gagal / dilewati).
 2. Cocokkan di HP: chat lead yang baru pindah tahap harus menampilkan label yang sama.
 3. Pastikan berbagi data WhatsApp Business ke Meta aktif.
 4. Ads Manager → kampanye Klik ke WhatsApp → tambah kolom hasil percakapan / pembelian / lead dari WhatsApp.
@@ -51,5 +57,21 @@ Bawaan per industri:
 
 ## Pemasangan
 
-Setelah merge: `php artisan migrate`, lalu pasang ulang gateway (`gateway/install.sh`) supaya endpoint label
-tersedia. Label yang sudah ada di akun baru dikenal gateway setelah label itu dipasang/diubah sekali di HP.
+Setelah merge: `php artisan migrate`, lalu pasang ulang gateway (`gateway/install.sh`) supaya endpoint label dan
+sinkron ulang tersedia. Nomor yang sudah tertaut tidak perlu scan ulang: gateway menyinkron ulang label otomatis
+sekali saat tersambung bila belum punya daftar label, dan tombol "Muat label dari WhatsApp" melakukannya kapan saja.
+Scheduler Laravel (`php artisan schedule:run` tiap menit) harus berjalan untuk `whatsapp:labels-retry`.
+
+# Kabar saat nomor gateway terputus (`App\WhatsApp\ChannelAlerts`)
+
+Admin agensi (peran Admin, aktif) mendapat email dan notifikasi lonceng di aplikasi:
+
+- **Perlu scan ulang**, langsung, sekali per kejadian: login rusak, atau **perangkat tertaut dilepas dari HP**
+  (alasan tertulis di email dan di kolom Catatan nomor).
+- **Terputus**: `whatsapp:watch` (tiap 5 menit) menanyakan status setiap nomor gateway yang pernah tersambung ke
+  gateway. Nomor yang tidak tersambung lebih dari 5 menit diberi kabar sekali.
+- **Tersambung lagi**: sekali, setelah kabar terputus/perlu scan ulang.
+- Tidak ada kabar untuk putus singkat (< 5 menit), nomor yang diputuskan sendiri dari CRM, atau status "Bermasalah"
+  karena satu kiriman gagal sementara gateway tetap tersambung (status dipulihkan otomatis).
+- `wa_channels.down_since` = awal gangguan, `down_alerted_at` = waktu kabar terakhir (terisi: pemulihan belum
+  dikabarkan).
