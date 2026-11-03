@@ -3,17 +3,23 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { deliver } = require('./webhook');
+const { findLabel, isBusiness, clean } = require('./labels');
 
 const ID = /^[A-Za-z0-9_-]{8,128}$/;
 const E164 = /^\+?\d{6,15}$/;
 const MAX_SEND_BYTES = 16 * 1024 * 1024; // WhatsApp's own limit for files is about 16 MB
 const MARKER = 'needs_relink';
+const LABELS = 'labels.json';
+const MAX_CHAT_LABELS = 5000; // chats whose labels are remembered, to skip putting on a label a chat already has
+const masked = (phone) => '…' + String(phone).replace(/\D/g, '').slice(-4);
 const V7 = 'baileys7'; // written once a login has connected under the current library
 
 class SessionError extends Error {
-  constructor(message, status = 400) {
+  /** `code`: a word the CRM acts on (label_not_found, not_business), sent as `error` with the text as `message`. */
+  constructor(message, status = 400, code = null) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -142,6 +148,8 @@ class SessionManager {
   open(id, meta) {
     const session = this.get(id) ?? { id, status: 'qr_required', qr: null, qrAt: 0, conn: null, meta, retries: 0, decryptFails: 0 };
     session.meta = meta;
+    session.labels ??= this.readLabels(id);
+    session.chatLabels ??= new Map();
     session.status = session.status === 'connected' ? 'connected' : 'qr_required';
     this.sessions.set(id, session);
 
@@ -174,6 +182,8 @@ class SessionManager {
             this.needsRelink(session, `${session.decryptFails} pesan berturut-turut tidak bisa dibuka`);
           }
         },
+        onLabel: (label) => this.rememberLabel(session, label),
+        onLabelAssociation: ({ type, chatId, labelId }) => this.rememberChatLabel(session, chatId, labelId, type !== 'remove'),
         onMessage: (m) => this.emit(session, { event: 'message', ...m }),
         onStatus: (s) => this.emit(session, { event: 'status', ...s }),
       },
@@ -266,6 +276,74 @@ class SessionManager {
     return s.conn.sendMedia(to.replace(/^\+/, '') + '@s.whatsapp.net', {
       type: media.type, buffer, mimetype: media.mime_type, filename: String(media.filename ?? 'file').slice(0, 120), caption: media.caption || undefined,
     });
+  }
+
+  /** Labels are only reported when they change, so they are kept on disk across restarts. */
+  readLabels(id) {
+    try {
+      const list = JSON.parse(fs.readFileSync(path.join(this.dir(id), LABELS), 'utf8'));
+
+      return new Map((Array.isArray(list) ? list : []).filter((l) => l?.id).map((l) => [String(l.id), clean(l)]));
+    } catch {
+      return new Map();
+    }
+  }
+
+  rememberLabel(session, label) {
+    const known = session.labels.get(String(label.id)) ?? {};
+    session.labels.set(String(label.id), clean({ ...known, ...Object.fromEntries(Object.entries(label).filter(([, v]) => v !== undefined)) }));
+
+    try {
+      const file = path.join(this.dir(session.id), LABELS);
+      fs.writeFileSync(`${file}.tmp`, JSON.stringify([...session.labels.values()]), { mode: 0o640 });
+      fs.renameSync(`${file}.tmp`, file);
+    } catch (err) {
+      this.log?.warn({ id: session.id, err: err.message }, 'daftar label gagal disimpan');
+    }
+  }
+
+  rememberChatLabel(session, chatId, labelId, on) {
+    const set = session.chatLabels.get(chatId) ?? new Set();
+    on ? set.add(labelId) : set.delete(labelId);
+    session.chatLabels.delete(chatId);
+    session.chatLabels.set(chatId, set);
+    if (session.chatLabels.size > MAX_CHAT_LABELS) session.chatLabels.delete(session.chatLabels.keys().next().value);
+  }
+
+  /** The account's WhatsApp Business labels: [{ id, name, color }]. */
+  labels(id) {
+    const s = this.get(id);
+    if (!s) throw new SessionError('Sesi WhatsApp belum terhubung.', 503);
+
+    return [...(s.labels ?? new Map()).values()].filter((l) => !l.deleted).map(({ id: labelId, name, color }) => ({ id: labelId, name, color }));
+  }
+
+  /**
+   * Puts the label named `label` on the chat with `phone`. Only labels the account already has: an unknown one is
+   * "label_not_found" (put it on any chat once on the phone so it syncs here), a personal account "not_business".
+   */
+  async addChatLabel(id, phone, label) {
+    const s = this.get(id);
+
+    if (s?.status === 'needs_relink') throw new SessionError('Sesi WhatsApp perlu scan ulang.', 503);
+    if (!s || s.status !== 'connected' || !s.conn) throw new SessionError('Sesi WhatsApp belum terhubung.', 503);
+    if (typeof phone !== 'string' || !E164.test(phone)) throw new SessionError('Nomor tujuan tidak valid.');
+    if (typeof label !== 'string' || label.trim() === '' || label.length > 60) throw new SessionError('Nama label tidak valid.');
+
+    const business = isBusiness(s.conn.platform?.());
+    const found = findLabel([...s.labels.values()], label);
+
+    if (business === false) throw new SessionError('not_business', 422, 'not_business');
+    if (!found) throw new SessionError('label_not_found', 422, 'label_not_found');
+
+    const jid = phone.replace(/^\+/, '') + '@s.whatsapp.net';
+    if (s.chatLabels.get(jid)?.has(found.id)) return { label: { id: found.id, name: found.name }, already: true };
+
+    await s.conn.addChatLabel(jid, found.id);
+    this.rememberChatLabel(s, jid, found.id, true);
+    this.log?.info({ id, chat: masked(phone), label: found.name }, 'label WhatsApp dipasang');
+
+    return { label: { id: found.id, name: found.name }, already: false };
   }
 
   async logout(id) {

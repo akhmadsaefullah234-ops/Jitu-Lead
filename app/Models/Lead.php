@@ -10,6 +10,7 @@ use App\Models\Concerns\BelongsToTenant;
 use App\Support\CurrentTenant;
 use App\Support\PhoneNumber;
 use App\Tracking\PipelineConversions;
+use App\WhatsApp\BusinessLabels;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -71,6 +72,8 @@ class Lead extends Model
 
         // A stage the agency mapped to an ad conversion, or becoming Hot, is reported to Meta/TikTok.
         static::saved(fn (Lead $lead) => PipelineConversions::saved($lead));
+        // The same moments put WhatsApp Business labels on the chat (trial, off by default).
+        static::saved(fn (Lead $lead) => BusinessLabels::saved($lead));
     }
 
     protected function casts(): array

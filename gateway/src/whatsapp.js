@@ -302,6 +302,13 @@ function connector({ log, decryptWaitMs = 45000, lookupRetryMs = 3000, loadLib =
       sock.ev.on('messages.upsert', (event) => {
         onUpsert(event).catch((err) => log.error({ err: err.message }, 'pesan masuk gagal diproses'));
       });
+      // WhatsApp Business labels: every change on any device of the account, including the first sync after linking.
+      sock.ev.on('labels.edit', (label) => {
+        if (label?.id) handlers.onLabel?.(label);
+      });
+      sock.ev.on('labels.association', ({ type, association } = {}) => {
+        if (association?.type === 'label_jid' && association.chatId && association.labelId) handlers.onLabelAssociation?.({ type, chatId: association.chatId, labelId: String(association.labelId) });
+      });
       sock.ev.on('messages.update', (updates) => {
         for (const u of updates) {
           const status = STATUS[u.update?.status];
@@ -335,6 +342,15 @@ function connector({ log, decryptWaitMs = 45000, lookupRetryMs = 3000, loadLib =
         }
 
         return sent.key.id;
+      },
+      /** Puts a WhatsApp Business label on a chat (never takes one off). */
+      async addChatLabel(jid, labelId) {
+        if (!sock) throw new Error('belum terhubung');
+        await sock.addChatLabel(jid, labelId);
+      },
+      /** The primary phone's platform ("smba"/"smbi" for WhatsApp Business), when the login says. */
+      platform() {
+        return sock?.authState?.creds?.platform ?? null;
       },
       async logout() {
         closed = true;

@@ -51,10 +51,22 @@ function createServer({ config, sessions }) {
       const auth = req.headers.authorization || '';
       if (!auth.startsWith('Bearer ') || !sameKey(auth.slice(7), config.apiKey)) return reply(401, { error: 'API key salah.' });
 
-      const id = req.headers['x-session-id'];
+      // Labels are also reachable as /sessions/:id/labels and /sessions/:id/chat-labels.
+      const scoped = route.match(/^(GET|POST) \/sessions\/([^/]+)\/(labels|chat-labels)$/);
+      const header = req.headers['x-session-id'];
+      const id = scoped ? scoped[2] : header;
       if (!SessionManager.validId(id)) return reply(400, { error: 'Header X-Session-Id wajib diisi.' });
+      if (scoped && header && header !== id) return reply(400, { error: 'Session id tidak cocok.' });
 
-      switch (route) {
+      switch (scoped ? `${scoped[1]} /${scoped[3]}` : route) {
+        case 'GET /labels':
+          return reply(200, { labels: sessions.labels(id) });
+
+        case 'POST /chat-labels': {
+          const body = await readJson(req);
+          return reply(200, await sessions.addChatLabel(id, body.phone, body.label));
+        }
+
         case 'GET /session':
           return reply(200, { status: sessions.status(id) });
 
@@ -82,7 +94,7 @@ function createServer({ config, sessions }) {
           return reply(404, { error: 'Tidak ditemukan.' });
       }
     } catch (err) {
-      if (err instanceof SessionError) return reply(err.status, { error: err.message });
+      if (err instanceof SessionError) return reply(err.status, err.code ? { error: err.code } : { error: err.message });
       sessions.log?.error({ err: err.message }, 'kesalahan tak terduga');
       return reply(500, { error: 'Kesalahan di gateway.' });
     }

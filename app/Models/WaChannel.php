@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
-#[Fillable(['type', 'name', 'phone', 'status', 'credentials', 'intro_template', 'position', 'last_connected_at', 'last_error', 'ai_mode'])]
+#[Fillable(['type', 'name', 'phone', 'status', 'credentials', 'intro_template', 'position', 'last_connected_at', 'last_error', 'ai_mode', 'label_settings'])]
 #[Hidden(['credentials'])]
 class WaChannel extends Model
 {
@@ -34,6 +34,7 @@ class WaChannel extends Model
             'status' => WaChannelStatus::class,
             'ai_mode' => AiMode::class,
             'credentials' => 'encrypted:array',
+            'label_settings' => 'array',
             'last_connected_at' => 'datetime',
         ];
     }
