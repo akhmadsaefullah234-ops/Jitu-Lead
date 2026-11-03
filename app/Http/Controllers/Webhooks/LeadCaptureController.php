@@ -11,6 +11,7 @@ use App\Models\TrackingSetting;
 use App\Push\Alerts;
 use App\Support\CurrentTenant;
 use App\Tracking\ConversionPayload;
+use App\Tracking\PipelineConversions;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -57,6 +58,8 @@ class LeadCaptureController extends Controller
             [$lead, $created] = $register($data, $source, 'form', null, $campaign, $page?->property_id);
 
             if ($created) {
+                PipelineConversions::rememberBrowserIds($lead, $data);
+
                 try {
                     app(Alerts::class)->newLead($lead, $page ? 'landing page' : 'formulir web', $data['note'] ?? null);
                 } catch (Throwable $e) {

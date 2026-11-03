@@ -26,7 +26,19 @@ final class ConversionPayload
         public readonly ?string $userAgent,
         public readonly array $ids = [],
         public readonly array $event = [],
+        public readonly array $extra = [],
     ) {}
+
+    /** "website" for a form; "system_generated" for an event from the CRM (App\Tracking\PipelineConversions). */
+    public function actionSource(): string
+    {
+        return $this->extra['action_source'] ?? 'website';
+    }
+
+    public function isTest(): bool
+    {
+        return (bool) ($this->extra['test'] ?? false);
+    }
 
     /** The event a platform gets: the form's own choice, or the agency's default when the form has none. Null: send nothing. */
     public function eventName(string $platform, ?string $default): ?string
@@ -41,7 +53,7 @@ final class ConversionPayload
             'value' => $this->event['value'] ?? null,
             'currency' => isset($this->event['value']) ? ($this->event['currency'] ?? PixelEvents::CURRENCY) : null,
             'content_name' => $this->event['content_name'] ?? null,
-        ], fn ($v) => $v !== null);
+        ], fn ($v) => $v !== null) + (array) ($this->extra['custom'] ?? []);
     }
 
     /**
@@ -73,6 +85,6 @@ final class ConversionPayload
     /** @param  array<string, mixed>  $data */
     public static function fromArray(array $data): self
     {
-        return new self($data['eventId'], $data['eventTime'], $data['sourceUrl'], $data['emailHash'], $data['phoneHash'], $data['ip'], $data['userAgent'], $data['ids'] ?? [], $data['event'] ?? []);
+        return new self($data['eventId'], $data['eventTime'], $data['sourceUrl'], $data['emailHash'], $data['phoneHash'], $data['ip'], $data['userAgent'], $data['ids'] ?? [], $data['event'] ?? [], $data['extra'] ?? []);
     }
 }

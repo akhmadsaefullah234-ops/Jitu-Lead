@@ -88,6 +88,9 @@ class WaChannelResource extends Resource
                     $secret('app_secret', 'App secret (verifikasi tanda tangan)'),
                     NoAutofill::text(TextInput::make('cred.verify_token'))->label('Verify token webhook')->required()
                         ->default(fn () => Str::random(24))->helperText('Sudah dibuatkan otomatis. Salin nilai ini ke kolom Verify token di Meta (langkah 6).'),
+                    NoAutofill::text(TextInput::make('cred.waba_id'))->label('WhatsApp Business Account ID (opsional)')->regex('/^\d{6,30}$/')
+                        ->validationMessages(['regex' => 'Berisi angka saja.'])
+                        ->helperText('Untuk event konversi WhatsApp Business (beta) di menu Pelacakan iklan. Terisi sendiri dari webhook pertama bila kosong.'),
                 ]),
             Section::make('Panduan: menyambungkan lewat scan QR')->collapsible()
                 ->visible(fn (Get $get) => static::typeOf($get('type')) === 'gateway')

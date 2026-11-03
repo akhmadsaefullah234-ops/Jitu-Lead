@@ -9,6 +9,7 @@ use App\Enums\StageType;
 use App\Models\Concerns\BelongsToTenant;
 use App\Support\CurrentTenant;
 use App\Support\PhoneNumber;
+use App\Tracking\PipelineConversions;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -67,6 +68,9 @@ class Lead extends Model
                 $lead->assigned_at = $lead->owner_id === null ? null : now();
             }
         });
+
+        // A stage the agency mapped to an ad conversion, or becoming Hot, is reported to Meta/TikTok.
+        static::saved(fn (Lead $lead) => PipelineConversions::saved($lead));
     }
 
     protected function casts(): array

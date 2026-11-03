@@ -15,6 +15,7 @@ use App\Models\Tenant;
 use App\Models\TrackingSetting;
 use App\Push\Alerts;
 use App\Tracking\ConversionPayload;
+use App\Tracking\PipelineConversions;
 use App\Tracking\PixelEvents;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -49,6 +50,10 @@ class SubmitLeadForm
         [$lead, $created] = ($this->register)($result['lead'] + ['name' => 'Tanpa nama'], $source, 'form', null, $campaign, $page?->property_id);
 
         $this->applyAnswers($lead, $created, $form, $result, $tenant);
+
+        if ($created) {
+            PipelineConversions::rememberBrowserIds($lead, $data);
+        }
         $this->orderIn($lead, $result);
 
         if ($created) {
