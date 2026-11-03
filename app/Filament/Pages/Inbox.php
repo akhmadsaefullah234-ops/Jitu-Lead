@@ -125,7 +125,6 @@ class Inbox extends Page
             'aiMode' => $conversation?->lastInboundChannel?->ai_mode,
             'aiPausedUntil' => $conversation?->aiPaused() ? $conversation->ai_paused_until : null,
             'aiDraft' => $conversation ? AiDraft::query()->where('conversation_id', $conversation->getKey())->whereIn('status', [AiDraft::PENDING, AiDraft::HANDOFF])->latest('id')->first() : null,
-            'leadUrl' => fn (Lead $lead) => LeadResource::getUrl('edit', ['record' => $lead]),
         ];
     }
 
@@ -409,6 +408,15 @@ class Inbox extends Page
     }
 
     /** Only reachable when the free windows are closed and no gateway is connected. */
+    /** In the chat header's ⋯ menu, with payment, tracking number and shipping cost. */
+    public function openLeadAction(): Action
+    {
+        return Action::make('openLead')
+            ->label('Buka lead')->icon(Heroicon::OutlinedArrowTopRightOnSquare)
+            ->url(fn () => ($lead = $this->current()?->lead) ? LeadResource::getUrl('edit', ['record' => $lead]) : null)
+            ->visible(fn () => $this->current()?->lead !== null);
+    }
+
     public function sendPaidTemplateAction(): Action
     {
         return Action::make('sendPaidTemplate')
