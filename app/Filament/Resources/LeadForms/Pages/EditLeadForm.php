@@ -24,6 +24,14 @@ class EditLeadForm extends EditRecord
         ];
     }
 
+    /** Address sub-fields and payment choices are edited as lists of their own. */
+    protected function mutateFormDataBeforeFill(array $data): array
+    {
+        $data['fields'] = FormFields::forEditor($data['fields'] ?? []);
+
+        return $data;
+    }
+
     protected function mutateFormDataBeforeSave(array $data): array
     {
         $data['fields'] = FormFields::normalize($data['fields'] ?? []);

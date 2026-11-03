@@ -39,44 +39,43 @@
                         <div class="lf-opts">@foreach ($f['options'] as $o)<label class="lf-o"><input type="checkbox" name="{{ $name }}[]" value="{{ $o }}"><span>{{ $o }}</span></label>@endforeach</div>
                     </fieldset>
                 @endif
-        @elseif ($f['type'] === 'address' && \App\LeadForms\FormFields::regionMode($f))
-                @php
-                    $must = $req($f) ? \App\LeadForms\FormFields::requiredParts($f) : [];
-                    $star = fn ($part) => in_array($part, $must, true) ? ' *' : '';
-                    $pickers = ['provinsi' => ['Provinsi', 'Cari provinsi'], 'kota' => ['Kota / kabupaten', 'Pilih provinsi dulu'], 'kecamatan' => ['Kecamatan', 'Pilih kota/kabupaten dulu'], 'kelurahan' => ['Kelurahan / desa', 'Pilih kecamatan dulu']];
-                @endphp
-                <fieldset class="lf-g lf-addr lf-rg" data-regions="{{ route('regions.children') }}"><legend>{{ $f['label'] }}{{ $mark }}</legend>
-                    @foreach ($pickers as $part => [$partLabel, $hint])
-                        <label class="lf-f"><span>{{ $partLabel }}{{ $star($part) }}</span>
-                            <span class="rg" data-part="{{ $part }}" @if ($part === 'provinsi') data-items="{{ json_encode(\App\Regions\RegionDirectory::children(null), JSON_UNESCAPED_UNICODE) }}" @endif>
-                                <input type="text" class="rg-q" id="{{ $id }}-{{ $part }}" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="{{ $id }}-{{ $part }}-l"
-                                       autocomplete="off" placeholder="{{ $hint }}" @if ($part !== 'provinsi') disabled @endif @if ($star($part)) required @endif>
-                                <input type="hidden" name="{{ $name }}[{{ $part }}]" value="">
-                                <span class="rg-l" id="{{ $id }}-{{ $part }}-l" role="listbox" hidden></span>
-                            </span></label>
-                    @endforeach
-                    <label class="lf-f"><span>Kode pos{{ $star('kode_pos') }}</span>
-                        <input type="text" name="{{ $name }}[kode_pos]" data-postal inputmode="numeric" maxlength="5" pattern="\d{5}" autocomplete="postal-code" placeholder="Terisi otomatis" @if ($star('kode_pos')) required @endif></label>
-                    <label class="lf-f"><span>RT/RW{{ $star('rt_rw') }}</span>
-                        <input type="text" name="{{ $name }}[rt_rw]" maxlength="100" placeholder="001/002" @if ($star('rt_rw')) required @endif></label>
-                    <label class="lf-f wide"><span>Nama jalan, blok{{ $star('street') }}</span>
-                        <input type="text" name="{{ $name }}[street]" maxlength="250" autocomplete="address-line1" placeholder="Jl. Mawar, Blok C" @if ($star('street')) required @endif></label>
-                    <label class="lf-f wide"><span>Nomor rumah / patokan{{ $star('landmark') }}</span>
-                        <input type="text" name="{{ $name }}[landmark]" maxlength="100" placeholder="No. 12, atau dekat masjid" @if ($star('landmark')) required @endif></label>
-                </fieldset>
         @elseif ($f['type'] === 'address')
-                <fieldset class="lf-g lf-addr"><legend>{{ $f['label'] }}{{ $mark }}</legend>
-                    @foreach ($f['parts'] as $part)
-                        @php $partReq = $req($f) && in_array($part, \App\LeadForms\FormFields::requiredParts($f), true); @endphp
-                        <label class="lf-f {{ in_array($part, ['street', 'landmark'], true) ? 'wide' : '' }}"><span>{{ \App\LeadForms\FormFields::ADDRESS_PARTS[$part] }}{{ $partReq ? ' *' : '' }}</span>
-                            @if ($part === 'provinsi')
-                                <select name="{{ $name }}[provinsi]" @if ($partReq) required @endif><option value="">Pilih provinsi</option>@foreach (\App\Shipping\Regions::options() as $p)<option value="{{ $p }}">{{ $p }}</option>@endforeach</select>
-                            @else
-                                <input type="text" name="{{ $name }}[{{ $part }}]" @if ($partReq) required @endif
-                                    @if ($part === 'kode_pos') inputmode="numeric" maxlength="5" pattern="\d{5}" autocomplete="postal-code" @elseif ($part === 'street') maxlength="250" autocomplete="street-address" @else maxlength="100" @endif
-                                    @if ($part === 'rt_rw') placeholder="001/002" @endif>
-                            @endif
-                        </label>
+                @php
+                    $region = \App\LeadForms\FormFields::regionMode($f);
+                    $must = \App\LeadForms\FormFields::requiredParts($f);
+                    $star = fn ($part) => in_array($part, $must, true) ? ' *' : '';
+                    $oneOf = [];
+                    foreach (\App\LeadForms\FormFields::addressRules($f) as $rule => [$pair, $message]) {
+                        foreach ($pair as $p) { $oneOf[$p] = $rule; }
+                    }
+                    $pickerHints = ['provinsi' => ['Cari provinsi', 'Cari provinsi'], 'kota' => ['Pilih provinsi dulu', 'Cari kota/kabupaten'], 'kecamatan' => ['Pilih kota/kabupaten dulu', 'Cari kecamatan'], 'kelurahan' => ['Pilih kecamatan dulu', 'Cari kelurahan/desa']];
+                @endphp
+                @if ($region)<fieldset class="lf-g lf-addr lf-rg" data-regions="{{ route('regions.children') }}">@else<fieldset class="lf-g lf-addr">@endif<legend>{{ $f['label'] }}{{ $mark }}</legend>
+                    @foreach (\App\LeadForms\FormFields::addressParts($f) as $part)
+                        @php
+                            $partLabel = \App\LeadForms\FormFields::partLabel($f, $part);
+                            $ph = \App\LeadForms\FormFields::partPlaceholder($f, $part);
+                            $rule = isset($oneOf[$part]) ? 'data-oneof='.$oneOf[$part] : '';
+                        @endphp
+                        @if ($region && isset($pickerHints[$part]))
+                            <label class="lf-f"><span>{{ $partLabel }}{{ $star($part) }}</span>
+                                <span class="rg" data-part="{{ $part }}" data-hint="{{ $pickerHints[$part][1] }}" @if ($part === 'provinsi') data-items="{{ json_encode(\App\Regions\RegionDirectory::children(null), JSON_UNESCAPED_UNICODE) }}" @endif>
+                                    <input type="text" class="rg-q" id="{{ $id }}-{{ $part }}" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="{{ $id }}-{{ $part }}-l"
+                                           autocomplete="off" placeholder="{{ $part === 'provinsi' ? ($ph ?: $pickerHints[$part][0]) : $pickerHints[$part][0] }}" @if ($part !== 'provinsi') disabled @endif @if ($star($part)) required @endif>
+                                    <input type="hidden" name="{{ $name }}[{{ $part }}]" value="">
+                                    <span class="rg-l" id="{{ $id }}-{{ $part }}-l" role="listbox" hidden></span>
+                                </span></label>
+                        @elseif ($part === 'provinsi')
+                            <label class="lf-f"><span>{{ $partLabel }}{{ $star($part) }}</span>
+                                <select name="{{ $name }}[provinsi]" @if ($star($part)) required @endif><option value="">{{ $ph ?: 'Pilih provinsi' }}</option>@foreach (\App\Shipping\Regions::options() as $p)<option value="{{ $p }}">{{ $p }}</option>@endforeach</select></label>
+                        @else
+                            <label class="lf-f {{ in_array($part, ['street', 'landmark'], true) ? 'wide' : '' }}"><span>{{ $partLabel }}{{ $star($part) }}</span>
+                                <input type="text" name="{{ $name }}[{{ $part }}]" placeholder="{{ $part === 'kode_pos' && $region ? ($ph === '12345' ? 'Terisi otomatis' : $ph) : $ph }}" {{ $rule }} @if ($star($part)) required @endif
+                                    @if ($part === 'kode_pos') inputmode="numeric" maxlength="5" pattern="\d{5}" autocomplete="postal-code" @if ($region) data-postal @endif @elseif ($part === 'street') maxlength="250" autocomplete="address-line1" @else maxlength="100" @endif></label>
+                        @endif
+                    @endforeach
+                    @foreach (\App\LeadForms\FormFields::addressRules($f) as $rule => [$pair, $message])
+                        @if (count($pair) > 1)<small class="lf-note wide" data-oneof-note="{{ $rule }}">{{ $message }}</small>@endif
                     @endforeach
                 </fieldset>
         @elseif ($f['type'] === 'photo')

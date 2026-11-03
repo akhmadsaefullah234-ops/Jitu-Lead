@@ -64,7 +64,6 @@
         form.querySelectorAll('.lf-rg').forEach(function (box) {
             var base = box.dataset.regions, postal = box.querySelector('input[data-postal]'), cache = {};
             var pickers = Array.prototype.slice.call(box.querySelectorAll('.rg'));
-            var hints = ['Cari provinsi', 'Cari kota/kabupaten', 'Cari kecamatan', 'Cari kelurahan/desa'];
             function norm(t) { return String(t).toLowerCase().replace(/^(kabupaten administrasi|kota administrasi|kabupaten|kota)\s+/, ''); }
             function load(code, done) {
                 if (cache[code]) { done(cache[code]); return; }
@@ -118,7 +117,7 @@
                 p.reset = function (newItems, failed) {
                     items = newItems || []; q.value = ''; h.value = ''; close();
                     q.disabled = !newItems;
-                    q.placeholder = failed ? 'Gagal memuat, pilih ulang di atas' : (newItems ? hints[i] : waitHint);
+                    q.placeholder = failed ? 'Gagal memuat, pilih ulang di atas' : (newItems ? (p.dataset.hint || '') : waitHint);
                 };
                 q.addEventListener('input', function () { if (h.value) { h.value = ''; clearBelow(i); } render(); });
                 q.addEventListener('focus', render);
@@ -162,6 +161,17 @@
             var groups = form.querySelectorAll('fieldset[data-required]');
             for (var g = 0; g < groups.length; g++) {
                 if (groups[g].querySelector('input[type=checkbox]') && !groups[g].querySelector('input:checked')) return [groups[g].querySelector('input'), 'Pilih minimal satu: ' + groups[g].querySelector('legend').textContent.replace(' *', '') + '.'];
+            }
+            // "Salah satu wajib": at least one box of each group filled (RT/RW or dusun, house number or landmark).
+            var seen = {}, ones = form.querySelectorAll('input[data-oneof]');
+            for (var o = 0; o < ones.length; o++) {
+                var box = ones[o].closest('fieldset'), rule = ones[o].dataset.oneof;
+                if (seen[rule + box.querySelector('legend').textContent]) continue;
+                seen[rule + box.querySelector('legend').textContent] = 1;
+                var group = box.querySelectorAll('input[data-oneof="' + rule + '"]'), filled = false;
+                for (var gi = 0; gi < group.length; gi++) { if (String(group[gi].value).trim() !== '') filled = true; }
+                var note = box.querySelector('[data-oneof-note="' + rule + '"]');
+                if (!filled) return [group[0], note ? note.textContent : 'Lengkapi alamat.'];
             }
             var phones = form.querySelectorAll('input[data-phone]');
             for (var p = 0; p < phones.length; p++) {

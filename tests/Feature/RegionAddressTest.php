@@ -189,7 +189,7 @@ class RegionAddressTest extends TestCase
         $lead = $this->in(fn () => Lead::query()->sole());
         $this->assertSame('Jl. Raya Mercedes, RT/RW 003/004, (No. 12), Desa Wanaherang, Kec. Gunungputri, Kabupaten Bogor, Jawa Barat 16965', $lead->shipping_address);
         $this->assertSame('Jawa Barat', $lead->shipping_province);
-        $this->assertSame([
+        $this->assertEquals([
             'street' => 'Jl. Raya Mercedes', 'rt_rw' => '003/004', 'landmark' => 'No. 12', 'kelurahan' => 'Wanaherang', 'kecamatan' => 'Gunungputri',
             'kota' => 'Kabupaten Bogor', 'provinsi' => 'Jawa Barat', 'kode_pos' => '16965',
             'codes' => ['provinsi' => '32', 'kota' => '32.01', 'kecamatan' => '32.01.02', 'kelurahan' => '32.01.02.2001'],

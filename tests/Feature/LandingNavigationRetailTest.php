@@ -10,6 +10,7 @@ use App\Filament\Resources\LeadForms\Pages\CreateLeadForm;
 use App\LandingPages\Navigation;
 use App\LandingPages\Sections;
 use App\LandingPages\Templates;
+use App\LeadForms\FormFields;
 use App\LeadForms\FormTemplates;
 use App\Models\LandingPage;
 use App\Models\Lead;
@@ -259,7 +260,7 @@ class LandingNavigationRetailTest extends TestCase
         $form = $this->in($this->shop, fn () => LeadForm::where('name', 'Order Tumbler Hijau')->firstOrFail());
         $this->assertSame($form->getKey(), collect($page->blocks)->firstWhere('type', 'form')['props']['form_id']);
         $this->assertSame(['Hijau', 'Hitam'], collect($form->fieldList())->firstWhere('key', 'varian')['options']);
-        $this->assertStringContainsString('Tumbler Hijau varian {varian}', $form->after_submit['wa_message']);
+        $this->assertStringContainsString("mau order Tumbler Hijau:\nVarian: {varian}", $form->after_submit['wa_message']);
 
         // A second product page can reuse that form, or get its own.
         Livewire::test(CreateLandingPage::class)
@@ -279,8 +280,10 @@ class LandingNavigationRetailTest extends TestCase
         $this->assertSame(['nama' => 'name', 'whatsapp' => 'phone', 'alamat' => 'shipping_address', 'varian' => 'variant', 'jumlah' => 'quantity',
             'pembayaran' => 'payment_type', 'catatan' => 'note'], $maps);
         $address = collect($attrs['fields'])->firstWhere('key', 'alamat');
-        $this->assertSame(['street', 'rt_rw', 'landmark', 'kelurahan', 'kecamatan', 'kota', 'provinsi', 'kode_pos'], $address['parts']);
-        $this->assertSame(['street', 'rt_rw', 'landmark', 'kecamatan', 'kota'], $address['required_parts']);
+        $this->assertSame(array_keys(FormFields::ADDRESS_PARTS), $address['parts'], 'every sub-field is shown');
+        $this->assertSame(['street', 'kecamatan', 'kota'], $address['required_parts']);
+        $this->assertSame(['rt_or_dusun', 'house_or_landmark'], $address['rules']);
+        $this->assertSame(['Transfer' => 'transfer', 'COD (bayar di tempat)' => 'cod'], collect($attrs['fields'])->firstWhere('key', 'pembayaran')['payment_map']);
         $this->assertSame('region', $address['mode']);
         $this->assertSame('whatsapp', $attrs['after_submit']['type']);
 
@@ -297,13 +300,14 @@ class LandingNavigationRetailTest extends TestCase
             'alamat' => ['street' => 'Jl. Melati 3', 'landmark' => 'pagar hijau', 'rt_rw' => '002/005', 'kecamatan' => 'Coblong', 'kota' => 'Kota Bandung', 'provinsi' => 'Jawa Barat']];
 
         $this->postJson('/f/toko-uji/order-kaos', ['f' => ['alamat' => ['rt_rw' => '', 'landmark' => ''] + $answers['alamat']] + $answers])
-            ->assertStatus(422)->assertJsonValidationErrors(['f.alamat.rt_rw', 'f.alamat.landmark']);
+            ->assertStatus(422)->assertJsonPath('errors', fn ($e) => $e['f.alamat'] === ['Isi RT/RW atau dusun/kampung.', 'Isi nomor rumah atau patokan.']);
 
         $response = $this->postJson('/f/toko-uji/order-kaos', ['f' => $answers])->assertOk()->assertJsonPath('action.type', 'whatsapp');
         $text = urldecode(explode('?text=', $response->json('action.url'))[1]);
         $this->assertStringStartsWith('https://wa.me/6281255556666', $response->json('action.url'));
         $this->assertStringContainsString('saya Sari mau order', $text);
-        $this->assertStringContainsString('varian Hitam, jumlah 2', $text);
+        $this->assertStringContainsString("Varian: Hitam\nJumlah: 2\n", $text);
+        $this->assertStringNotContainsString('Catatan', $text, 'a field left empty is not in the message');
         $this->assertStringContainsString('Pembayaran: COD (bayar di tempat)', $text);
         $this->assertStringContainsString('Alamat: Jl. Melati 3, RT/RW 002/005, (pagar hijau), Kec. Coblong, Kota Bandung, Jawa Barat', $text);
 

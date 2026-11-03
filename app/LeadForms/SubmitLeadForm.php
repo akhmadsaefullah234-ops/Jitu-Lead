@@ -3,6 +3,7 @@
 namespace App\LeadForms;
 
 use App\Actions\RegisterLead;
+use App\Automation\StageAutomation;
 use App\Jobs\SendConversionEvents;
 use App\LandingPages\Buttons;
 use App\LandingPages\PageData;
@@ -48,6 +49,7 @@ class SubmitLeadForm
         [$lead, $created] = ($this->register)($result['lead'] + ['name' => 'Tanpa nama'], $source, 'form', null, $campaign, $page?->property_id);
 
         $this->applyAnswers($lead, $created, $form, $result, $tenant);
+        $this->orderIn($lead, $result);
 
         if ($created) {
             try {
@@ -107,9 +109,30 @@ class SubmitLeadForm
         if ($result['answers'] !== []) {
             $lead->activities()->create([
                 'type' => 'note',
-                'body' => "Jawaban formulir {$form->name}:\n".collect($result['answers'])->map(fn ($a) => "- {$a['label']}: {$a['value']}")->implode("\n"),
+                'body' => "Jawaban formulir {$form->name}:\n".collect($result['answers'])->map(fn ($a) => "- {$a['label']}: {$a['value']}")->implode("\n")
+                    .(isset($result['lead']['shipping_address']) && blank($lead->payment_type) ? "\nCara bayar belum ditanyakan." : ''),
                 'meta' => ['formulir' => $form->getKey()],
             ]);
+        }
+    }
+
+    /**
+     * An order sent through a form (it has a delivery address) goes to "Order masuk" when the shop's stage
+     * automation is on. How it is paid never moves it further: that waits for the admin or the chat.
+     */
+    private function orderIn(Lead $lead, array $result): void
+    {
+        if (! isset($result['lead']['shipping_address'])) {
+            return;
+        }
+
+        try {
+            $automation = app(StageAutomation::class);
+            if ($automation->applies()) {
+                $automation->orderDrafted($lead);
+            }
+        } catch (Throwable $e) {
+            report($e);
         }
     }
 
@@ -130,8 +153,8 @@ class SubmitLeadForm
     private function after(Tenant $tenant, LeadForm $form, Lead $lead, array $vars, ?LandingPage $page): array
     {
         $after = (array) $form->after_submit;
-        $message = trim((string) ($after['message'] ?? '')) ?: 'Terima kasih! Tim kami akan segera menghubungi Anda.';
         $vars += ['judul' => $page?->title ?? $form->name, 'produk' => $vars['produk'] ?? ($page?->productName() ?? '')];
+        $message = FormFields::fillSummary((string) ($after['message'] ?? ''), $vars) ?: 'Terima kasih! Tim kami akan segera menghubungi Anda.';
 
         if (($after['type'] ?? 'message') === 'redirect') {
             $url = ($after['page_kind'] ?? 'landing') === 'url'
@@ -149,7 +172,7 @@ class SubmitLeadForm
                 'manual' => PageData::digits($after['wa_number'] ?? null),
                 default => ($page ? PageData::digits($page->whatsapp_number) : '') ?: PageData::agencyNumber(),
             };
-            $text = Buttons::fill((string) ($after['wa_message'] ?? 'Halo, saya {nama}. Saya baru mengisi formulir {judul}.'), $vars);
+            $text = FormFields::fillSummary((string) ($after['wa_message'] ?? 'Halo, saya {nama}. Saya baru mengisi formulir {judul}.'), $vars);
 
             if ($number !== '') {
                 return ['type' => 'whatsapp', 'url' => PageData::waLink($number, $text), 'new_tab' => false, 'message' => $message];
