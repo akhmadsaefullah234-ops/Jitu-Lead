@@ -44,7 +44,9 @@ class RecordOrder
             return $this->draft($lead, $order, $quote, $actor, $by);
         }
 
-        $payment = in_array($order['pembayaran'] ?? null, self::PAYMENTS, true) ? $order['pembayaran'] : 'transfer';
+        // What the buyer said now, else what the order form already recorded ("other": QRIS, e-wallet), else transfer.
+        $payment = in_array($order['pembayaran'] ?? null, self::PAYMENTS, true) ? $order['pembayaran']
+            : (in_array($lead->payment_type, [...self::PAYMENTS, 'other'], true) ? $lead->payment_type : 'transfer');
 
         $option = $quote->option((string) ($order['kurir'] ?? ''));
         $address = trim((string) ($order['alamat'] ?? ''));
@@ -84,7 +86,9 @@ class RecordOrder
                 'type' => 'order_recorded',
                 'body' => "Pesanan dicatat oleh {$by}: ".implode(', ', array_map(fn (ShippingItem $i) => trim($i->name.' '.$i->variant).' x'.$i->quantity, $quote->items))
                     .". Ongkir {$option->courier} ".ShippingQuote::rupiah($option->price).($total !== null ? ', total '.ShippingQuote::rupiah($total) : '')
-                    .($payment === 'cod' ? '. Bayar di tempat (COD)' : '. Bayar transfer'),
+                    .match ($payment) {
+                        'cod' => '. Bayar di tempat (COD)', 'other' => '. Bayar lainnya (QRIS/e-wallet)', default => '. Bayar transfer'
+                    },
                 'meta' => ['ongkir' => $option->price, 'total' => $total, 'berat_kg' => $quote->billableKg, 'zona' => $quote->zone, 'pembayaran' => $payment],
             ]);
 

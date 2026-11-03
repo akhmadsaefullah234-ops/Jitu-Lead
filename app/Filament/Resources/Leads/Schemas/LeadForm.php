@@ -107,7 +107,9 @@ class LeadForm
                             ->minValue(0)
                             ->prefix('Rp'),
                         Select::make('payment_type')
-                            ->options(['transfer' => 'Transfer', 'cod' => 'Bayar di tempat (COD)']),
+                            ->options(['transfer' => 'Transfer', 'cod' => 'Bayar di tempat (COD)', 'other' => 'Lainnya (QRIS, e-wallet, dll.)'])
+                            ->placeholder('Belum ditanyakan')
+                            ->helperText(fn (Get $get) => blank($get('payment_type')) && (filled($get('shipping_address')) || filled($get('variant'))) ? 'Cara bayar belum ditanyakan. Tanyakan ke pembeli.' : null),
                         TextInput::make('tracking_number')
                             ->maxLength(60)
                             ->regex('/^[A-Za-z0-9\-\s]{4,60}$/')
