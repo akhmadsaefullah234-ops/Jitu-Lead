@@ -30,6 +30,7 @@ class RouteSelector
                 $official,
                 'Lewat nomor resmi, gratis',
                 'Jendela gratis iklan Meta masih terbuka, sisa '.$this->remaining($conversation->free_window_ends_at).'. Semua pesan termasuk template gratis.',
+                until: $conversation->free_window_ends_at,
             );
         }
 
@@ -37,11 +38,12 @@ class RouteSelector
             $channel = $channels->firstWhere('id', $conversation->last_inbound_channel_id);
 
             if ($channel) {
-                $left = $this->remaining($conversation->serviceWindowEndsAt());
+                $ends = $conversation->serviceWindowEndsAt();
 
+                // A gateway number has no 24-hour window, so its reply says nothing about one.
                 return $channel->isOfficial()
-                    ? new RouteDecision(RouteKind::ReplyOfficial, $channel, 'Lewat nomor resmi, gratis', "Klien membalas dalam 24 jam terakhir, jadi pesan biasa gratis. Sisa jendela $left.")
-                    : new RouteDecision(RouteKind::ReplyGateway, $channel, 'Balas di nomor gateway', "Klien terakhir menulis ke nomor gateway. Balasan dikirim dari nomor yang sama, sisa jendela $left.");
+                    ? new RouteDecision(RouteKind::ReplyOfficial, $channel, 'Lewat nomor resmi, gratis', 'Klien membalas dalam 24 jam terakhir, jadi pesan biasa gratis. Sisa jendela '.$this->remaining($ends).'.', until: $ends)
+                    : new RouteDecision(RouteKind::ReplyGateway, $channel, 'Balas di nomor gateway', 'Klien terakhir menulis ke nomor gateway. Balasan dikirim dari nomor yang sama.');
             }
         }
 
