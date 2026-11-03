@@ -51,8 +51,8 @@ function createServer({ config, sessions }) {
       const auth = req.headers.authorization || '';
       if (!auth.startsWith('Bearer ') || !sameKey(auth.slice(7), config.apiKey)) return reply(401, { error: 'API key salah.' });
 
-      // Labels are also reachable as /sessions/:id/labels and /sessions/:id/chat-labels.
-      const scoped = route.match(/^(GET|POST) \/sessions\/([^/]+)\/(labels|chat-labels)$/);
+      // Labels are also reachable as /sessions/:id/labels, /sessions/:id/labels/resync and /sessions/:id/chat-labels.
+      const scoped = route.match(/^(GET|POST) \/sessions\/([^/]+)\/(labels|labels\/resync|chat-labels)$/);
       const header = req.headers['x-session-id'];
       const id = scoped ? scoped[2] : header;
       if (!SessionManager.validId(id)) return reply(400, { error: 'Header X-Session-Id wajib diisi.' });
@@ -61,6 +61,9 @@ function createServer({ config, sessions }) {
       switch (scoped ? `${scoped[1]} /${scoped[3]}` : route) {
         case 'GET /labels':
           return reply(200, { labels: sessions.labels(id) });
+
+        case 'POST /labels/resync':
+          return reply(200, await sessions.resyncLabels(id));
 
         case 'POST /chat-labels': {
           const body = await readJson(req);

@@ -15,7 +15,7 @@ const KEY = 'k'.repeat(32);
 const SID = 'abcdefgh12345678';
 const HOOK = { webhook_url: 'https://crm.test/webhooks/whatsapp/gateway/x', signing_secret: 'sec' };
 
-async function boot() {
+async function boot(extra = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gw-'));
   const posted = [];
   const sockets = [];
@@ -26,7 +26,7 @@ async function boot() {
     sockets.push(conn);
     return conn;
   };
-  const config = { apiKey: KEY, dataDir, maxSessions: 2, webhookTimeoutMs: 100 };
+  const config = { apiKey: KEY, dataDir, maxSessions: 2, webhookTimeoutMs: 100, labelResyncDelayMs: 10, ...extra };
   const sessions = new SessionManager({ config, connector, post: async (p) => posted.push(p.payload), retryDelayMs: 5 });
   const server = createServer({ config, sessions });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -102,7 +102,7 @@ test('logout menghapus sesi dan datanya', async () => {
   g.close();
 });
 
-test('logout dari HP menghapus login dan memberi tahu CRM; putus biasa mencoba lagi', async () => {
+test('perangkat dilepas dari HP (logout 401 / device_removed) = perlu scan ulang dengan alasannya; putus biasa mencoba lagi', async () => {
   const g = await boot();
   await g.call('POST', '/session/start', HOOK);
   g.sockets[0].handlers.onOpen();
@@ -111,8 +111,33 @@ test('logout dari HP menghapus login dan memberi tahu CRM; putus biasa mencoba l
   assert.equal(g.sockets.length, 2, 'menyambung ulang memakai login yang tersimpan');
 
   g.sockets[1].handlers.onClose({ loggedOut: true });
+  assert.deepEqual(g.posted.at(-1), { event: 'session', status: 'needs_relink', reason: 'perangkat tertaut dilepas dari HP' });
+  assert.equal((await g.call('GET', '/session')).body.status, 'needs_relink');
+  assert.equal(fs.existsSync(path.join(g.dataDir, 'sessions', SID, 'needs_relink')), true, 'diingat walau gateway restart');
+  g.sockets[1].handlers.onClose({ loggedOut: true });
+  assert.equal(g.posted.filter((p) => p.status === 'needs_relink').length, 1, 'sekali per kejadian');
+
+  // Scan ulang memulai login baru.
+  assert.equal((await g.call('POST', '/session/start', HOOK)).body.status, 'qr_required');
+  assert.equal(g.sockets.length, 3);
+
+  // Login yang belum pernah tersambung (QR belum di-scan) cukup dihapus, tanpa kabar perlu scan ulang.
+  const other = 'sesi-baru-12345';
+  await g.call('POST', '/session/start', HOOK, { 'X-Session-Id': other });
+  g.sockets.at(-1).handlers.onClose({ loggedOut: true });
   assert.deepEqual(g.posted.at(-1), { event: 'session', status: 'disconnected' });
-  assert.equal(fs.existsSync(path.join(g.dataDir, 'sessions', SID)), false);
+  assert.equal(fs.existsSync(path.join(g.dataDir, 'sessions', other)), false);
+  g.close();
+});
+
+test('logout dari CRM tidak dilaporkan sebagai perangkat dilepas', async () => {
+  const g = await boot();
+  await g.call('POST', '/session/start', HOOK);
+  const sock = g.sockets[0];
+  sock.handlers.onOpen();
+  sock.logout = async () => sock.handlers.onClose({ loggedOut: true });
+  await g.call('POST', '/session/logout');
+  assert.deepEqual(g.posted.map((p) => p.status), ['connected']);
   g.close();
 });
 
@@ -589,4 +614,80 @@ test('connector: labels.edit dan labels.association diteruskan; addChatLabel mem
   await f.conn.addChatLabel('6281@s.whatsapp.net', '5');
   assert.deepEqual(calls, [['6281@s.whatsapp.net', '5']]);
   assert.equal(f.conn.platform(), 'smbi');
+});
+
+test('label: POST /sessions/:id/labels/resync meminta semua label lagi, paling sering 1x per 10 menit; yang tak dilaporkan lagi dianggap terhapus', async () => {
+  const g = await boot({ labelResyncDelayMs: 60000 });
+  await g.call('POST', '/session/start', HOOK);
+  const sock = g.sockets[0];
+  let calls = 0;
+  sock.resyncLabels = async () => {
+    calls++;
+    sock.handlers.onLabel({ id: '1', name: 'Prospek', color: 1, deleted: false });
+    sock.handlers.onLabel({ id: '2', name: 'Order baru', color: 2, deleted: false });
+  };
+  assert.equal((await g.call('POST', `/sessions/${SID}/labels/resync`)).status, 503, 'belum terhubung');
+  sock.handlers.onOpen();
+  sock.handlers.onLabel({ id: '9', name: 'Lama', color: 0, deleted: false });
+
+  const first = await g.call('POST', `/sessions/${SID}/labels/resync`);
+  assert.deepEqual([first.status, first.body], [200, { labels: [{ id: '1', name: 'Prospek', color: 1 }, { id: '2', name: 'Order baru', color: 2 }], resynced: true }]);
+  const second = await g.call('POST', `/sessions/${SID}/labels/resync`);
+  assert.equal(second.body.resynced, false);
+  assert.ok(second.body.retry_after > 590 && second.body.retry_after <= 600);
+  assert.equal(second.body.labels.length, 2);
+  assert.equal(calls, 1, 'tidak lebih dari sekali per 10 menit');
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(g.dataDir, 'sessions', SID, 'labels.json'), 'utf8')).map((l) => l.name), ['Lama', 'Prospek', 'Order baru']);
+  assert.deepEqual(g.posted.map((p) => p.event), ['session'], 'tidak ada pesan atau kontak yang ikut dikirim');
+
+  g.sessions.get(SID).resyncAt = 0;
+  sock.resyncLabels = async () => { throw new Error('timeout'); };
+  assert.deepEqual((await g.call('POST', `/sessions/${SID}/labels/resync`)).body, { error: 'resync_failed' });
+  g.close();
+});
+
+test('label: resync otomatis sekali saat tersambung bila belum ada label; tidak untuk nomor yang sudah punya label atau akun pribadi', async () => {
+  const g = await boot();
+  await g.call('POST', '/session/start', HOOK);
+  const sock = g.sockets[0];
+  let calls = 0;
+  sock.platform = () => 'smba';
+  sock.resyncLabels = async () => { calls++; sock.handlers.onLabel({ id: '1', name: 'Prospek', color: 1 }); };
+  sock.handlers.onOpen();
+  await new Promise((r) => setTimeout(r, 40));
+  assert.equal(calls, 1);
+  assert.deepEqual(g.sessions.labels(SID).map((l) => l.name), ['Prospek']);
+
+  // Tersambung lagi: label sudah ada, tidak diminta lagi.
+  sock.handlers.onOpen();
+  await new Promise((r) => setTimeout(r, 40));
+  assert.equal(calls, 1);
+
+  // Akun pribadi: tidak punya label, tidak diminta.
+  const other = 'sesi-pribadi-123';
+  await g.call('POST', '/session/start', HOOK, { 'X-Session-Id': other });
+  const personal = g.sockets.at(-1);
+  let personalCalls = 0;
+  personal.platform = () => 'android';
+  personal.resyncLabels = async () => { personalCalls++; };
+  personal.handlers.onOpen();
+  await new Promise((r) => setTimeout(r, 40));
+  assert.equal(personalCalls, 0);
+  g.close();
+});
+
+test('connector: resyncLabels mengosongkan versi app state lalu meminta 5 koleksi dari awal; device_removed = logout', async () => {
+  const f = await fakeConnector({ flushWaitMs: 1 });
+  const sets = [];
+  const resyncs = [];
+  f.sock.authState = { creds: {}, keys: { set: async (d) => sets.push(d) } };
+  f.sock.resyncAppState = async (names, initial) => resyncs.push([names, initial]);
+  await f.conn.resyncLabels();
+  const names = ['regular', 'regular_low', 'regular_high', 'critical_block', 'critical_unblock_low'];
+  assert.deepEqual(sets, [{ 'app-state-sync-version': Object.fromEntries(names.map((n) => [n, null])) }]);
+  assert.deepEqual(resyncs, [[names, true]]);
+
+  const err = Object.assign(new Error('Stream Errored (conflict)'), { output: { statusCode: 440 }, data: { tag: 'conflict', attrs: { type: 'device_removed' } } });
+  f.sock.ev.emit('connection.update', { connection: 'close', lastDisconnect: { error: err } });
+  assert.equal(f.events.closes.at(-1).loggedOut, true);
 });

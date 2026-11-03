@@ -49,7 +49,7 @@ class WhatsAppWebhookController extends Controller
                 $inbound->status($channel, $status);
             }
             if ($parsed['session'] !== null) {
-                $inbound->session($channel, $parsed['session']);
+                $inbound->session($channel, $parsed['session'], $parsed['session_reason'] ?? null);
             }
         });
 

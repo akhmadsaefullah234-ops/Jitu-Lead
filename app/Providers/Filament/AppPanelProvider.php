@@ -56,6 +56,9 @@ class AppPanelProvider extends PanelProvider
             ->darkMode(false)
             ->maxContentWidth('full')
             ->sidebarCollapsibleOnDesktop()
+            // The bell: e.g. a WhatsApp number that dropped (App\WhatsApp\ChannelAlerts).
+            ->databaseNotifications()
+            ->databaseNotificationsPolling('60s')
             ->colors([
                 'primary' => Color::Red,
                 'danger' => Color::Rose,

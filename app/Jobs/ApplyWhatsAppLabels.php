@@ -16,8 +16,9 @@ use Throwable;
 
 /**
  * Puts the queued WhatsApp Business labels of one lead on its chat, in order, through the QR gateway (trial,
- * App\WhatsApp\BusinessLabels). A label the account lacks or a personal account is final; the gateway being out
- * of reach is tried again (3 tries), and stops the later labels so they never go on out of order.
+ * App\WhatsApp\BusinessLabels). A label the account lacks waits (waiting_label) and is put on once the account
+ * has it (whatsapp:labels-retry, or "Muat label dari WhatsApp"), for up to 7 days; a personal account is final;
+ * the gateway being out of reach is tried again (3 tries), and stops the later labels so they never go on out of order.
  */
 class ApplyWhatsAppLabels implements ShouldQueue
 {
@@ -64,6 +65,12 @@ class ApplyWhatsAppLabels implements ShouldQueue
                     continue;
                 }
 
+                if ($result['code'] === 'label_not_found') {
+                    $this->wait($event, $channel);
+
+                    continue;
+                }
+
                 // Platform, label and reason only: never the customer's number.
                 Log::warning('WhatsApp label not put on', ['tenant' => $this->tenantId, 'label' => $event->label, 'reason' => $result['code']]);
 
@@ -86,6 +93,25 @@ class ApplyWhatsAppLabels implements ShouldQueue
                 $this->finish($event, 'error');
             }
         });
+    }
+
+    /** The account has no such label yet: wait for it (noted on the lead the first time), up to 7 days. */
+    private function wait(WaLabelEvent $event, WaChannel $channel): void
+    {
+        $since = $event->waiting_since;
+
+        if ($since !== null && $since->lte(now()->subDays(BusinessLabels::WAIT_DAYS))) {
+            $event->forceFill(['status' => 'failed', 'error' => 'label_not_found'])->save();
+            BusinessLabels::note($event->lead, $event->label, 'expired', $channel);
+
+            return;
+        }
+
+        $event->forceFill(['status' => 'waiting_label', 'error' => 'label_not_found', 'waiting_since' => $since ?? now()])->save();
+
+        if ($since === null) {
+            BusinessLabels::note($event->lead, $event->label, 'waiting_label', $channel);
+        }
     }
 
     private function finish(WaLabelEvent $event, string $code): void

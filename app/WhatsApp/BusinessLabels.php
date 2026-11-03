@@ -31,6 +31,16 @@ class BusinessLabels
 {
     public const RULES = 3;
 
+    /** How long a label the account does not have yet is waited for before it counts as failed. */
+    public const WAIT_DAYS = 7;
+
+    /** Names that mean the same default label (as the gateway matches them: gateway/src/labels.js). */
+    private const SAME = [
+        ['prospek', 'lead', 'calon pelanggan'],
+        ['order baru', 'new order', 'pesanan baru'],
+        ['lunas', 'paid', 'dibayar', 'sudah dibayar'],
+    ];
+
     /** Activity text per outcome. */
     private const NOTES = [
         'sent' => "Label WhatsApp ':label' dipasang (uji coba)",
@@ -38,6 +48,8 @@ class BusinessLabels
         'not_business' => "Label WhatsApp ':label' gagal dipasang (uji coba): nomor ini bukan akun WhatsApp Business.",
         'error' => "Label WhatsApp ':label' gagal dipasang (uji coba): gateway tidak bisa dihubungi.",
         'not_from_ad' => "Label WhatsApp ':label' dilewati (uji coba): chat bukan dari iklan.",
+        'waiting_label' => "Label WhatsApp ':label' menunggu (uji coba): label itu belum ada di WhatsApp Business. Pasang label itu sekali di HP, lalu klik \"Muat label dari WhatsApp\" di Nomor WhatsApp. Dicoba lagi otomatis selama 7 hari.",
+        'expired' => "Label WhatsApp ':label' gagal dipasang (uji coba): setelah 7 hari menunggu, label itu tetap belum ada di WhatsApp Business.",
     ];
 
     /** Called after every lead save: a stage it entered or becoming Hot, once the save is committed. */
@@ -229,7 +241,7 @@ class BusinessLabels
     /**
      * Per label, how many chats in the last 30 days got it, failed, or were skipped.
      *
-     * @return array<string, array{sent: int, failed: int, skipped: int, pending: int}>
+     * @return array<string, array{sent: int, failed: int, skipped: int, pending: int, waiting_label: int}>
      */
     public static function summary(WaChannel $channel, int $days = 30): array
     {
@@ -239,10 +251,103 @@ class BusinessLabels
             ->selectRaw('label, status, count(*) as n')->groupBy('label', 'status')->get();
 
         foreach ($rows as $row) {
-            $out[$row->label] ??= ['sent' => 0, 'failed' => 0, 'skipped' => 0, 'pending' => 0];
+            $out[$row->label] ??= ['sent' => 0, 'failed' => 0, 'skipped' => 0, 'pending' => 0, 'waiting_label' => 0];
             $out[$row->label][$row->status] = (int) $row->n;
         }
 
         return $out;
+    }
+
+    /**
+     * The account label that `$wanted` names among `$names`: the exact name first, then its other spellings
+     * ("Prospek" = "Lead"), the same way the gateway picks it. Null when the account has none.
+     *
+     * @param  list<string>  $names
+     */
+    public static function match(array $names, string $wanted): ?string
+    {
+        $normalize = fn (string $n) => trim((string) preg_replace('/\s+/u', ' ', mb_strtolower(\Normalizer::normalize($n, \Normalizer::FORM_KC) ?: $n)));
+        $w = $normalize($wanted);
+        $group = collect(self::SAME)->first(fn (array $g) => in_array($w, $g, true)) ?? [];
+        $byName = [];
+
+        foreach ($names as $name) {
+            $byName[$normalize($name)] ??= $name;
+        }
+
+        foreach (array_values(array_unique([$w, ...$group])) as $candidate) {
+            if (isset($byName[$candidate])) {
+                return $byName[$candidate];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Per rule label (e.g. Prospek, Order baru, Lunas): the account label it goes on as, by the labels last loaded
+     * from WhatsApp, or null when the account has none.
+     *
+     * @return array<string, ?string>
+     */
+    public static function checklist(WaChannel $channel): array
+    {
+        $settings = self::settings($channel);
+        $out = [];
+
+        foreach ($settings['rules'] as $rule) {
+            if ($rule['name'] !== '') {
+                $out[$rule['name']] = self::match($settings['known'], $rule['name']);
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Labels waiting for the account to have them: the ones it now has go on (queued, in order), the ones waited
+     * for 7 days fail. `$names`: the account's labels, asked from the gateway when not given. Must run inside the
+     * channel's tenant.
+     *
+     * @param  list<string>|null  $names
+     * @return array{retried: int, expired: int}
+     */
+    public static function retryWaiting(WaChannel $channel, ?array $names = null): array
+    {
+        $events = WaLabelEvent::query()->with('lead')->where('wa_channel_id', $channel->getKey())->where('status', 'waiting_label')
+            ->orderBy('lead_id')->orderBy('id')->get();
+
+        if ($events->isEmpty()) {
+            return ['retried' => 0, 'expired' => 0];
+        }
+
+        $enabled = self::settings($channel)['enabled'];
+        $names ??= $enabled ? array_column((new GatewayProvider($channel))->labels()['labels'], 'name') : [];
+        $retry = [];
+        $expired = 0;
+
+        foreach ($events as $event) {
+            if ($event->waiting_since !== null && $event->waiting_since->lte(now()->subDays(self::WAIT_DAYS))) {
+                $event->forceFill(['status' => 'failed', 'error' => 'label_not_found'])->save();
+                $expired++;
+
+                if ($event->lead !== null) {
+                    self::note($event->lead, $event->label, 'expired', $channel);
+                }
+
+                continue;
+            }
+
+            if ($enabled && self::match($names, $event->label) !== null) {
+                $event->forceFill(['status' => 'pending'])->save();
+                $retry[] = $event->getKey();
+            }
+        }
+
+        if ($retry !== []) {
+            ApplyWhatsAppLabels::dispatch((int) $channel->tenant_id, $retry);
+        }
+
+        return ['retried' => count($retry), 'expired' => $expired];
     }
 }
