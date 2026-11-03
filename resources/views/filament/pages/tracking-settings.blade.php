@@ -10,6 +10,10 @@
         </ul>
     </x-filament::section>
 
+    <x-filament::section heading="Event dari pipeline" description="Lead dari WhatsApp dan perpindahan tahap juga bisa dilaporkan ke Meta dan TikTok. Atur di tombol &quot;Event dari pipeline&quot; di atas.">
+        <div style="font-size:.9rem">{{ $this->pipelineSummary() }}</div>
+    </x-filament::section>
+
     <div style="display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr))">
         @foreach ($this->platforms() as $p)
             <x-filament::section :heading="$p['name']">
@@ -17,6 +21,9 @@
                     <span class="fi-badge" style="align-self:flex-start;border-radius:9999px;padding:.1rem .65rem;font-weight:700;{{ $p['ok'] ? 'background:#dcfce7;color:#166534' : 'background:#f3f4f6;color:#4b5563' }}">{{ $p['ok'] ? 'Terpasang' : 'Belum diisi' }}</span>
                     <div>Browser: <b>{{ $p['browser'] ? 'aktif' : 'belum' }}</b> &nbsp; Server: <b>{{ $p['server'] ? 'aktif' : ($p['name'] === 'Google (GA4 / Google Ads)' ? 'tidak tersedia' : 'belum') }}</b></div>
                     <span style="color:var(--gray-600)">{{ $p['hint'] }}</span>
+                    @if ($result = \App\Filament\Pages\TrackingSettings::lastResult($p['last']))
+                        <div>Kiriman terakhir dari server: <b style="color:{{ ($p['last']['ok'] ?? false) ? '#166534' : '#b91c1c' }}">{{ $result }}</b></div>
+                    @endif
                 </div>
             </x-filament::section>
         @endforeach

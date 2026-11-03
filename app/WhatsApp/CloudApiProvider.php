@@ -105,6 +105,14 @@ class CloudApiProvider implements WhatsAppProvider
         return hash_equals(hash_hmac('sha256', $request->getContent(), $secret), substr($header, 7));
     }
 
+    /** The entry id of a WhatsApp webhook is the WhatsApp Business Account: kept for conversion events when not set. */
+    private function learnBusinessAccount(mixed $wabaId): void
+    {
+        if (is_string($wabaId) && preg_match('/^\d{6,30}$/', $wabaId) && blank($this->channel->credential('waba_id')) && $this->channel->exists) {
+            $this->channel->forceFill(['credentials' => ['waba_id' => $wabaId] + (array) $this->channel->credentials])->save();
+        }
+    }
+
     public function parseWebhook(Request $request): array
     {
         $messages = [];
@@ -119,6 +127,8 @@ class CloudApiProvider implements WhatsAppProvider
                 if (($value['metadata']['phone_number_id'] ?? null) !== $phoneNumberId) {
                     continue;
                 }
+
+                $this->learnBusinessAccount($entry['id'] ?? null);
 
                 $names = [];
                 foreach ((array) ($value['contacts'] ?? []) as $contact) {
