@@ -80,6 +80,7 @@ class SubmitLeadForm
                 $data['event_id'], $lead->email, $lead->phone, $data['source_url'] ?? null,
                 $request->ip(), $request->userAgent(), array_filter(array_intersect_key($data, array_flip(self::BROWSER_IDS))), $event,
             )->toArray());
+            PipelineConversions::recordFormEvent($lead, (string) $data['event_id'], $event['meta'] ?? $event['tiktok']);
         }
 
         $form->newQuery()->whereKey($form->getKey())->increment('submissions');

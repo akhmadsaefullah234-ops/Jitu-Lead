@@ -115,16 +115,17 @@ class PipelineConversionsTest extends TestCase
         Queue::fake();
 
         $this->move($lead, 'Order masuk');
+        $enteredAt = $lead->fresh()->stage_entered_at->getTimestamp();
         $this->move($lead, 'Tanya produk');
         $this->move($lead, 'Order masuk');
 
         Queue::assertPushed(SendConversionEvents::class, 1);
-        Queue::assertPushed(SendConversionEvents::class, function (SendConversionEvents $job) use ($lead) {
+        Queue::assertPushed(SendConversionEvents::class, function (SendConversionEvents $job) use ($lead, $enteredAt) {
             $p = $job->payload;
 
             return $p['eventId'] === 'lead-'.$lead->getKey().'-InitiateCheckout' && $p['event']['meta'] === 'InitiateCheckout'
                 && $p['extra']['action_source'] === 'system_generated' && $p['extra']['trigger'] === 'stage'
-                && $p['eventTime'] === $lead->fresh()->activities()->where('type', 'stage_changed')->oldest('id')->first()->created_at->getTimestamp();
+                && $p['eventTime'] === $enteredAt;
         });
         $this->assertSame(1, $this->in(fn () => ConversionEvent::query()->count()));
     }
@@ -365,5 +366,60 @@ class PipelineConversionsTest extends TestCase
         $this->assertCount(0, Http::recorded(fn (Request $r) => str_contains($r->url(), 'tiktok')), 'TikTok has no test code: nothing sent');
 
         Livewire::test(TrackingSettings::class)->assertSee('Kiriman terakhir dari server')->assertSee('Berhasil');
+    }
+
+    // ---- Never the same event twice for one person ------------------------------------------------------------
+
+    public function test_a_form_lead_turning_hot_sends_no_second_lead_but_its_later_stages_still_go(): void
+    {
+        $this->tracking();
+        $token = $this->shop->regenerateCaptureToken();
+
+        $this->postJson("/capture/{$token}", ['name' => 'Sinta', 'phone' => '081277778888', 'event_id' => 'evt-form-1'])->assertOk();
+        $lead = $this->in(fn () => Lead::query()->where('phone', '+6281277778888')->firstOrFail());
+        $this->assertSame([['evt-form-1', 'Lead', 'form']], $this->in(fn () => ConversionEvent::query()->get()->map(fn ($e) => [$e->event_id, $e->event_name, $e->trigger])->all()));
+
+        $this->in(fn () => $lead->fresh()->update(['interest' => Interest::Hot]));
+        $this->move($lead, 'Order masuk');
+        $this->in(fn () => $lead->fresh()->update(['interest' => Interest::Warm]));
+        $this->in(fn () => $lead->fresh()->update(['interest' => Interest::Hot]));
+        $this->move($lead, 'Tanya produk');
+        $this->move($lead, 'Order masuk');
+
+        $events = $this->metaEvents();
+        $this->assertSame([['Lead', 'evt-form-1', 'website'], ['InitiateCheckout', 'lead-'.$lead->getKey().'-InitiateCheckout', 'system_generated']],
+            array_map(fn ($e) => [$e['event_name'], $e['event_id'], $e['action_source']], $events), 'one Lead (the form\'s), one InitiateCheckout');
+    }
+
+    public function test_a_click_to_whatsapp_lead_turning_hot_still_sends_lead_once(): void
+    {
+        $this->tracking();
+        $gw = $this->in(fn () => WaChannel::create([
+            'type' => WaChannelType::Gateway, 'name' => 'GW', 'phone' => '+6281100000002', 'status' => WaChannelStatus::Connected, 'position' => 1, 'ai_mode' => AiMode::Off,
+            'credentials' => ['base_url' => 'https://gw.example.com', 'api_key' => 'k', 'signing_secret' => 's'],
+        ]));
+        $this->in(fn () => app(HandleInboundWhatsApp::class)->message($gw, new InboundMessage(
+            'in-1', '+6281299990000', 'text', 'Halo', null, CarbonImmutable::now(), 'Budi', ['source_id' => '120210000000001', 'headline' => 'Raket', 'ctwa_clid' => 'clid-1'],
+        )));
+        $lead = $this->in(fn () => Lead::query()->where('phone', '+6281299990000')->firstOrFail());
+
+        $this->in(fn () => $lead->fresh()->update(['interest' => Interest::Hot]));
+        $this->in(fn () => $lead->fresh()->update(['interest' => Interest::Warm]));
+        $this->in(fn () => $lead->fresh()->update(['interest' => Interest::Hot]));
+
+        $this->assertSame([['Lead', 'lead-'.$lead->getKey().'-Lead']], array_map(fn ($e) => [$e['event_name'], $e['event_id']], $this->metaEvents()));
+    }
+
+    public function test_an_older_form_lead_with_no_record_counts_its_form_event_as_sent(): void
+    {
+        $this->tracking(['stages' => [$this->stageId('Order masuk') => 'InitiateCheckout', $this->stageId('Menunggu pembayaran') => 'Lead']]);
+        [$lead] = $this->in(fn () => app(RegisterLead::class)(['name' => 'Sari', 'phone' => '081277770000'], 'Formulir web', 'form'));
+        $this->assertSame(0, $this->in(fn () => ConversionEvent::query()->count()), 'as before forms were recorded');
+
+        $this->in(fn () => $lead->fresh()->update(['interest' => Interest::Hot]));
+        $this->move($lead, 'Menunggu pembayaran');
+        $this->move($lead, 'Order masuk');
+
+        $this->assertSame(['InitiateCheckout'], array_column($this->metaEvents(), 'event_name'), 'no Lead from Hot or from a stage mapped to Lead');
     }
 }

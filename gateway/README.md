@@ -37,6 +37,23 @@ Gateway memakai Baileys 7 (mendukung alamat `@lid`). Yang perlu diketahui:
 
 Pasang versi baru: `git pull` lalu `sudo bash gateway/install.sh` (menjalankan `npm ci` dan restart layanan).
 
+## Label WhatsApp Business (uji coba)
+
+Untuk fitur CRM "Label WhatsApp Business (uji coba)" di Koneksi WhatsApp (lihat `docs/whatsapp-labels.md`).
+
+- Gateway mengikuti label akun bisnis dari app state Baileys (`labels.edit`, `labels.association`, termasuk sinkron
+  awal setelah scan) dan menyimpannya per sesi di `sessions/<id>/labels.json` (id, nama, warna, terhapus).
+  WhatsApp hanya mengirim label yang berubah, jadi label yang sudah ada sebelum gateway ini dipasang baru dikenal
+  setelah label itu dipasang/diubah sekali di HP (atau setelah scan ulang).
+- `GET /sessions/:id/labels` → `{ labels: [{ id, name, color }] }` (label terhapus tidak ikut).
+- `POST /sessions/:id/chat-labels` `{ phone: "+62…", label: "Prospek" }` → `{ label: { id, name }, already }`.
+  Label dicari tanpa beda huruf besar/kecil, dengan padanan Prospek/Lead, Order baru/New order, Lunas/Paid.
+  Error 422 `{ error: "label_not_found" }` bila akun belum punya label itu (gateway tidak pernah membuat label
+  baru), `{ error: "not_business" }` bila HP utama bukan WhatsApp Business. Label tidak pernah dilepas.
+- Auth sama dengan endpoint lain (Bearer API key); `X-Session-Id` boleh dikosongkan karena id ada di path, tapi
+  bila diisi harus sama.
+- Log hanya memuat 4 digit terakhir nomor dan nama label.
+
 ## Pengembangan
 
 ```

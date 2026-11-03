@@ -188,6 +188,61 @@ class GatewayProvider implements WhatsAppProvider
         return $response->successful() ? null : "Gateway menjawab HTTP {$response->status()}.";
     }
 
+    /**
+     * The WhatsApp Business labels of the number (trial: App\WhatsApp\BusinessLabels).
+     *
+     * @return array{labels: list<array{id: string, name: string, color: ?int}>, error: ?string}
+     */
+    public function labels(): array
+    {
+        if ($problem = $this->configurationProblem()) {
+            return ['labels' => [], 'error' => $problem];
+        }
+
+        try {
+            $response = $this->http()->get($this->url('/sessions/'.$this->channel->webhook_token.'/labels'));
+        } catch (Throwable $e) {
+            return ['labels' => [], 'error' => 'Tidak bisa menghubungi gateway.'];
+        }
+
+        if (! $response->successful()) {
+            return ['labels' => [], 'error' => $response->status() === 404 ? 'Gateway belum mendukung label. Pasang ulang gateway.' : "Gateway menjawab HTTP {$response->status()}."];
+        }
+
+        $labels = array_values(array_filter((array) $response->json('labels'), fn ($l) => is_array($l) && filled($l['name'] ?? null)));
+
+        return ['labels' => array_map(fn (array $l) => ['id' => (string) ($l['id'] ?? ''), 'name' => mb_substr((string) $l['name'], 0, 60), 'color' => isset($l['color']) ? (int) $l['color'] : null], $labels), 'error' => null];
+    }
+
+    /**
+     * Puts a label the account already has on the chat with $phone. `code` says why not: label_not_found,
+     * not_business, or error (worth trying again).
+     *
+     * @return array{ok: bool, code: ?string, already: bool, retry: bool}
+     */
+    public function addChatLabel(string $phone, string $label): array
+    {
+        if ($this->configurationProblem()) {
+            return ['ok' => false, 'code' => 'error', 'already' => false, 'retry' => false];
+        }
+
+        try {
+            $response = $this->http()->post($this->url('/sessions/'.$this->channel->webhook_token.'/chat-labels'), ['phone' => $phone, 'label' => $label]);
+        } catch (Throwable $e) {
+            return ['ok' => false, 'code' => 'error', 'already' => false, 'retry' => true];
+        }
+
+        if ($response->successful()) {
+            return ['ok' => true, 'code' => null, 'already' => (bool) $response->json('already'), 'retry' => false];
+        }
+
+        $code = $response->json('error');
+
+        return in_array($code, ['label_not_found', 'not_business'], true)
+            ? ['ok' => false, 'code' => $code, 'already' => false, 'retry' => false]
+            : ['ok' => false, 'code' => 'error', 'already' => false, 'retry' => $response->status() >= 500 || $response->status() === 429];
+    }
+
     private function post(string $path, array $payload, ?int $timeout = null): SendResult
     {
         if ($problem = $this->configurationProblem()) {

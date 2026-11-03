@@ -9,8 +9,11 @@ use App\Filament\Resources\WaChannels\Pages\CreateWaChannel;
 use App\Filament\Resources\WaChannels\Pages\EditWaChannel;
 use App\Filament\Resources\WaChannels\Pages\ListWaChannels;
 use App\Filament\Support\NoAutofill;
+use App\Models\Stage;
 use App\Models\WaChannel;
+use App\Models\WaLabelEvent;
 use App\Support\Industry;
+use App\WhatsApp\BusinessLabels;
 use App\WhatsApp\GatewayProvider;
 use App\WhatsApp\GatewayUrlGuard;
 use App\WhatsApp\Providers;
@@ -24,8 +27,10 @@ use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\View;
@@ -102,6 +107,7 @@ class WaChannelResource extends Resource
                         ->placeholder(WaChannel::DEFAULT_INTRO)
                         ->helperText('Dikirim lebih dulu saat nomor ini pertama kali menulis ke klien. Variabel: {nama} {agen} {agensi} {'.Industry::t('catalog_item').'}.'),
                 ]),
+            static::labelSection(),
             Section::make('Gateway sendiri (lanjutan)')->columns(2)->collapsible()->collapsed($platformGateway)
                 ->description($platformGateway ? 'Abaikan bagian ini bila Anda menyambungkan lewat scan QR. Isi hanya jika Anda punya gateway WhatsApp sendiri.' : 'Isi alamat dan kunci dari gateway WhatsApp Anda.')
                 ->visible(fn (Get $get) => static::typeOf($get('type')) === 'gateway')
@@ -167,6 +173,62 @@ class WaChannelResource extends Resource
             EditAction::make(),
             DeleteAction::make(),
         ]);
+    }
+
+    /** Trial: WhatsApp Business labels from the pipeline (App\WhatsApp\BusinessLabels), per QR gateway number. */
+    private static function labelSection(): Section
+    {
+        $stages = fn () => Stage::query()->orderBy('position')->orderBy('id')->pluck('name', 'id')->all();
+        $known = fn (?WaChannel $record) => $record ? BusinessLabels::settings($record)['known'] : [];
+        $retail = fn () => Industry::current()->key === 'retail';
+        $titles = ['Label calon pembeli (sinyal lead)', 'Label pesanan (sinyal order)', 'Label lunas (sinyal pembayaran)'];
+
+        $rules = [];
+        foreach ($titles as $i => $title) {
+            $rules[] = Fieldset::make($title)->columns(2)->schema([
+                TextInput::make("label_settings.rules.$i.name")->label('Nama label di WhatsApp')->maxLength(60)->datalist($known)
+                    ->placeholder(BusinessLabels::defaults(null)['rules'][$i]['name']),
+                Toggle::make("label_settings.rules.$i.hot")->label('Saat lead ditandai Hot')->inline(false),
+                Select::make("label_settings.rules.$i.stages")->label($i === 2 ? 'Saat masuk tahap (transfer / belum diketahui)' : 'Saat masuk tahap')
+                    ->multiple()->options($stages)->native(false),
+                Select::make("label_settings.rules.$i.cod_stages")->label('Saat masuk tahap (bayar di tempat / COD)')
+                    ->helperText('Kosong: sama dengan tahap di sebelahnya.')
+                    ->multiple()->options($stages)->native(false)->visible(fn () => $i === 2 && $retail()),
+            ]);
+        }
+
+        return Section::make('Label WhatsApp Business (uji coba)')->key('wa_labels')
+            ->description('Memasang label WhatsApp Business di chat lead secara otomatis saat lead pindah tahap atau ditandai Hot, sehingga sinyal iklan Klik ke WhatsApp ("Prospek", "Order baru", "Lunas") terkirim ke Meta lewat fitur berbagi data WhatsApp Business tanpa memberi label manual di HP. Belum pasti Meta menghitung label dari perangkat tertaut sama seperti dari HP: cek hasilnya di Ads Manager.')
+            ->collapsible()->collapsed(fn (?WaChannel $record) => ! ($record && BusinessLabels::settings($record)['enabled']))
+            ->visible(fn (?WaChannel $record, Get $get) => $record !== null && static::typeOf($get('type')) === 'gateway')
+            ->headerActions([
+                Action::make('loadLabels')->label('Muat label dari WhatsApp')->icon(Heroicon::OutlinedArrowPath)->link()
+                    ->action(function (?WaChannel $record) {
+                        $result = static::gateway($record)->labels();
+
+                        if ($result['error'] !== null) {
+                            Notification::make()->title('Label belum bisa dimuat')->body($result['error'])->danger()->send();
+
+                            return;
+                        }
+
+                        $names = array_values(array_unique(array_column($result['labels'], 'name')));
+                        $record->forceFill(['label_settings' => ['known' => $names] + BusinessLabels::settings($record)])->save();
+
+                        Notification::make()->title($names === [] ? 'Belum ada label yang tersinkron' : count($names).' label dimuat')
+                            ->body($names === [] ? 'Ubah atau pasang satu label sekali di HP (WhatsApp Business) agar label tersinkron ke CRM, lalu muat lagi.' : implode(', ', $names))
+                            ->success()->send();
+                    }),
+            ])
+            ->schema([
+                Toggle::make('label_settings.enabled')->label('Aktifkan label otomatis'),
+                Toggle::make('label_settings.ads_only')->label('Hanya chat dari iklan')
+                    ->helperText('Hanya lead yang datang dari iklan Klik ke WhatsApp (punya ID iklan atau data iklan).'),
+                ...$rules,
+                Placeholder::make('label_summary')->label('Ringkasan 30 hari')
+                    ->content(fn (?WaChannel $record) => $record ? view('filament.wa-label-summary', ['summary' => BusinessLabels::summary($record), 'statuses' => WaLabelEvent::STATUSES]) : null),
+                View::make('filament.guides.wa-labels'),
+            ]);
     }
 
     private static function gateway(WaChannel $channel): GatewayProvider

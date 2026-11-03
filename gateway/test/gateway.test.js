@@ -215,11 +215,12 @@ async function fakeConnector(extra = {}) {
   const mk = (level) => (obj, text) => logs.push({ level, ...obj, text });
   const log = { debug: mk('debug'), info: mk('info'), warn: mk('warn'), error: mk('error'), child: () => log };
   const lib = { ...real, default: (cfg) => { sock.cfg = cfg; return sock; }, fetchLatestBaileysVersion: async () => ({ version: [2, 3000, 1] }) };
-  const events = { messages: [], dec: [], closes: [], fails: 0, oks: 0 };
+  const events = { messages: [], dec: [], closes: [], fails: 0, oks: 0, labels: [], links: [] };
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gw-auth-'));
   const conn = connector({ log, decryptWaitMs: 40, lookupRetryMs: 5, loadLib: async () => lib, ...extra })({
     authDir: dir,
-    handlers: { onQr() {}, onOpen() {}, onClose: (c) => events.closes.push(c), onMessage: (m) => events.messages.push(m), onStatus() {}, onDecryptOk: () => events.oks++, onDecryptFail: (f) => events.fails++ },
+    handlers: { onQr() {}, onOpen() {}, onClose: (c) => events.closes.push(c), onMessage: (m) => events.messages.push(m), onStatus() {}, onDecryptOk: () => events.oks++, onDecryptFail: (f) => events.fails++,
+      onLabel: (l) => events.labels.push(l), onLabelAssociation: (a) => events.links.push(a) },
   });
   await new Promise((r) => setTimeout(r, 50));
 
@@ -510,4 +511,82 @@ test('iklan Click-to-WhatsApp: externalAdReply dari pesan pertama dikirim sebaga
   assert.equal(toInbound(own).referral, undefined, 'pesan sendiri tidak membawa iklan');
   const empty = { ...ad, message: { extendedTextMessage: { text: 'x', contextInfo: { externalAdReply: { sourceType: 'ad' } } } } };
   assert.equal(toInbound(empty).referral, undefined, 'tanpa data iklan yang berarti');
+});
+
+// ---- Label WhatsApp Business (uji coba) ----------------------------------------------------------------------
+
+test('label: dicari tanpa beda huruf, padanan bahasa Inggris, yang terhapus tidak dihitung', () => {
+  const { findLabel, isBusiness } = require('../src/labels');
+  const labels = [
+    { id: '1', name: 'Pelanggan baru', color: 0 },
+    { id: '2', name: 'New order', color: 1 },
+    { id: '3', name: 'Lunas', color: 2, deleted: true },
+    { id: '4', name: 'Paid', color: 3 },
+    { id: '5', name: 'Lead', color: 4 },
+    { id: '6', name: '  PROSPEK ', color: 5 },
+  ];
+  assert.equal(findLabel(labels, 'Prospek').id, '6', 'nama persis menang atas padanannya');
+  assert.equal(findLabel(labels, 'order baru').id, '2', 'Order baru = New order');
+  assert.equal(findLabel(labels, 'Lunas').id, '4', 'Lunas yang terhapus dilewati, Paid dipakai');
+  assert.equal(findLabel(labels, 'Lead').id, '5');
+  assert.equal(findLabel(labels, 'Penting'), null);
+  assert.equal(findLabel([], 'Prospek'), null);
+  assert.deepEqual([isBusiness('smba'), isBusiness('smbi'), isBusiness('android'), isBusiness(undefined)], [true, true, false, null]);
+});
+
+test('label: GET /sessions/:id/labels dan POST chat-labels memasang label; tak dikenal, bukan bisnis, dan nomor salah ditolak', async () => {
+  const g = await boot();
+  await g.call('POST', '/session/start', HOOK);
+  const sock = g.sockets[0];
+  const added = [];
+  let platform = 'smba';
+  Object.assign(sock, { addChatLabel: async (jid, labelId) => added.push([jid, labelId]), platform: () => platform });
+  const logs = [];
+  g.sessions.log = { info: (o, t) => logs.push({ ...o, t }), warn() {}, error() {} };
+
+  assert.equal((await g.call('POST', `/sessions/${SID}/chat-labels`, { phone: '+6281234567890', label: 'Prospek' })).status, 503, 'belum terhubung');
+  sock.handlers.onOpen();
+  sock.handlers.onLabel({ id: '5', name: 'Lead', color: 4, deleted: false });
+  sock.handlers.onLabel({ id: '7', name: 'Order baru', color: 2, deleted: false });
+  sock.handlers.onLabel({ id: '9', name: 'Lama', color: 1, deleted: true });
+
+  assert.deepEqual((await g.call('GET', `/sessions/${SID}/labels`, null, { 'X-Session-Id': '' })).body, { labels: [{ id: '5', name: 'Lead', color: 4 }, { id: '7', name: 'Order baru', color: 2 }] });
+  assert.equal((await g.call('GET', `/sessions/${SID}/labels`, null, { 'X-Session-Id': 'lainnya12345678' })).status, 400, 'header dan path harus cocok');
+
+  const ok = await g.call('POST', `/sessions/${SID}/chat-labels`, { phone: '+6281234567890', label: 'prospek' });
+  assert.deepEqual([ok.status, ok.body], [200, { label: { id: '5', name: 'Lead' }, already: false }]);
+  assert.deepEqual(added, [['6281234567890@s.whatsapp.net', '5']]);
+  assert.deepEqual((await g.call('POST', `/sessions/${SID}/chat-labels`, { phone: '+6281234567890', label: 'Prospek' })).body.already, true);
+  assert.equal(added.length, 1, 'label yang sudah terpasang tidak dipasang lagi');
+
+  assert.deepEqual((await g.call('POST', `/sessions/${SID}/chat-labels`, { phone: '+6281234567890', label: 'Lunas' })).body, { error: 'label_not_found' });
+  assert.equal((await g.call('POST', `/sessions/${SID}/chat-labels`, { phone: '0812', label: 'Prospek' })).status, 400);
+  platform = 'android';
+  const personal = await g.call('POST', `/sessions/${SID}/chat-labels`, { phone: '+6281234567890', label: 'Order baru' });
+  assert.deepEqual([personal.status, personal.body], [422, { error: 'not_business' }]);
+  assert.equal(added.length, 1, 'tidak pernah membuat label baru atau memasang di akun pribadi');
+
+  assert.deepEqual(logs.map((l) => [l.chat, l.label]), [['…7890', 'Lead']], 'log hanya 4 digit terakhir dan nama label');
+
+  // Label diingat di disk: setelah restart tetap dikenal.
+  const again = new SessionManager({ config: { apiKey: KEY, dataDir: g.dataDir, maxSessions: 2, webhookTimeoutMs: 100 }, connector: () => ({}), post: async () => {} });
+  again.restore();
+  assert.deepEqual(again.labels(SID).map((l) => l.name), ['Lead', 'Order baru']);
+  g.close();
+});
+
+test('connector: labels.edit dan labels.association diteruskan; addChatLabel memanggil Baileys', async () => {
+  const f = await fakeConnector();
+  f.sock.ev.emit('labels.edit', { id: '5', name: 'Prospek', color: 4, deleted: false });
+  f.sock.ev.emit('labels.association', { type: 'add', association: { type: 'label_jid', chatId: '6281@s.whatsapp.net', labelId: '5' } });
+  f.sock.ev.emit('labels.association', { type: 'add', association: { type: 'label_message', chatId: '6281@s.whatsapp.net', messageId: 'm', labelId: '5' } });
+  assert.deepEqual(f.events.labels, [{ id: '5', name: 'Prospek', color: 4, deleted: false }]);
+  assert.deepEqual(f.events.links, [{ type: 'add', chatId: '6281@s.whatsapp.net', labelId: '5' }], 'label pada pesan diabaikan');
+
+  const calls = [];
+  f.sock.addChatLabel = async (jid, id) => calls.push([jid, id]);
+  f.sock.authState = { creds: { platform: 'smbi' } };
+  await f.conn.addChatLabel('6281@s.whatsapp.net', '5');
+  assert.deepEqual(calls, [['6281@s.whatsapp.net', '5']]);
+  assert.equal(f.conn.platform(), 'smbi');
 });
