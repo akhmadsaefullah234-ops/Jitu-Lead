@@ -31,6 +31,7 @@ Gateway memakai Baileys 7 (mendukung alamat `@lid`). Yang perlu diketahui:
 - Nomor HP pengirim diambil dari `remoteJidAlt`/`senderPn`, atau dari pemetaan LID di folder login. Pesan yang nomornya tetap tidak diketahui dicatat (level warn) dan tidak diteruskan.
 - Pesan yang belum bisa dibuka (CIPHERTEXT) ditunggu sampai WhatsApp mengirim ulang (45 detik); kalau tetap gagal, dicatat (warn). Tiga kegagalan berturut-turut tanpa satu pun pesan berhasil membuat sesi `needs_relink`.
 - Setiap pesan pribadi yang tidak diteruskan tercatat di log dengan alasannya (`journalctl -u jitu-gateway | grep "tidak diteruskan"`). Hanya 4 digit terakhir nomor yang dicatat.
+- Chat yang dimulai dari iklan Click-to-WhatsApp membawa `referral` (`source_id` = ID iklan, `headline`, `body`, `source_url`, `ctwa_clid`, `thumbnail_url`) dari `contextInfo.externalAdReply` pesan pertama, dengan bentuk yang sama seperti Cloud API. CRM memakainya untuk mencatat iklan dan menentukan produk lead.
 - Balasan yang diketik di aplikasi WhatsApp di HP (nomor yang di-scan) diteruskan ke CRM dengan `from_me: true` dan tampil di Inbox sebagai pesan keluar "dari WhatsApp HP". Pesan yang dikirim gateway atas perintah CRM tidak diteruskan ulang, dan CRM juga mengabaikan id pesan yang sudah tersimpan. Pesan dari HP yang terkirim saat gateway mati tidak disusulkan.
 - Berkas login ditulis atomik (berkas sementara lalu rename), dan `creds.json` punya cadangan `creds.json.bak`.
 

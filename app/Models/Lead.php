@@ -28,6 +28,7 @@ use LogicException;
     'survey_location', 'unit', 'deal_value', 'lost_reason_id', 'custom_fields', 'stage_entered_at',
     'variant', 'quantity', 'shipping_address', 'courier', 'shipping_cost', 'order_items',
     'payment_type', 'payment_proof_at', 'paid_at', 'shipping_province', 'tracking_number', 'shipped_at', 'shipping_address_parts',
+    'ad_id', 'ad_title', 'ad_url', 'product_source',
 ])]
 class Lead extends Model
 {

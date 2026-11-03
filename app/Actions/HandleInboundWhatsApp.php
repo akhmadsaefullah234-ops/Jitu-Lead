@@ -3,6 +3,7 @@
 namespace App\Actions;
 
 use App\Automation\StageAutomation;
+use App\Catalog\ProductMatcher;
 use App\Enums\AiMode;
 use App\Enums\MessageStatus;
 use App\Enums\Role;
@@ -33,7 +34,7 @@ use Throwable;
  */
 class HandleInboundWhatsApp
 {
-    public function __construct(private AssignLead $assign, private CurrentTenant $current) {}
+    public function __construct(private AssignLead $assign, private CurrentTenant $current, private ProductMatcher $products) {}
 
     /**
      * Must run with the channel's tenant as the current tenant.
@@ -94,6 +95,8 @@ class HandleInboundWhatsApp
                 }
 
                 $conversation->save();
+
+                $this->rememberAd($lead, $incoming, $isNewLead);
 
                 $lead->activities()->create([
                     'type' => 'whatsapp_in',
@@ -279,6 +282,34 @@ class HandleInboundWhatsApp
             } catch (Throwable $e) {
                 report($e);
             }
+        }
+    }
+
+    /**
+     * The ad a chat came from goes on the lead (id, title, link), and the lead gets the product the ad or the
+     * first message points to (App\Catalog\ProductMatcher). A product never stops the message from being saved.
+     */
+    private function rememberAd(Lead $lead, InboundMessage $incoming, bool $isNewLead): void
+    {
+        $ad = $incoming->referral;
+
+        if ($ad !== null) {
+            $lead->forceFill([
+                'ad_id' => $ad['source_id'] ?? null,
+                'ad_title' => $ad['headline'] ?? (filled($ad['body'] ?? null) ? mb_substr($ad['body'], 0, 255) : null),
+                'ad_url' => $ad['source_url'] ?? null,
+                'custom_fields' => ['iklan' => $ad] + (array) $lead->custom_fields,
+            ])->save();
+        }
+
+        if ($ad === null && ! $isNewLead) {
+            return;
+        }
+
+        try {
+            $this->products->assign($lead, $ad, $isNewLead ? $incoming->body : null);
+        } catch (Throwable $e) {
+            report($e);
         }
     }
 

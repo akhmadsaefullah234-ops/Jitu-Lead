@@ -10,9 +10,11 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -73,7 +75,20 @@ class PropertyResource extends Resource
             TextInput::make('location')->label('Lokasi')->maxLength(120)->visible($property),
             TextInput::make('developer')->label('Developer (primary)')->maxLength(120)->visible($property),
             TextInput::make('price_from')->label($property ? 'Harga mulai (Rp)' : 'Harga (Rp)')->numeric()->minValue(0)->prefix('Rp'),
+            TextInput::make('compare_price')->label('Harga coret (Rp)')->numeric()->minValue(0)->prefix('Rp')
+                ->helperText('Opsional. Harga normal sebelum promo, ditampilkan dicoret; harga di atas menjadi harga promo.')
+                ->rule(fn (Get $get) => function (string $attribute, mixed $value, \Closure $fail) use ($get) {
+                    if (filled($value) && filled($get('price_from')) && (int) $value <= (int) $get('price_from')) {
+                        $fail('Harga coret harus lebih tinggi dari harga.');
+                    }
+                }),
             Select::make('status')->label($property ? 'Status' : 'Stok')->options(self::statuses())->default('available')->required(),
+            TextInput::make('promo_text')->label('Teks promo')->maxLength(300)->columnSpanFull()
+                ->placeholder($property ? 'Free biaya KPR dan AJB sampai akhir bulan' : 'Diskon 30% minggu ini, gratis ongkir Pulau Jawa')
+                ->helperText('Opsional. AI menyebutnya saat membahas harga produk ini.'),
+            TagsInput::make('ad_keywords')->label('Pengenal iklan')->columnSpanFull()->placeholder('Ketik lalu Enter')
+                ->splitKeys([','])->nestedRecursiveRules(['string', 'max:120'])
+                ->helperText('Kata kunci, potongan teks sapaan iklan, atau ID iklan Meta (angka). Chat dari iklan atau pesan pertama yang memuatnya otomatis ditandai menanyakan '.Industry::t('catalog_item').' ini, mis. "badminton", "capra", "selempang", atau 120210000000001.'),
             // Shipping cost is counted from these (Pengaturan > Pengiriman)
             TextInput::make('weight_grams')->label('Berat (gram)')->numeric()->integer()->minValue(1)->maxValue(1000000)->suffix('g')->visible(! $property)
                 ->helperText('Berat siap kirim, termasuk kemasan. Kosong = berat bawaan di pengaturan Pengiriman.'),
@@ -97,7 +112,9 @@ class PropertyResource extends Resource
             TextColumn::make('property_type')->label($property ? 'Tipe' : 'Kategori')->toggleable(),
             TextColumn::make('location')->label('Lokasi')->searchable()->toggleable()->visible($property),
             TextColumn::make('weight_grams')->label('Berat')->suffix(' g')->toggleable()->visible(! $property),
-            TextColumn::make('price_from')->label($property ? 'Harga mulai' : 'Harga')->money('IDR', locale: 'id')->sortable(),
+            TextColumn::make('price_from')->label($property ? 'Harga mulai' : 'Harga')->money('IDR', locale: 'id')->sortable()
+                ->description(fn (Property $r) => $r->compare_price ? 'Coret: Rp '.number_format((int) $r->compare_price, 0, ',', '.') : null),
+            TextColumn::make('ad_keywords')->label('Pengenal iklan')->badge()->limitList(3)->toggleable(),
             TextColumn::make('status')->label($property ? 'Status' : 'Stok')->badge()
                 ->formatStateUsing(fn (string $state) => self::statuses()[$state] ?? $state)
                 ->color(fn (string $state) => match ($state) {

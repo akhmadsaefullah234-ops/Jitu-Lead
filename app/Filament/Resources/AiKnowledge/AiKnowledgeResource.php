@@ -8,6 +8,7 @@ use App\Support\Industry;
 use BackedEnum;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -16,6 +17,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ToggleColumn;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 
 class AiKnowledgeResource extends Resource
@@ -42,6 +44,9 @@ class AiKnowledgeResource extends Resource
                 ->helperText('Isi bila ini jawaban untuk satu pertanyaan tertentu.'),
             Textarea::make('content')->label('Isi / jawaban')->required()->rows(8)->maxLength(4000)
                 ->helperText(Industry::t('knowledge_body_hint')),
+            Select::make('property_id')->label('Berlaku untuk')->relationship('property', 'name')->searchable()->preload()
+                ->placeholder('Semua '.Industry::t('catalog_item'))
+                ->helperText('Pilih satu '.Industry::t('catalog_item').' bila isinya khusus untuknya (harga, promo, cara pakai). AI hanya memakainya di chat tentang '.Industry::t('catalog_item').' itu, agar tidak tercampur.'),
             Toggle::make('active')->label('Dipakai AI')->default(true),
         ]);
     }
@@ -55,7 +60,10 @@ class AiKnowledgeResource extends Resource
                 'upload' => 'Dokumen',
                 default => 'Manual',
             }),
+            TextColumn::make('property.name')->label('Berlaku untuk')->badge()->placeholder('Semua')->toggleable(),
             ToggleColumn::make('active')->label('Dipakai'),
+        ])->filters([
+            SelectFilter::make('property_id')->label('Berlaku untuk')->relationship('property', 'name'),
         ])->recordActions([EditAction::make(), DeleteAction::make()])
             ->emptyStateHeading('Belum ada pengetahuan')
             ->emptyStateDescription('Tambahkan harga, fasilitas, dan jawaban yang sering ditanyakan agar AI bisa membantu membalas chat.');

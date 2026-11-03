@@ -8,6 +8,7 @@ use App\Actions\SendLibraryItem;
 use App\Actions\SendWhatsAppMessage;
 use App\Automation\StageAutomation;
 use App\Automation\StageAutomationSettings;
+use App\Catalog\ProductMatcher;
 use App\Enums\MessageStatus;
 use App\Filament\Resources\Leads\LeadResource;
 use App\Filament\Resources\MediaAssets\MediaAssetResource;
@@ -24,6 +25,7 @@ use App\Shipping\Regions;
 use App\Shipping\Shipping;
 use App\Shipping\ShippingQuote;
 use App\Support\CurrentTenant;
+use App\Support\Industry;
 use App\WhatsApp\RouteDecision;
 use App\WhatsApp\RouteSelector;
 use App\WhatsApp\WhatsAppException;
@@ -117,8 +119,8 @@ class Inbox extends Page
 
         return [
             'seesAll' => app(CurrentTenant::class)->roleOf(auth()->user())?->seesAllLeads() ?? false,
-            'conversations' => static::visibleConversations()->with(['lead:id,name,phone,owner_id', 'lead.owner:id,name'])->orderByDesc('last_message_at')->limit(100)->get(),
-            'conversation' => $conversation?->load(['lead.stage', 'lead.owner', 'messages.channel']),
+            'conversations' => static::visibleConversations()->with(['lead:id,name,phone,owner_id,property_id', 'lead.owner:id,name', 'lead.property:id,name'])->orderByDesc('last_message_at')->limit(100)->get(),
+            'conversation' => $conversation?->load(['lead.stage', 'lead.owner', 'lead.property', 'messages.channel']),
             'decision' => $decision,
             'aiMode' => $conversation?->lastInboundChannel?->ai_mode,
             'aiPausedUntil' => $conversation?->aiPaused() ? $conversation->ai_paused_until : null,
@@ -172,6 +174,11 @@ class Inbox extends Page
 
         foreach ($actions as $action) {
             $outcome = $action['outcome'] ?? [];
+            if (($action['type'] ?? null) === 'product') {
+                Notification::make()->title('Produk lead diperbarui')->body($outcome['pesan'] ?? null)->success()->send();
+
+                continue;
+            }
             ($outcome['status'] ?? null) === 'tercatat'
                 ? Notification::make()->title('Pesanan dicatat di lead')->body($outcome['pesan'] ?? null)->success()->send()
                 : Notification::make()->title('Pesanan belum tercatat')->body($outcome['pesan'] ?? null)->warning()->send();
@@ -329,6 +336,38 @@ class Inbox extends Page
                 $this->draft = trim($this->draft) === '' ? $quote->summary() : rtrim($this->draft)."\n\n".$quote->summary();
                 $this->updatedDraft();
                 Notification::make()->title('Ongkir dihitung, zona '.$quote->zone)->body(nl2br(e($quote->summary())))->success()->persistent()->send();
+            });
+    }
+
+    /**
+     * The product the chat is about, shown as a badge the agent can change. The AI reads it on every reply, so a
+     * change here steers the next answer; an agent's pick is not overwritten by a later ad click.
+     */
+    public function productAction(): Action
+    {
+        return Action::make('product')
+            ->label(fn () => $this->current()?->lead?->property?->name ?? 'Pilih '.Industry::t('catalog_item'))
+            ->icon(Heroicon::OutlinedTag)->color(fn () => $this->current()?->lead?->property_id ? 'primary' : 'gray')->size('sm')->badge()
+            ->tooltip(fn () => ($lead = $this->current()?->lead)?->product_source ? 'Ditentukan dari '.(ProductMatcher::SOURCES[$lead->product_source] ?? $lead->product_source) : 'Ganti '.Industry::t('catalog_item').' yang ditanyakan')
+            ->visible(fn () => $this->current() !== null && Property::query()->exists())
+            ->modalHeading(fn () => ucfirst(Industry::t('catalog_item')).' yang ditanyakan')
+            ->modalDescription('AI menjawab berdasarkan pilihan ini, termasuk harga, promo, dan pengetahuan khusus '.Industry::t('catalog_item').' tersebut.')
+            ->modalSubmitActionLabel('Simpan')
+            ->fillForm(fn () => ['property_id' => $this->current()?->lead?->property_id])
+            ->schema([
+                Select::make('property_id')->label(ucfirst(Industry::t('catalog_item')))->searchable()->placeholder('Belum diketahui')
+                    ->options(fn () => Property::query()->orderBy('name')->pluck('name', 'id')),
+            ])
+            ->action(function (array $data) {
+                $lead = $this->current()?->lead;
+                $product = filled($data['property_id'] ?? null) ? Property::query()->find($data['property_id']) : null;
+
+                if ($lead === null || $lead->property_id === $product?->getKey()) {
+                    return;
+                }
+
+                ProductMatcher::set($lead, $product, 'agent', auth()->user()->name);
+                Notification::make()->title($product ? 'Produk diganti ke '.$product->name : 'Produk dikosongkan')->success()->send();
             });
     }
 

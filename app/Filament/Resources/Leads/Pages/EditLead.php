@@ -40,6 +40,16 @@ class EditLead extends EditRecord
         ];
     }
 
+    /** A product an agent picks here is theirs: a later ad click does not change it, and the AI follows it. */
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        if (array_key_exists('property_id', $data) && (int) $data['property_id'] !== (int) $this->record->property_id) {
+            $data['product_source'] = filled($data['property_id']) ? 'agent' : null;
+        }
+
+        return $data;
+    }
+
     /** A tracking number typed here goes to the buyer and moves the lead (Pengaturan > Otomatisasi tahap). */
     protected function afterSave(): void
     {
