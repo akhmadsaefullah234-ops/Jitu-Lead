@@ -138,14 +138,7 @@ class CloudApiProvider implements WhatsAppProvider
                         media: $this->mediaOf($message, $type),
                         sentAt: InboundMessage::at($message['timestamp'] ?? null),
                         contactName: $names[$from] ?? null,
-                        referral: is_array($referral) ? array_filter([
-                            'source_id' => $referral['source_id'] ?? null,
-                            'source_type' => $referral['source_type'] ?? null,
-                            'source_url' => $referral['source_url'] ?? null,
-                            'headline' => $referral['headline'] ?? null,
-                            'body' => $referral['body'] ?? null,
-                            'ctwa_clid' => $referral['ctwa_clid'] ?? null,
-                        ]) : null,
+                        referral: is_array($referral) ? InboundMessage::referral($referral + ['thumbnail_url' => $referral['thumbnail_url'] ?? $referral['image_url'] ?? null]) : null,
                     );
                 }
 

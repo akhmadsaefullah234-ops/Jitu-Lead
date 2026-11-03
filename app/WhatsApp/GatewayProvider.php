@@ -95,6 +95,8 @@ class GatewayProvider implements WhatsAppProvider
                         media: is_array($request->input('media')) ? $request->input('media') : null,
                         sentAt: InboundMessage::at($request->input('timestamp')),
                         contactName: $request->input('name'),
+                        // A chat that starts from a Click-to-WhatsApp ad (contextInfo.externalAdReply).
+                        referral: $request->boolean('from_me') ? null : InboundMessage::referral($request->input('referral')),
                         fromMe: $request->boolean('from_me'),
                     );
                 }

@@ -479,3 +479,35 @@ test('permissions.sh: folder 2750, berkas 0640 (termasuk yang lama 0600), ACL di
   assert.equal(mode(path.join(auth, 'creds.json')), 0o640);
   assert.equal(mode(path.join(root, 'sessions', SID, 'meta.json')), 0o640);
 });
+
+test('iklan Click-to-WhatsApp: externalAdReply dari pesan pertama dikirim sebagai referral', () => {
+  const ad = {
+    key: { id: 'ad1', remoteJid: '6281234567890@s.whatsapp.net' },
+    pushName: 'Rina',
+    messageTimestamp: 1700000000,
+    message: {
+      extendedTextMessage: {
+        text: 'Halo, saya mau tanya raket ini',
+        contextInfo: {
+          externalAdReply: {
+            title: 'Raket Badminton Capra Promo', body: 'Diskon 30% minggu ini', sourceType: 'ad', sourceId: '120210000000001',
+            sourceUrl: 'https://fb.me/abc', ctwaClid: 'Afc_123', thumbnailUrl: 'https://scontent.example/t.jpg', thumbnail: Buffer.from('x'),
+          },
+        },
+      },
+    },
+  };
+
+  assert.deepEqual(toInbound(ad).referral, {
+    source_id: '120210000000001', source_type: 'ad', source_url: 'https://fb.me/abc', headline: 'Raket Badminton Capra Promo',
+    body: 'Diskon 30% minggu ini', ctwa_clid: 'Afc_123', thumbnail_url: 'https://scontent.example/t.jpg',
+  });
+  assert.equal(toInbound(ad).text, 'Halo, saya mau tanya raket ini');
+
+  const plain = { ...ad, message: { conversation: 'halo' } };
+  assert.equal(toInbound(plain).referral, undefined, 'pesan biasa tanpa referral');
+  const own = { ...ad, key: { ...ad.key, fromMe: true } };
+  assert.equal(toInbound(own).referral, undefined, 'pesan sendiri tidak membawa iklan');
+  const empty = { ...ad, message: { extendedTextMessage: { text: 'x', contextInfo: { externalAdReply: { sourceType: 'ad' } } } } };
+  assert.equal(toInbound(empty).referral, undefined, 'tanpa data iklan yang berarti');
+});

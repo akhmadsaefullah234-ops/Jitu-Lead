@@ -25,6 +25,38 @@ function typeOf(message = {}) {
   return 'unsupported';
 }
 
+const AD_TEXT_MAX = { source_id: 100, source_type: 40, source_url: 500, headline: 255, body: 1000, ctwa_clid: 255, thumbnail_url: 1000 };
+
+/**
+ * The Click-to-WhatsApp ad a chat started from: WhatsApp puts it on the first message as
+ * message.<kind>.contextInfo.externalAdReply. Sent to the CRM as `referral`, in the same
+ * shape as the Cloud API's (source_id is the ad id). Null when the message did not come from an ad.
+ * The thumbnail itself (bytes) is left out; its address is kept when WhatsApp gives one.
+ */
+function adReferralOf(message = {}) {
+  for (const part of Object.values(message)) {
+    const ad = part && typeof part === 'object' ? part.contextInfo?.externalAdReply : null;
+    if (!ad || typeof ad !== 'object') continue;
+
+    const raw = {
+      source_id: ad.sourceId,
+      source_type: ad.sourceType || 'ad',
+      source_url: ad.sourceUrl,
+      headline: ad.title,
+      body: ad.body,
+      ctwa_clid: ad.ctwaClid,
+      thumbnail_url: ad.thumbnailUrl || ad.originalImageUrl,
+    };
+    const referral = {};
+    for (const [k, v] of Object.entries(raw)) {
+      if (typeof v === 'string' && v.trim() !== '') referral[k] = v.trim().slice(0, AD_TEXT_MAX[k]);
+    }
+    if (referral.source_id || referral.headline || referral.source_url || referral.ctwa_clid) return referral;
+  }
+
+  return null;
+}
+
 // Messages that carry no chat content for the CRM (key exchange, deletions, ...).
 function isSystemOnly(message = {}) {
   const keys = Object.keys(message).filter((k) => k !== 'messageContextInfo');
@@ -101,7 +133,11 @@ function build(msg, from) {
     timestamp: seconds(msg.messageTimestamp),
   };
 
-  return own ? { ...inbound, from_me: true } : inbound;
+  if (own) return { ...inbound, from_me: true };
+
+  const referral = adReferralOf(msg.message);
+
+  return referral ? { ...inbound, referral } : inbound;
 }
 
 /** Turns a WhatsApp event into the shape the CRM expects. Returns null for chats the CRM should not see. */
@@ -314,4 +350,4 @@ function connector({ log, decryptWaitMs = 45000, lookupRetryMs = 3000, loadLib =
   };
 }
 
-module.exports = { connector, toInbound, classify };
+module.exports = { connector, toInbound, classify, adReferralOf };

@@ -17,6 +17,9 @@
         .wa-item[aria-current="true"] { background: var(--gray-100); }
         .wa-item .n { display: flex; justify-content: space-between; font-weight: 600; font-size: .875rem; }
         .wa-item .p { font-size: .75rem; color: var(--gray-500); }
+        .wa-prod { display: inline-block; margin-top: .2rem; font-size: .68rem; font-weight: 600; color: var(--primary-700); background: var(--primary-50); border-radius: 9999px; padding: .05rem .5rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .wa-prod.none { color: var(--gray-500); background: var(--gray-100); }
+        .dark .wa-prod { background: var(--gray-800); color: var(--primary-300); }
         .wa-badge { background: var(--primary-600); color: white; border-radius: 9999px; padding: 0 .45rem; font-size: .7rem; }
         .wa-chat { display: flex; flex-direction: column; max-height: calc(100vh - 12rem); }
         .wa-head { padding: .7rem 1rem; border-bottom: 1px solid var(--gray-200); display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
@@ -63,6 +66,7 @@
                     <div class="n"><span>{{ $c->lead->name }}</span>@if ($c->unread_count)<span class="wa-badge">{{ $c->unread_count }}</span>@endif</div>
                     <div class="p">{{ $c->lead->phone }} · {{ $c->last_message_at?->diffForHumans() }}</div>
                     @if ($seesAll && $c->lead->owner)<div class="p">Agen: {{ $c->lead->owner->name }}</div>@endif
+                    @if ($c->lead->property)<span class="wa-prod" title="Produk yang ditanyakan">{{ $c->lead->property->name }}</span>@endif
                 </button>
             @empty
                 <div class="wa-empty">Belum ada percakapan. Buka chat dari kartu lead, atau tunggu pesan masuk.</div>
@@ -76,11 +80,17 @@
                         <button type="button" class="wa-back" wire:click="close">&larr; Semua chat</button>
                         <br class="wa-back-br"><strong>{{ $conversation->lead->name }}</strong>
                         <div class="p" style="font-size:.75rem;color:var(--gray-500)">{{ $conversation->phone }} · {{ $conversation->lead->stage?->name }}@if ($aiMode) · Pembalas: {{ $aiMode->getLabel() }}@endif</div>
+                        @if ($conversation->lead->ad_title || $conversation->lead->ad_id)
+                            <div class="p" style="font-size:.75rem;color:var(--gray-500)">Dari iklan:
+                                @if ($conversation->lead->ad_url && preg_match('#^https?://#i', $conversation->lead->ad_url))<a href="{{ $conversation->lead->ad_url }}" target="_blank" rel="noopener nofollow" style="text-decoration:underline">{{ $conversation->lead->ad_title ?: 'ID '.$conversation->lead->ad_id }}</a>@else{{ $conversation->lead->ad_title ?: 'ID '.$conversation->lead->ad_id }}@endif
+                            </div>
+                        @endif
                     </div>
                     <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;justify-content:flex-end">
                         @if ($conversation->lead->payment_proof_at && ! $conversation->lead->paid_at)
                             <span class="wa-proof">Bukti transfer masuk, perlu dicek</span>
                         @endif
+                        {{ $this->productAction }}
                         {{ $this->paymentReceivedAction }}
                         {{ $this->trackingAction }}
                         {{ $this->shippingQuoteAction }}
@@ -138,6 +148,11 @@
                             @foreach ($aiDraft->actions ?? [] as $action)
                                 @if (($action['type'] ?? null) === 'order' && ! ($action['applied'] ?? false))
                                     <div style="margin:.25rem 0;font-size:.8rem;color:#6b7280">Bila dikirim, pesanan ikut dicatat di lead ({{ $action['result']['kurir'] ?? '' }}, ongkir {{ $action['result']['ongkir_teks'] ?? '' }}{{ isset($action['result']['total_teks']) ? ', total '.$action['result']['total_teks'] : '' }}) dan lead pindah ke Menunggu pembayaran.</div>
+                                @endif
+                            @endforeach
+                            @foreach ($aiDraft->actions ?? [] as $action)
+                                @if (($action['type'] ?? null) === 'product' && ! ($action['applied'] ?? false))
+                                    <div style="margin:.25rem 0;font-size:.8rem;color:#6b7280">Bila dikirim, produk lead diganti ke {{ implode(', ', $action['names'] ?? []) }}.</div>
                                 @endif
                             @endforeach
                             @if ($aiDraft->suggestedAssets()->isNotEmpty())

@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Leads\Schemas;
 
 use App\Automation\StageAutomationSettings;
+use App\Catalog\ProductMatcher;
 use App\Enums\Interest;
 use App\Enums\Need;
 use App\Enums\PaymentMethod;
@@ -21,6 +22,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
+use Illuminate\Support\HtmlString;
 
 class LeadForm
 {
@@ -91,6 +93,8 @@ class LeadForm
                             ->relationship('property', 'name')
                             ->searchable()
                             ->preload()
+                            ->helperText(fn (?Lead $record) => $record?->product_source && $record->property_id
+                                ? 'Ditentukan dari '.(ProductMatcher::SOURCES[$record->product_source] ?? $record->product_source).'. AI menjawab berdasarkan pilihan ini.' : null)
                             ->columnSpanFull(),
                         TextInput::make('variant')
                             ->placeholder('Contoh: Hitam, L')
@@ -127,6 +131,22 @@ class LeadForm
                                 ->map(fn (string $label, string $part) => filled($record?->shipping_address_parts[$part] ?? null) ? $label.': '.$record->shipping_address_parts[$part] : null)
                                 ->filter()->implode(' · ')),
                     ])),
+                Section::make('Iklan asal')
+                    ->description('Iklan Click-to-WhatsApp yang membawa lead ini ke chat.')
+                    ->columnSpanFull()->collapsible()->columns(2)
+                    ->visible(fn (?Lead $record) => filled($record?->ad_id) || filled($record?->ad_title) || filled($record?->ad_url))
+                    ->schema([
+                        Placeholder::make('ad_title_view')->label('Judul iklan')->content(fn (?Lead $record) => $record?->ad_title ?: '-'),
+                        Placeholder::make('ad_id_view')->label('ID iklan')->content(fn (?Lead $record) => $record?->ad_id ?: '-'),
+                        Placeholder::make('ad_body_view')->label('Teks iklan')->columnSpanFull()
+                            ->visible(fn (?Lead $record) => filled($record?->custom_fields['iklan']['body'] ?? null))
+                            ->content(fn (?Lead $record) => (string) ($record?->custom_fields['iklan']['body'] ?? '')),
+                        Placeholder::make('ad_url_view')->label('Tautan iklan')->columnSpanFull()
+                            ->visible(fn (?Lead $record) => filled($record?->ad_url))
+                            ->content(fn (?Lead $record) => preg_match('#^https?://#i', (string) $record?->ad_url)
+                                ? new HtmlString('<a href="'.e($record->ad_url).'" target="_blank" rel="noopener nofollow" style="text-decoration:underline">'.e($record->ad_url).'</a>')
+                                : (string) $record?->ad_url),
+                    ]),
                 Section::make('Jawaban formulir')
                     ->columnSpanFull()->collapsible()
                     ->visible(fn (?Lead $record) => filled($record?->custom_fields['formulir'] ?? null) || filled($record?->custom_fields['foto_formulir'] ?? null))
