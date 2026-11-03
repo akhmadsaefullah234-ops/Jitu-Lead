@@ -61,6 +61,13 @@
         .gal { display: grid; gap: .6rem; grid-template-columns: repeat(2, 1fr); }
         @media (min-width: 768px) { .gal { grid-template-columns: repeat(3, 1fr); } }
         .gal img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: .85rem; }
+        .gif { margin: 0 auto; }
+        .gif-medium { max-width: 560px; } .gif-small { max-width: 360px; }
+        .gif-grid { display: grid; gap: .6rem; }
+        .gif-c2 .gif-grid, .gif-c3 .gif-grid { grid-template-columns: repeat(2, 1fr); }
+        @media (min-width: 768px) { .gif-c3 .gif-grid { grid-template-columns: repeat(3, 1fr); } .gif-c2.gif-medium, .gif-c3.gif-medium { max-width: 820px; } }
+        .gif img { display: block; width: 100%; height: auto; border-radius: .85rem; }
+        .gif figcaption { margin-top: .6rem; text-align: center; font-size: .9rem; opacity: .8; }
         table.det { width: 100%; border-collapse: collapse; background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 1rem; overflow: hidden; }
         table.det th, table.det td { text-align: left; padding: .8rem 1rem; border-bottom: 1px solid var(--line); vertical-align: top; }
         table.det th { width: 40%; color: var(--mute); font-weight: 600; }

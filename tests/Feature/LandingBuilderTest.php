@@ -408,4 +408,29 @@ class LandingBuilderTest extends TestCase
         $this->assertSame(8192, $field->getMaxSize());
         $this->assertLessThanOrEqual(10 * 1024, $field->getMaxSize(), 'stays under the 10M nginx body limit');
     }
+
+    public function test_gif_section_shows_animated_gifs_stored_as_uploaded(): void
+    {
+        $field = Sections::gifUpload('gifs');
+        $this->assertSame(['image/gif', 'image/webp'], $field->getAcceptedFileTypes());
+        $this->assertLessThan(10 * 1024, $field->getMaxSize(), 'stays under the 10M nginx body limit');
+        $this->assertArrayHasKey('gif', Sections::types('retail'));
+        $this->assertArrayHasKey('gif', Sections::types('properti'));
+
+        $tenantId = $this->tenant->getKey();
+        $page = $this->page(['blocks' => [
+            ['type' => 'hero', 'version' => 1, 'props' => ['headline' => 'Promo']],
+            ['type' => 'gif', 'version' => 1, 'props' => ['heading' => 'Cara pakai', 'caption' => 'Cukup tekan dan putar',
+                'gifs' => ["landing/{$tenantId}/a.gif", "landing/{$tenantId}/b.gif", 'landing/999999/asing.gif'], 'width' => 'small', 'columns' => '3']],
+            ['type' => 'gif', 'version' => 1, 'props' => ['heading' => 'Kosong', 'gifs' => []]],
+        ]]);
+
+        $html = $this->get($page->publicUrl())->assertOk()->getContent();
+        $this->assertStringContainsString('<h2>Cara pakai</h2>', $html);
+        $this->assertStringContainsString('class="gif gif-small gif-c3"', $html);
+        $this->assertStringContainsString("/storage/landing/{$tenantId}/a.gif\" alt=\"Cukup tekan dan putar\" loading=\"lazy\"", $html);
+        $this->assertSame(2, substr_count($html, '.gif" alt='), 'a file of another agency is never shown');
+        $this->assertStringContainsString('<figcaption>Cukup tekan dan putar</figcaption>', $html);
+        $this->assertStringNotContainsString('<h2>Kosong</h2>', $html, 'a GIF section without a file is left out');
+    }
 }

@@ -28,7 +28,7 @@ yang dibatasi paket hanya **jumlah halaman** (`config/plans.php`) dan pixel ikla
 ]
 ```
 
-- `type`: salah satu kunci di `Sections::TYPES` (hero, price, gallery, amenities, unit_types, location, kpr,
+- `type`: salah satu kunci di `Sections::TYPES` (hero, price, gallery, gif, amenities, unit_types, location, kpr,
   testimonials, faq, legal, video, cta, form, countdown, highlights, details, text). Type tak dikenal dibuang saat dibaca.
 - `version`: 1. Naikkan bila bentuk `props` suatu bagian berubah, lalu tambahkan konversi di `BlockFormat::normalize()`.
 - `props`: isi bagian. Dua saklar umum: `hidden` (bool) dan `bg` (`auto|light|dark|brand`).
@@ -44,7 +44,8 @@ yang dibatasi paket hanya **jumlah halaman** (`config/plans.php`) dan pixel ikla
   `rel="noopener nofollow"`.
 - Embed hanya dari domain yang diizinkan: peta `https://www.google.com/maps/embed?`, video YouTube
   (dimuat sebagai gambar dulu, iframe `youtube-nocookie.com` baru dibuat saat diklik). Lihat `Embeds`.
-- Gambar hanya dari folder agensi sendiri (`landing/{tenant_id}/...`); jenis file jpeg/png/webp (tanpa SVG).
+- Gambar hanya dari folder agensi sendiri (`landing/{tenant_id}/...`); jenis file jpeg/png/webp (tanpa SVG), plus
+  gif/webp di bagian **GIF animasi**.
 - Pratinjau samping memakai iframe `sandbox` tanpa skrip.
 
 ## Gambar
@@ -52,6 +53,9 @@ yang dibatasi paket hanya **jumlah halaman** (`config/plans.php`) dan pixel ikla
 Unggahan (maks. 8 MB, di bawah batas nginx 10M) diproses di server oleh `ImageOptimizer`: sisi terpanjang
 maks. 1600 px (logo 600 px), orientasi EXIF dirapikan, dikonversi ke WebP bila PHP-GD mendukung. Bila GD tidak
 ada atau gambar tak bisa dibaca, berkas asli disimpan. Di halaman publik gambar `loading="lazy"`.
+Bagian **GIF animasi** (`gif`: `gifs`, `caption`, `width` full|medium|small, `columns` 1|2|3) memakai
+`Sections::gifUpload()`: GIF/WebP maks. 9 MB disimpan apa adanya, karena dikecilkan atau dikonversi berarti
+hanya frame pertama yang tersisa.
 `deploy/install.sh` memasang `php8.3-gd` dan menaikkan `upload_max_filesize` PHP ke 10M (bawaan PHP hanya 2M).
 
 ## Jarak antar bagian
