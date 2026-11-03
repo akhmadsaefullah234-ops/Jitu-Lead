@@ -52,6 +52,7 @@ class Sections
         'reviews' => 'Ulasan pembeli',
         'price' => 'Harga mulai dari + cicilan',
         'gallery' => 'Galeri foto',
+        'gif' => 'GIF animasi',
         'amenities' => 'Fasilitas',
         'unit_types' => 'Tipe unit',
         'location' => 'Lokasi, peta & akses terdekat',
@@ -144,7 +145,7 @@ class Sections
     private static function icon(string $type): Heroicon
     {
         return match ($type) {
-            'hero' => Heroicon::OutlinedPhoto, 'price' => Heroicon::OutlinedBanknotes, 'gallery' => Heroicon::OutlinedSquares2x2,
+            'hero' => Heroicon::OutlinedPhoto, 'price' => Heroicon::OutlinedBanknotes, 'gallery' => Heroicon::OutlinedSquares2x2, 'gif' => Heroicon::OutlinedFilm,
             'amenities' => Heroicon::OutlinedSparkles, 'unit_types' => Heroicon::OutlinedHomeModern, 'location' => Heroicon::OutlinedMapPin,
             'kpr' => Heroicon::OutlinedCalculator, 'testimonials' => Heroicon::OutlinedChatBubbleBottomCenterText, 'faq' => Heroicon::OutlinedQuestionMarkCircle,
             'legal' => Heroicon::OutlinedShieldCheck, 'video' => Heroicon::OutlinedPlayCircle, 'cta' => Heroicon::OutlinedChatBubbleLeftRight,
@@ -176,6 +177,22 @@ class Sections
             ->maxSize(8192)->helperText('Foto dari HP boleh langsung dipakai. Ukuran maksimal 8 MB, dikecilkan otomatis.')
             ->saveUploadedFileUsing(fn ($file) => ImageOptimizer::store($file, 'landing/'.app(CurrentTenant::class)->id(), $maxEdge));
     }
+
+    /**
+     * An animated picture (GIF, or animated WebP) stored exactly as uploaded: resizing or converting it would keep
+     * only the first frame.
+     */
+    public static function gifUpload(string $name): FileUpload
+    {
+        return FileUpload::make($name)->disk('public')->visibility('public')
+            ->directory(fn () => 'landing/'.app(CurrentTenant::class)->id())
+            ->acceptedFileTypes(['image/gif', 'image/webp'])->maxSize(self::GIF_MAX_KB)
+            ->helperText('GIF atau WebP animasi, maksimal 9 MB. Disimpan apa adanya agar tetap bergerak; di bawah 3 MB lebih cepat dimuat di HP.');
+    }
+
+    public const GIF_MAX_KB = 9216;
+
+    public const GIF_WIDTHS = ['full' => 'Lebar penuh', 'medium' => 'Sedang', 'small' => 'Kecil'];
 
     private static function heading(string $default = '', string $label = 'Judul bagian'): TextInput
     {
@@ -338,6 +355,16 @@ class Sections
             'gallery' => [
                 self::heading('Galeri'),
                 self::upload('images')->label('Foto')->multiple()->reorderable()->maxFiles(12),
+            ],
+            'gif' => [
+                self::heading(''),
+                self::gifUpload('gifs')->label('GIF')->multiple()->reorderable()->maxFiles(6)->required(),
+                TextInput::make('caption')->label('Keterangan di bawah GIF (opsional)')->maxLength(200),
+                Grid::make(['default' => 1, 'sm' => 2])->schema([
+                    Select::make('width')->label('Ukuran')->options(self::GIF_WIDTHS)->default('medium')->native(false)->selectablePlaceholder(false),
+                    Select::make('columns')->label('Bila lebih dari satu GIF')->options(['1' => 'Bersusun ke bawah', '2' => '2 kolom', '3' => '3 kolom (2 di HP)'])
+                        ->default('2')->native(false)->selectablePlaceholder(false),
+                ]),
             ],
             'amenities' => [
                 self::heading('Fasilitas'),
