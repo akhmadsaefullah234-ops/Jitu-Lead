@@ -6,7 +6,13 @@ use App\Actions\ReassignLead;
 use App\Enums\Interest;
 use App\Filament\Resources\Leads\Schemas\LeadForm;
 use App\Models\Lead;
+use App\Models\Property;
+use App\Models\Stage;
+use App\Reports\DashboardData;
+use App\Reports\LeadOrigin;
 use App\Support\CurrentTenant;
+use App\Support\Industry;
+use App\Support\Period;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
@@ -16,6 +22,7 @@ use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\RestoreBulkAction;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
+use Filament\Support\Enums\Width;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
@@ -26,6 +33,15 @@ use Illuminate\Support\Collection;
 
 class LeadsTable
 {
+    /** The ad a lead came from: its title, else its id. */
+    public const AD = "coalesce(nullif(leads.ad_title, ''), nullif(leads.ad_id, ''))";
+
+    /** The "Tanggal masuk" filter's period, or null for all time. */
+    public static function period(array $data): ?Period
+    {
+        return Period::optional($data['periode'] ?? null, $data['dari'] ?? null, $data['sampai'] ?? null);
+    }
+
     public static function configure(Table $table): Table
     {
         return $table
@@ -80,7 +96,46 @@ class LeadsTable
                     ->sortable()
                     ->toggleable(),
             ])
+            ->filtersFormColumns(['default' => 1, 'md' => 2])
+            ->filtersFormWidth(Width::ThreeExtraLarge)
             ->filters([
+                Filter::make('masuk')
+                    ->schema(Period::fields(all: true, label: 'Tanggal masuk'))
+                    ->columnSpanFull()
+                    ->query(fn (Builder $query, array $data) => ($p = self::period($data)) ? $p->apply($query, 'leads.created_at') : $query)
+                    ->indicateUsing(fn (array $data) => ($p = self::period($data)) ? 'Masuk: '.$p->label() : null),
+                SelectFilter::make('produk')
+                    ->label(ucfirst(Industry::t('catalog_item')))
+                    ->visible(fn () => LeadForm::showsIndustryFields())
+                    ->options(fn () => ['none' => 'Tanpa '.Industry::t('catalog_item')] + Property::query()->orderBy('name')->pluck('name', 'id')->all())
+                    ->searchable()
+                    ->query(fn (Builder $query, array $data) => match ($data['value'] ?? null) {
+                        null, '' => $query,
+                        'none' => $query->whereNull('leads.property_id'),
+                        default => $query->where('leads.property_id', (int) $data['value']),
+                    }),
+                SelectFilter::make('sumber')
+                    ->label('Asal lead')
+                    ->options(LeadOrigin::LABELS)
+                    ->query(fn (Builder $query, array $data) => filled($data['value'] ?? null) ? LeadOrigin::apply($query, $data['value']) : $query),
+                SelectFilter::make('iklan')
+                    ->label('Iklan')
+                    ->options(fn () => Lead::query()->selectRaw(self::AD.' as ad')->whereRaw(self::AD.' is not null')->distinct()->orderBy('ad')->limit(200)->pluck('ad', 'ad')->all())
+                    ->searchable()
+                    ->query(fn (Builder $query, array $data) => filled($data['value'] ?? null) ? $query->whereRaw(self::AD.' = ?', [$data['value']]) : $query),
+                Filter::make('masuk_tahap')
+                    ->schema([
+                        Select::make('tahap')->label('Masuk tahap')->placeholder('Pilih tahap')
+                            ->options(fn () => Stage::query()->orderBy('position')->pluck('name', 'id')),
+                        ...Period::fields(label: 'Pada periode'),
+                    ])
+                    ->columnSpanFull()
+                    ->query(fn (Builder $query, array $data) => filled($data['tahap'] ?? null)
+                        ? DashboardData::enteredIn($query, Period::make($data['periode'] ?? null, $data['dari'] ?? null, $data['sampai'] ?? null), [(int) $data['tahap']])
+                        : $query)
+                    ->indicateUsing(fn (array $data) => filled($data['tahap'] ?? null)
+                        ? 'Masuk '.(Stage::query()->find($data['tahap'])?->name ?? 'tahap').': '.Period::make($data['periode'] ?? null, $data['dari'] ?? null, $data['sampai'] ?? null)->label()
+                        : null),
                 SelectFilter::make('stage')
                     ->label('Tahap')
                     ->relationship('stage', 'name', fn (Builder $query) => $query->orderBy('position')),

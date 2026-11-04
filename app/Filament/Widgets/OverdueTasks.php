@@ -13,7 +13,7 @@ class OverdueTasks extends TableWidget
 {
     use VisibleLeads;
 
-    protected static ?int $sort = 4;
+    protected static ?int $sort = 9;
 
     protected static ?string $heading = 'Tindak lanjut yang harus dikerjakan';
 

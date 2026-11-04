@@ -29,6 +29,11 @@
     .fi-ta-header-cell { background: #fef2f2; }
     .fi-btn.fi-color-primary:not(.fi-outlined) { background: var(--jl-red); }
     .fi-btn.fi-color-primary:not(.fi-outlined):hover { background: var(--jl-red-dark); }
+    /* Toggle buttons (period chips, interest): only the chosen one is filled */
+    .fi-fo-toggle-buttons-input:not(:checked) + .fi-btn.fi-color-primary,
+    .fi-fo-toggle-buttons-input:not(:checked) + .fi-btn.fi-color-primary:hover { background: #fff; color: var(--gray-700); box-shadow: inset 0 0 0 1px var(--gray-300); }
+    .fi-fo-toggle-buttons-input:not(:checked) + .fi-btn.fi-color-primary:hover { background: var(--gray-50); }
+    .dark .fi-fo-toggle-buttons-input:not(:checked) + .fi-btn.fi-color-primary { background: var(--gray-900); color: var(--gray-200); box-shadow: inset 0 0 0 1px var(--gray-700); }
 
     /* Small screens: comfortable touch targets and no sideways page scroll */
     html, body { max-width: 100%; overflow-x: hidden; }

@@ -2,23 +2,28 @@
 
 namespace App\Filament\Widgets;
 
-use App\Filament\Widgets\Concerns\VisibleLeads;
-use App\Models\LeadSource;
+use App\Filament\Widgets\Concerns\UsesPagePeriod;
+use App\Reports\LeadOrigin;
 use Filament\Widgets\ChartWidget;
 
+/** Where the period's leads came from: WhatsApp from an ad, WhatsApp on its own, a form or landing page, the rest. */
 class LeadsBySource extends ChartWidget
 {
-    use VisibleLeads;
+    use UsesPagePeriod;
 
-    protected static ?int $sort = 3;
+    protected static ?int $sort = 4;
 
     protected ?string $heading = 'Sumber lead';
+
+    protected ?string $description = 'Lead yang masuk pada periode ini.';
 
     protected ?string $maxHeight = '300px';
 
     protected ?string $pollingInterval = null;
 
-    private const COLORS = ['#dc2626', '#f97316', '#facc15', '#16a34a', '#0ea5e9', '#6366f1', '#9ca3af'];
+    protected static bool $isLazy = false;
+
+    private const COLORS = [LeadOrigin::WA_ADS => '#dc2626', LeadOrigin::WA_ORGANIC => '#16a34a', LeadOrigin::FORM => '#0ea5e9', LeadOrigin::MANUAL => '#9ca3af'];
 
     protected function getType(): string
     {
@@ -27,15 +32,14 @@ class LeadsBySource extends ChartWidget
 
     protected function getData(): array
     {
-        $rows = $this->leads()->selectRaw('lead_source_id, count(*) as total')->groupBy('lead_source_id')->orderByDesc('total')->get();
-        $names = LeadSource::query()->pluck('name', 'id');
+        $counts = $this->data()->sources($this->period());
 
         return [
             'datasets' => [[
-                'data' => $rows->pluck('total')->map(fn ($n) => (int) $n)->all(),
-                'backgroundColor' => $rows->keys()->map(fn ($i) => self::COLORS[$i % count(self::COLORS)])->all(),
+                'data' => array_values($counts),
+                'backgroundColor' => array_values(array_intersect_key(self::COLORS, $counts)),
             ]],
-            'labels' => $rows->map(fn ($r) => $names[$r->lead_source_id] ?? 'Tanpa sumber')->all(),
+            'labels' => array_map(fn ($key) => LeadOrigin::LABELS[$key].' ('.$counts[$key].')', array_keys($counts)),
         ];
     }
 

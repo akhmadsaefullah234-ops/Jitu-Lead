@@ -6,19 +6,25 @@ use App\Actions\MoveLeadToStage;
 use App\Enums\Interest;
 use App\Enums\StageRequirement;
 use App\Filament\Resources\Leads\LeadResource;
+use App\Filament\Resources\Leads\Schemas\LeadForm;
 use App\Models\Lead;
 use App\Models\LostReason;
+use App\Models\Property;
 use App\Models\Stage;
+use App\Reports\DashboardData;
 use App\Support\CurrentTenant;
 use App\Support\Industry;
+use App\Support\Period;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\ToggleButtons;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -53,6 +59,59 @@ class Pipeline extends Page
     #[Url]
     public ?int $agent = null;
 
+    /** Period (App\Support\Period) the board is limited to; "all" shows every lead. */
+    #[Url]
+    public ?string $periode = null;
+
+    #[Url]
+    public ?string $dari = null;
+
+    #[Url]
+    public ?string $sampai = null;
+
+    /** Which date the period looks at: when the lead came in ("lead") or when it entered its stage ("tahap"). */
+    #[Url]
+    public string $dasar = 'lead';
+
+    #[Url]
+    public ?string $produk = null;
+
+    public function mount(): void
+    {
+        // The viewer's last choice, unless the link carries one.
+        if (! request()->hasAny(['periode', 'dari', 'sampai'])) {
+            ['periode' => $this->periode, 'dari' => $this->dari, 'sampai' => $this->sampai] = Period::remembered('pipeline');
+        }
+
+        $this->periode ??= Period::ALL;
+        $this->periodForm->fill(['periode' => $this->periode, 'dari' => $this->dari, 'sampai' => $this->sampai, 'dasar' => $this->dasar, 'produk' => $this->produk]);
+    }
+
+    public function updated(string $name): void
+    {
+        if (in_array($name, ['periode', 'dari', 'sampai'], true)) {
+            Period::remember('pipeline', $this->periode, $this->dari, $this->sampai);
+        }
+    }
+
+    public function periodForm(Schema $schema): Schema
+    {
+        return $schema->columns(['default' => 1, 'md' => 2])->components([
+            ...Period::fields(all: true),
+            ToggleButtons::make('dasar')->label('Berdasarkan')->inline()->grouped()->live()
+                ->options(['lead' => 'Tanggal lead masuk', 'tahap' => 'Tanggal masuk tahap'])
+                ->visible(fn () => $this->period() !== null),
+            Select::make('produk')->label(ucfirst(Industry::t('catalog_item')))->placeholder('Semua '.Industry::t('catalog_item'))->live()->searchable()
+                ->visible(fn () => LeadForm::showsIndustryFields())
+                ->options(fn () => ['none' => 'Tanpa '.Industry::t('catalog_item')] + Property::query()->orderBy('name')->pluck('name', 'id')->all()),
+        ]);
+    }
+
+    public function period(): ?Period
+    {
+        return Period::optional($this->periode, $this->dari, $this->sampai);
+    }
+
     public function getViewData(): array
     {
         $stages = Stage::query()->orderBy('position')->get();
@@ -61,13 +120,19 @@ class Pipeline extends Page
             ->with(['owner:id,name', 'property:id,name'])
             ->get()
             ->groupBy('stage_id');
+        // A shop counts what its orders are worth; a property agency the agreed deal values.
+        $retail = Industry::current()->key === 'retail';
+        $values = $this->filteredLeads()->reorder()->groupBy('leads.stage_id')
+            ->selectRaw('leads.stage_id, sum('.($retail ? DashboardData::ORDER_VALUE : 'coalesce(leads.deal_value, 0)').') as v')->pluck('v', 'stage_id');
 
         return [
             'columns' => $stages->map(fn (Stage $stage) => [
                 'stage' => $stage,
                 'leads' => $this->sortCards($leads->get($stage->getKey(), collect()))->take(self::CARDS_PER_STAGE),
                 'count' => $leads->get($stage->getKey(), collect())->count(),
+                'value' => (int) ($values[$stage->getKey()] ?? 0),
             ]),
+            'period' => $this->period(),
             'filters' => [
                 'all' => 'Semua',
                 'hot' => 'Hot',
@@ -189,7 +254,11 @@ class Pipeline extends Page
 
     private function filteredLeads(): Builder
     {
+        $period = $this->period();
+
         return LeadResource::getEloquentQuery()
+            ->when($period, fn (Builder $q) => $period->apply($q, $this->dasar === 'tahap' ? 'leads.stage_entered_at' : 'leads.created_at'))
+            ->when(filled($this->produk), fn (Builder $q) => $this->produk === 'none' ? $q->whereNull('leads.property_id') : $q->where('leads.property_id', (int) $this->produk))
             ->when($this->agent && $this->canSeeTeam(), fn (Builder $q) => $q->where('owner_id', $this->agent))
             ->when(filled($this->search), function (Builder $q) {
                 $term = '%'.mb_strtolower(trim($this->search)).'%';

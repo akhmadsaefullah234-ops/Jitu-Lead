@@ -6,8 +6,10 @@ use App\Billing\PlanLimits;
 use App\Filament\Resources\Leads\LeadResource;
 use App\Models\Lead;
 use App\Models\Stage;
+use App\Support\Period;
 use BackedEnum;
 use Filament\Pages\Page;
+use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
 use Livewire\Attributes\Url;
@@ -28,16 +30,46 @@ class Reports extends Page
 
     protected static ?int $navigationSort = 10;
 
-    public const PERIODS = [7 => '7 hari', 30 => '30 hari', 90 => '90 hari', 365 => '1 tahun'];
+    /** The same period picker as the Dashboard, Lead and Pipeline (App\Support\Period); 30 days unless chosen. */
+    #[Url]
+    public ?string $periode = null;
 
     #[Url]
-    public int $days = 30;
+    public ?string $dari = null;
+
+    #[Url]
+    public ?string $sampai = null;
+
+    public function mount(): void
+    {
+        if (! request()->hasAny(['periode', 'dari', 'sampai'])) {
+            ['periode' => $this->periode, 'dari' => $this->dari, 'sampai' => $this->sampai] = Period::remembered('reports');
+        }
+
+        $this->periode ??= '30d';
+        $this->periodForm->fill(['periode' => $this->periode, 'dari' => $this->dari, 'sampai' => $this->sampai]);
+    }
+
+    public function updated(string $name): void
+    {
+        if (in_array($name, ['periode', 'dari', 'sampai'], true)) {
+            Period::remember('reports', $this->periode, $this->dari, $this->sampai);
+        }
+    }
+
+    public function periodForm(Schema $schema): Schema
+    {
+        return $schema->components(Period::fields());
+    }
+
+    public function period(): Period
+    {
+        return Period::make($this->periode, $this->dari, $this->sampai, default: '30d');
+    }
 
     private function leads(): Builder
     {
-        $days = array_key_exists($this->days, self::PERIODS) ? $this->days : 30;
-
-        return LeadResource::onlyVisibleLeads(Lead::query())->where('created_at', '>=', now()->subDays($days));
+        return $this->period()->apply(LeadResource::onlyVisibleLeads(Lead::query()), 'leads.created_at');
     }
 
     private function rate(int $part, int $whole): string
@@ -85,7 +117,7 @@ class Reports extends Page
                 'Konversi' => $this->rate($closed->count(), $total),
                 'Nilai transaksi' => 'Rp '.number_format((int) $closed->sum('deal_value'), 0, ',', '.'),
             ],
-            'funnel' => $funnel, 'max' => $max, 'perAgent' => $perAgent, 'perSource' => $perSource, 'periods' => self::PERIODS,
+            'funnel' => $funnel, 'max' => $max, 'perAgent' => $perAgent, 'perSource' => $perSource, 'period' => $this->period(),
         ];
     }
 }

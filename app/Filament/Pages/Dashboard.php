@@ -5,22 +5,38 @@ namespace App\Filament\Pages;
 use App\Actions\DemoData;
 use App\Enums\Role;
 use App\Filament\Widgets\BannerSlider;
+use App\Filament\Widgets\Dashboard\AdPerformance;
+use App\Filament\Widgets\Dashboard\AgentPerformance;
+use App\Filament\Widgets\Dashboard\AutomationActivity;
+use App\Filament\Widgets\Dashboard\CurrentStatus;
+use App\Filament\Widgets\Dashboard\LeadFunnel;
+use App\Filament\Widgets\Dashboard\PeriodStats;
+use App\Filament\Widgets\Dashboard\ProductPerformance;
 use App\Filament\Widgets\GettingStarted;
 use App\Filament\Widgets\LeadsBySource;
-use App\Filament\Widgets\LeadsByStage;
 use App\Filament\Widgets\OverdueTasks;
 use App\Filament\Widgets\RecentLeads;
-use App\Filament\Widgets\SalesStats;
 use App\Filament\Widgets\WhatsAppPrompt;
 use App\Support\CurrentTenant;
 use App\Support\Industry;
+use App\Support\Period;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Dashboard as BaseDashboard;
+use Filament\Pages\Dashboard\Concerns\HasFiltersForm;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 
+/**
+ * Everything the agency does, for one period picked at the top (App\Support\Period; 7 days unless the viewer
+ * picked another, remembered in their session and shareable as ?periode=7d or ?dari=...&sampai=...). Every
+ * widget follows it through the page filters, except "Status saat ini".
+ */
 class Dashboard extends BaseDashboard
 {
+    use HasFiltersForm;
+
     protected static ?string $navigationLabel = 'Dasbor';
 
     protected static ?string $title = 'Dasbor';
@@ -34,7 +50,40 @@ class Dashboard extends BaseDashboard
 
     public function getWidgets(): array
     {
-        return [WhatsAppPrompt::class, BannerSlider::class, GettingStarted::class, SalesStats::class, LeadsByStage::class, LeadsBySource::class, OverdueTasks::class, RecentLeads::class];
+        return [
+            WhatsAppPrompt::class, BannerSlider::class, GettingStarted::class,
+            PeriodStats::class, CurrentStatus::class, LeadFunnel::class, LeadsBySource::class,
+            ProductPerformance::class, AdPerformance::class, AutomationActivity::class, AgentPerformance::class,
+            OverdueTasks::class, RecentLeads::class,
+        ];
+    }
+
+    public function mount(): void
+    {
+        // A shared link: ?periode=30d, or ?dari=2026-11-01&sampai=2026-11-04.
+        $query = request()->only(['periode', 'dari', 'sampai']);
+
+        if (filled($query['periode'] ?? null) || (filled($query['dari'] ?? null) && filled($query['sampai'] ?? null))) {
+            $period = Period::make($query['periode'] ?? Period::CUSTOM, $query['dari'] ?? null, $query['sampai'] ?? null);
+            $this->filters = $period->toQuery() + ['dari' => null, 'sampai' => null];
+            $this->getFiltersForm()->fill($this->filters);
+            session()->put($this->getFiltersSessionKey(), $this->filters);
+        }
+    }
+
+    public function filtersForm(Schema $schema): Schema
+    {
+        return $schema->columns(1)->components([
+            Section::make()->compact()->columnSpanFull()->schema(Period::fields())
+                ->description(fn () => 'Dibanding '.$this->period()->previous()->label().'. Status saat ini tidak mengikuti periode.'),
+        ]);
+    }
+
+    public function period(): Period
+    {
+        $f = (array) $this->filters;
+
+        return Period::make($f['periode'] ?? null, $f['dari'] ?? null, $f['sampai'] ?? null);
     }
 
     private function isAdmin(): bool
