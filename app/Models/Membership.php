@@ -31,6 +31,7 @@ class Membership extends Pivot
         return [
             'role' => Role::class,
             'takes_leads' => 'boolean',
+            'report_settings' => 'array',
         ];
     }
 
