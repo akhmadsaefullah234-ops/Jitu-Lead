@@ -2,16 +2,22 @@
 
 namespace App\Jobs;
 
+use App\Actions\HandleInboundWhatsApp;
 use App\Models\Tenant;
 use App\Models\WaMessage;
 use App\Support\CurrentTenant;
 use App\WhatsApp\CloudApiProvider;
+use App\WhatsApp\GatewayProvider;
 use App\WhatsApp\MediaStore;
 use App\WhatsApp\Providers;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
-/** Downloads a picture that arrived through the official API, where the webhook only carries a media id. */
+/**
+ * Downloads a picture, voice note, sticker or video the webhook only named: the official API always sends a
+ * media id, a gateway does so for a file too big for its webhook. A voice note is answered by the AI once
+ * its file is in (or could not be had).
+ */
 class FetchWhatsAppMedia implements ShouldQueue
 {
     use Queueable;
@@ -23,6 +29,13 @@ class FetchWhatsAppMedia implements ShouldQueue
     public function __construct(public int $tenantId, public int $messageId)
     {
         $this->afterCommit();
+    }
+
+    private function answer(WaMessage $message): void
+    {
+        if ($message->type === 'audio' && HandleInboundWhatsApp::aiAnswers($message->channel, $message)) {
+            GenerateAiReplyJob::dispatch($this->tenantId, $message->getKey());
+        }
     }
 
     public function backoff(): array
@@ -47,11 +60,12 @@ class FetchWhatsAppMedia implements ShouldQueue
             }
 
             $provider = $providers->for($message->channel);
-            $bytes = $provider instanceof CloudApiProvider ? $provider->downloadMedia((string) $id) : null;
+            $bytes = $provider instanceof CloudApiProvider || $provider instanceof GatewayProvider ? $provider->downloadMedia((string) $id) : null;
 
             if ($bytes === null) {
                 if ($this->attempts() >= $this->tries) {
                     $store->fail($message, 'download_failed');
+                    $this->answer($message);
 
                     return;
                 }
@@ -61,7 +75,8 @@ class FetchWhatsAppMedia implements ShouldQueue
                 return;
             }
 
-            $store->storeImage($message, $bytes);
+            $store->store($message, $bytes);
+            $this->answer($message);
         });
     }
 }

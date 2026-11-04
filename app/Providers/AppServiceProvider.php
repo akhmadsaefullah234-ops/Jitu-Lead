@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Ai\Transcriber;
+use App\Ai\WhisperTranscriber;
 use App\Support\CurrentTenant;
 use Filament\Facades\Filament;
 use Filament\Tables\Table;
@@ -19,6 +21,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->scoped(CurrentTenant::class);
+        $this->app->bind(Transcriber::class, WhisperTranscriber::class);
     }
 
     /**

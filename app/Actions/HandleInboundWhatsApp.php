@@ -22,6 +22,7 @@ use App\Support\CurrentTenant;
 use App\WhatsApp\ChannelAlerts;
 use App\WhatsApp\InboundMessage;
 use App\WhatsApp\MediaStore;
+use App\WhatsApp\MessageContent;
 use App\WhatsApp\StatusUpdate;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -46,6 +47,13 @@ class HandleInboundWhatsApp
             return null;
         }
 
+        if ($incoming->type === 'reaction') {
+            // A reaction is never a message of its own: it goes on the message it reacts to.
+            $this->react($incoming);
+
+            return null;
+        }
+
         if ($incoming->fromMe) {
             return $this->fromPhone($channel, $incoming);
         }
@@ -53,7 +61,7 @@ class HandleInboundWhatsApp
         $lead = null;
         $isNewLead = false;
 
-        [$media, $imageBytes] = $this->splitMedia($incoming);
+        [$media, $fileBytes] = $this->splitMedia($incoming);
 
         try {
             $message = DB::transaction(function () use ($channel, $incoming, $media, &$lead, &$isNewLead) {
@@ -106,7 +114,7 @@ class HandleInboundWhatsApp
                 return $message;
             });
 
-            $this->keepImage($message, $imageBytes);
+            $this->keepMedia($message, $fileBytes);
             $isNewLead ?: $this->automate($lead, $message);
             $this->queueAiReply($channel, $message);
             $this->alert($lead, $message, $isNewLead, $incoming);
@@ -125,7 +133,7 @@ class HandleInboundWhatsApp
      */
     private function fromPhone(WaChannel $channel, InboundMessage $incoming): ?WaMessage
     {
-        [$media, $imageBytes] = $this->splitMedia($incoming);
+        [$media, $fileBytes] = $this->splitMedia($incoming);
 
         try {
             $message = DB::transaction(function () use ($channel, $incoming, $media) {
@@ -168,39 +176,73 @@ class HandleInboundWhatsApp
         }
 
         if ($message !== null) {
-            $this->keepImage($message, $imageBytes);
+            $this->keepMedia($message, $fileBytes);
         }
 
         return $message;
     }
 
-    /** @return array{0: array<string, mixed>|null, 1: ?string} the media without the picture itself, and the picture */
+    /** @return array{0: array<string, mixed>|null, 1: ?string} the media without the file itself, and the file */
     private function splitMedia(InboundMessage $incoming): array
     {
-        // A gateway sends the picture itself inside the webhook; it is kept as a file, never in the database.
+        // A gateway sends a picture, voice note, sticker or small video inside the webhook; it is kept as a file,
+        // never in the database.
         $media = $incoming->media;
-        $imageBytes = null;
+        $bytes = null;
 
-        if ($incoming->type === 'image' && is_array($media) && isset($media['data'])) {
-            $imageBytes = base64_decode((string) $media['data'], true) ?: null;
+        if (in_array($incoming->type, MessageContent::MEDIA_TYPES, true) && is_array($media) && isset($media['data'])) {
+            $bytes = base64_decode((string) $media['data'], true) ?: null;
         }
 
         unset($media['data']);
 
-        return [$media, $imageBytes];
+        return [$media, $bytes];
     }
 
-    private function keepImage(WaMessage $message, ?string $bytes): void
+    private function keepMedia(WaMessage $message, ?string $bytes): void
     {
         try {
             if ($bytes !== null) {
-                app(MediaStore::class)->storeImage($message, $bytes);
-            } elseif ($message->type === 'image' && isset($message->media['id'])) {
+                app(MediaStore::class)->store($message, $bytes);
+            } elseif (self::awaitsFile($message)) {
+                // The Cloud API, or a gateway with a file too big for its webhook: fetched in the background.
                 FetchWhatsAppMedia::dispatch($this->current->id(), $message->getKey());
             }
         } catch (Throwable $e) {
-            report($e); // A picture that cannot be kept never costs the message.
+            report($e); // A file that cannot be kept never costs the message.
         }
+    }
+
+    /** The message's file is still to be downloaded from the provider. */
+    public static function awaitsFile(WaMessage $message): bool
+    {
+        return in_array($message->type, MessageContent::MEDIA_TYPES, true)
+            && isset($message->media['id']) && ! isset($message->media['path']) && ! isset($message->media['error']);
+    }
+
+    /**
+     * Puts a reaction on the message it reacts to, in the chat with that number. The customer's reaction is kept
+     * as "in", one from the business's own WhatsApp app as "out"; an empty emoji takes it off. A reaction to a
+     * message the CRM does not have is dropped.
+     */
+    private function react(InboundMessage $incoming): void
+    {
+        $reaction = MessageContent::reaction($incoming->media);
+        $conversation = WaConversation::query()->where('phone', $incoming->from)->latest('id')->first();
+
+        if ($reaction === null || $conversation === null) {
+            return;
+        }
+
+        $target = $conversation->messages()->where('external_id', $reaction['message_id'])->first();
+
+        if ($target === null) {
+            return;
+        }
+
+        $side = $incoming->fromMe ? 'out' : 'in';
+        $reactions = array_filter([...(array) $target->reactions, $side => $reaction['emoji']], fn ($v) => is_string($v) && $v !== '');
+        $target->forceFill(['reactions' => $reactions === [] ? null : $reactions])->save();
     }
 
     /** A shop's automatic stage moves (payment proof, a cancelled buyer writing again). Never costs the message. */
@@ -226,9 +268,20 @@ class HandleInboundWhatsApp
 
     private function queueAiReply(WaChannel $channel, WaMessage $message): void
     {
-        if ($channel->ai_mode !== null && $channel->ai_mode !== AiMode::Off && $message->type === 'text') {
+        if (self::aiAnswers($channel, $message) && ! self::awaitsFile($message)) {
+            // A voice note still being downloaded is answered once its file is in (FetchWhatsAppMedia).
             GenerateAiReplyJob::dispatch($this->current->id(), $message->getKey());
         }
+    }
+
+    /**
+     * Whether the AI looks at this message: text, a location, a voice note. Stickers, reactions, pictures and
+     * the rest never start a reply on their own; they are only context.
+     */
+    public static function aiAnswers(?WaChannel $channel, WaMessage $message): bool
+    {
+        return $channel?->ai_mode !== null && $channel->ai_mode !== AiMode::Off && $message->direction === 'in'
+            && in_array($message->type, ['text', 'location', 'audio'], true);
     }
 
     public function status(WaChannel $channel, StatusUpdate $update): void

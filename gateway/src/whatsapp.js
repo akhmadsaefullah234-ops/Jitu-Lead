@@ -11,18 +11,95 @@ const STUB_CIPHERTEXT = 2; // proto.WebMessageInfo.StubType.CIPHERTEXT: the mess
 const PN = '@s.whatsapp.net';
 const LID = '@lid';
 
+// Envelopes WhatsApp wraps a message in (disappearing chats, view once, a document with a caption).
+const WRAPPERS = ['ephemeralMessage', 'viewOnceMessage', 'viewOnceMessageV2', 'viewOnceMessageV2Extension', 'documentWithCaptionMessage'];
+
+/** The message inside any envelopes. */
+function contentOf(message = {}) {
+  let m = message ?? {};
+  for (let depth = 0; depth < 4; depth++) {
+    const wrapper = WRAPPERS.find((k) => m[k]?.message);
+    if (!wrapper) break;
+    m = m[wrapper].message;
+  }
+
+  return m;
+}
+
 function textOf(message = {}) {
-  return message.conversation || message.extendedTextMessage?.text || message.imageMessage?.caption || message.videoMessage?.caption || null;
+  const m = contentOf(message);
+
+  return m.conversation || m.extendedTextMessage?.text || m.imageMessage?.caption || m.videoMessage?.caption || m.documentMessage?.caption || null;
 }
 
 function typeOf(message = {}) {
-  if (message.conversation || message.extendedTextMessage) return 'text';
-  if (message.imageMessage) return 'image';
-  if (message.videoMessage) return 'video';
-  if (message.audioMessage) return 'audio';
-  if (message.documentMessage) return 'document';
+  const m = contentOf(message);
+
+  if (m.conversation || m.extendedTextMessage) return 'text';
+  if (m.imageMessage) return 'image';
+  if (m.videoMessage || m.ptvMessage) return 'video';
+  if (m.audioMessage) return 'audio';
+  if (m.stickerMessage) return 'sticker';
+  if (m.documentMessage) return 'document';
+  if (m.locationMessage || m.liveLocationMessage) return 'location';
+  if (m.contactMessage || m.contactsArrayMessage) return 'contacts';
+  if (m.reactionMessage) return 'reaction';
 
   return 'unsupported';
+}
+
+const num = (v) => {
+  const n = typeof v === 'object' && v !== null ? (v.toNumber ? v.toNumber() : v.low) : Number(v);
+
+  return Number.isFinite(n) ? n : null;
+};
+const str = (v, max) => (typeof v === 'string' && v.trim() !== '' ? v.trim().slice(0, max) : null);
+const compact = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== null && v !== undefined));
+
+/** Phone numbers in a vCard: the WhatsApp id when there is one, else the number as written (digits and +). */
+function phonesOf(vcard) {
+  const out = [];
+  for (const line of String(vcard || '').split(/\r?\n/)) {
+    if (!/^(item\d+\.)?TEL[;:]/i.test(line)) continue;
+    const waid = line.match(/waid=(\d{5,20})/i);
+    const value = waid ? waid[1] : line.slice(line.lastIndexOf(':') + 1).replace(/[^\d+]/g, '');
+    if (value.replace(/\D/g, '').length >= 5) out.push(value.slice(0, 20));
+  }
+
+  return [...new Set(out)].slice(0, 5);
+}
+
+function contactOf(c = {}) {
+  const fn = String(c.vcard || '').match(/^FN:(.*)$/im)?.[1];
+
+  return { name: str(c.displayName, 120) ?? str(fn, 120), phones: phonesOf(c.vcard) };
+}
+
+/**
+ * What a location, contact card or reaction says, as plain fields for the CRM. Null for every other type.
+ * A reaction names the message it reacts to (`message_id`); an empty emoji means the reaction was taken back.
+ */
+function detailsOf(message = {}) {
+  const m = contentOf(message);
+  const loc = m.locationMessage || m.liveLocationMessage;
+
+  if (loc) {
+    const lat = num(loc.degreesLatitude);
+    const lng = num(loc.degreesLongitude);
+    if (lat === null || lng === null || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+
+    return { location: compact({ latitude: lat, longitude: lng, name: str(loc.name, 200), address: str(loc.address, 300), live: m.liveLocationMessage ? true : null, caption: str(loc.caption, 300) }) };
+  }
+  if (m.contactMessage) return { contacts: [contactOf(m.contactMessage)] };
+  if (m.contactsArrayMessage) return { contacts: (m.contactsArrayMessage.contacts || []).slice(0, 10).map(contactOf) };
+  if (m.reactionMessage) {
+    const r = m.reactionMessage;
+    if (!str(r.key?.id, 128)) return null;
+
+    return { reaction: { message_id: r.key.id.slice(0, 128), emoji: typeof r.text === 'string' ? r.text.slice(0, 16) : '' } };
+  }
+
+  return null;
 }
 
 const AD_TEXT_MAX = { source_id: 100, source_type: 40, source_url: 500, headline: 255, body: 1000, ctwa_clid: 255, thumbnail_url: 1000 };
@@ -34,7 +111,7 @@ const AD_TEXT_MAX = { source_id: 100, source_type: 40, source_url: 500, headline
  * The thumbnail itself (bytes) is left out; its address is kept when WhatsApp gives one.
  */
 function adReferralOf(message = {}) {
-  for (const part of Object.values(message)) {
+  for (const part of Object.values(contentOf(message))) {
     const ad = part && typeof part === 'object' ? part.contextInfo?.externalAdReply : null;
     if (!ad || typeof ad !== 'object') continue;
 
@@ -61,7 +138,7 @@ function adReferralOf(message = {}) {
 function isSystemOnly(message = {}) {
   const keys = Object.keys(message).filter((k) => k !== 'messageContextInfo');
 
-  return keys.length > 0 && keys.every((k) => ['protocolMessage', 'senderKeyDistributionMessage', 'reactionMessage', 'peerDataOperationRequestResponseMessage'].includes(k));
+  return keys.length > 0 && keys.every((k) => ['protocolMessage', 'senderKeyDistributionMessage', 'peerDataOperationRequestResponseMessage'].includes(k));
 }
 
 function seconds(t) {
@@ -131,6 +208,7 @@ function build(msg, from) {
     // On our own message pushName is the business account's own name, not the customer's.
     name: own ? null : msg.pushName || null,
     timestamp: seconds(msg.messageTimestamp),
+    ...detailsOf(msg.message),
   };
 
   if (own) return { ...inbound, from_me: true };
@@ -149,12 +227,43 @@ function toInbound(msg) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Pictures bigger than this are not sent to the CRM (the chat still shows that a picture arrived).
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+// Media the CRM is sent, per type: where it sits in the message and the largest file kept (bigger: media.error 'too_large').
+const MEDIA = {
+  image: { keys: ['imageMessage'], mime: 'image/jpeg', max: 5 * 1024 * 1024 },
+  audio: { keys: ['audioMessage'], mime: 'audio/ogg', max: 16 * 1024 * 1024 },
+  sticker: { keys: ['stickerMessage'], mime: 'image/webp', max: 1024 * 1024 },
+  video: { keys: ['videoMessage', 'ptvMessage'], mime: 'video/mp4', max: 16 * 1024 * 1024 },
+};
+// Files up to this size travel inside the webhook (base64); bigger ones wait at the gateway for the CRM to fetch
+// (GET /media/:id), so a webhook stays well under the CRM server's request size limit.
+const INLINE_MAX_BYTES = 5 * 1024 * 1024;
+const MAX_IMAGE_BYTES = MEDIA.image.max;
+
+/** What the CRM is told about a media file besides its bytes: type, size, length, voice note, animated. */
+function mediaInfoOf(message, type) {
+  const spec = MEDIA[type];
+  const m = contentOf(message);
+  const key = spec.keys.find((k) => m[k]);
+  const info = m[key] ?? {};
+
+  return {
+    info,
+    meta: compact({
+      mime_type: str(info.mimetype, 100) ?? spec.mime,
+      bytes: num(info.fileLength) || null,
+      seconds: type === 'audio' || type === 'video' ? num(info.seconds) : null,
+      ptt: type === 'audio' ? Boolean(info.ptt) : null,
+      animated: type === 'sticker' ? Boolean(info.isAnimated) : null,
+      gif: type === 'video' && info.gifPlayback ? true : null,
+      round: key === 'ptvMessage' ? true : null,
+    }),
+  };
+}
+
 // App state collections asked for again on a label resync (labels live in "regular"; all are asked so none is half done).
 const APP_STATE = ['regular', 'regular_low', 'regular_high', 'critical_block', 'critical_unblock_low'];
 
-function connector({ log, decryptWaitMs = 45000, lookupRetryMs = 3000, loadLib = loadBaileys, download = null, maxImageBytes = MAX_IMAGE_BYTES, flushWaitMs = 500 }) {
+function connector({ log, decryptWaitMs = 45000, lookupRetryMs = 3000, loadLib = loadBaileys, download = null, maxImageBytes = MAX_IMAGE_BYTES, maxBytes = {}, inlineMaxBytes = INLINE_MAX_BYTES, flushWaitMs = 500 }) {
   return ({ authDir, handlers }) => {
     let sock;
     let fetchMedia = null;
@@ -181,30 +290,39 @@ function connector({ log, decryptWaitMs = 45000, lookupRetryMs = 3000, loadLib =
       return null;
     }
 
-    /** Downloads and decrypts a picture so the CRM can show it. A failure only costs the picture, never the message. */
+    const limitFor = (type) => maxBytes[type] ?? (type === 'image' ? maxImageBytes : MEDIA[type].max);
+
+    /**
+     * Downloads and decrypts a picture, voice note, sticker or video so the CRM can show it. A small file goes
+     * inside the webhook; a bigger one is kept here (handlers.keepMedia) and the CRM fetches it. A failure only
+     * costs the file, never the message.
+     */
     async function withMedia(msg, inbound) {
-      if (inbound.type !== 'image' || !fetchMedia) return inbound;
+      if (!MEDIA[inbound.type] || !fetchMedia) return inbound;
 
-      const info = msg.message?.imageMessage ?? {};
-      const mime = info.mimetype || 'image/jpeg';
-      const size = Number(info.fileLength?.toNumber ? info.fileLength.toNumber() : info.fileLength) || 0;
+      const { meta } = mediaInfoOf(msg.message, inbound.type);
+      const limit = limitFor(inbound.type);
+      const what = { image: 'gambar', audio: 'audio', sticker: 'stiker', video: 'video' }[inbound.type];
 
-      if (size > maxImageBytes) {
-        log.info({ id: msg.key?.id, bytes: size }, 'gambar terlalu besar, tidak dikirim ke CRM');
+      if ((meta.bytes ?? 0) > limit) {
+        log.info({ id: msg.key?.id, bytes: meta.bytes, type: inbound.type }, `${what} terlalu besar, tidak dikirim ke CRM`);
 
-        return { ...inbound, media: { mime_type: mime, error: 'too_large' } };
+        return { ...inbound, media: { ...meta, error: 'too_large' } };
       }
 
       try {
         const buffer = await fetchMedia(msg);
+        const media = { ...meta, bytes: buffer.length };
 
-        if (buffer.length > maxImageBytes) return { ...inbound, media: { mime_type: mime, error: 'too_large' } };
+        if (buffer.length > limit) return { ...inbound, media: { ...media, error: 'too_large' } };
+        if (buffer.length <= inlineMaxBytes) return { ...inbound, media: { ...media, data: buffer.toString('base64') } };
+        if (handlers.keepMedia && msg.key?.id && (await handlers.keepMedia(msg.key.id, buffer))) return { ...inbound, media: { ...media, fetch: true } };
 
-        return { ...inbound, media: { mime_type: mime, data: buffer.toString('base64') } };
+        return { ...inbound, media: { ...media, error: 'too_large' } };
       } catch (err) {
-        log.warn({ id: msg.key?.id, err: err.message }, 'gambar gagal diunduh dari WhatsApp');
+        log.warn({ id: msg.key?.id, err: err.message, type: inbound.type }, `${what} gagal diunduh dari WhatsApp`);
 
-        return { ...inbound, media: { mime_type: mime, error: 'download_failed' } };
+        return { ...inbound, media: { ...meta, error: 'download_failed' } };
       }
     }
 
@@ -387,4 +505,4 @@ function connector({ log, decryptWaitMs = 45000, lookupRetryMs = 3000, loadLib =
   };
 }
 
-module.exports = { connector, toInbound, classify, adReferralOf };
+module.exports = { connector, toInbound, classify, adReferralOf, typeOf, detailsOf, phonesOf, MEDIA, INLINE_MAX_BYTES };

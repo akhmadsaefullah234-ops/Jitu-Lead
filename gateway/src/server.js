@@ -2,6 +2,7 @@
 
 const http = require('node:http');
 const crypto = require('node:crypto');
+const fs = require('node:fs');
 const { SessionManager, SessionError } = require('./sessions');
 
 function sameKey(given, expected) {
@@ -57,6 +58,14 @@ function createServer({ config, sessions }) {
       const id = scoped ? scoped[2] : header;
       if (!SessionManager.validId(id)) return reply(400, { error: 'Header X-Session-Id wajib diisi.' });
       if (scoped && header && header !== id) return reply(400, { error: 'Session id tidak cocok.' });
+
+      // A file too big for the webhook, kept until the CRM fetches it.
+      const media = route.match(/^GET \/media\/([^/]+)$/);
+      if (media) {
+        const { file, bytes } = sessions.mediaFile(id, media[1]);
+        res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': bytes, 'Cache-Control': 'no-store' });
+        return fs.createReadStream(file).on('error', () => res.destroy()).pipe(res);
+      }
 
       switch (scoped ? `${scoped[1]} /${scoped[3]}` : route) {
         case 'GET /labels':

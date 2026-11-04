@@ -54,6 +54,18 @@ return [
         'effort' => env('ANTHROPIC_EFFORT', 'low'),
     ],
 
+    // Optional: voice notes turned into text, so the AI can answer them (App\Ai\Transcriber). Off unless a provider
+    // and key are set. "openai" (Whisper) or "groq" (Whisper on Groq); model and URL have defaults per provider.
+    'transcribe' => [
+        'provider' => env('TRANSCRIBE_PROVIDER'),
+        'key' => env('TRANSCRIBE_API_KEY'),
+        'model' => env('TRANSCRIBE_MODEL'),
+        'url' => env('TRANSCRIBE_URL'),
+        'language' => env('TRANSCRIBE_LANGUAGE', 'id'),
+        // Longer voice notes are left for an agent to listen to.
+        'max_seconds' => (int) env('TRANSCRIBE_MAX_SECONDS', 120),
+    ],
+
     // Server-side ad events (Conversions API and Events API).
     'meta' => [
         'graph_url' => env('META_GRAPH_URL', 'https://graph.facebook.com'),

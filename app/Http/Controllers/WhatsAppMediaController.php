@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\Response;
 
-/** Shows a picture or hands out a file from a WhatsApp chat, only to people who may open that lead. */
+/** Shows a picture, plays a voice note or video, or hands out a file from a WhatsApp chat, only to people who may open that lead. */
 class WhatsAppMediaController extends Controller
 {
     public function show(Request $request, int $message, CurrentTenant $current): Response
@@ -34,12 +34,13 @@ class WhatsAppMediaController extends Controller
         // The same answer for "no such picture" and "not yours", so ids cannot be probed.
         abort_unless($allowed && Storage::disk('local')->exists($path), 404);
 
-        $isImage = str_starts_with($mime, 'image/');
+        // Pictures, stickers, voice notes and videos open in the page (a video or audio player asks for ranges).
+        $inline = preg_match('#^(image|audio|video)/#', $mime) === 1;
         $name = (string) ($row->media['filename'] ?? basename($path));
 
         return response()->file(Storage::disk('local')->path($path), [
             'Content-Type' => $mime,
-            'Content-Disposition' => $isImage ? 'inline' : 'attachment; filename="'.str_replace(['"', "\r", "\n", '\\'], '_', $name).'"',
+            'Content-Disposition' => $inline ? 'inline' : 'attachment; filename="'.str_replace(['"', "\r", "\n", '\\'], '_', $name).'"',
             'Cache-Control' => 'private, max-age=86400',
             'X-Content-Type-Options' => 'nosniff',
             'Content-Security-Policy' => "default-src 'none'; sandbox",

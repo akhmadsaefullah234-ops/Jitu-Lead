@@ -119,7 +119,7 @@ class Inbox extends Page
 
         return [
             'seesAll' => app(CurrentTenant::class)->roleOf(auth()->user())?->seesAllLeads() ?? false,
-            'conversations' => static::visibleConversations()->with(['lead:id,name,phone,owner_id,property_id', 'lead.owner:id,name', 'lead.property:id,name'])->orderByDesc('last_message_at')->limit(100)->get(),
+            'conversations' => static::visibleConversations()->with(['lead:id,name,phone,owner_id,property_id', 'lead.owner:id,name', 'lead.property:id,name', 'latestMessage'])->orderByDesc('last_message_at')->limit(100)->get(),
             'conversation' => $conversation?->load(['lead.stage', 'lead.owner', 'lead.property', 'messages.channel']),
             'decision' => $decision,
             'aiMode' => $conversation?->lastInboundChannel?->ai_mode,
