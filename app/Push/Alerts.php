@@ -11,6 +11,7 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Models\WaMessage;
 use App\Support\CurrentTenant;
+use App\WhatsApp\MessageContent;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
@@ -84,13 +85,7 @@ class Alerts
             return;
         }
 
-        $text = filled($message->body) ? Str::limit(trim((string) $message->body), 100) : match ($message->type) {
-            'image' => '[Gambar]',
-            'video' => '[Video]',
-            'audio' => '[Pesan suara]',
-            'document' => '[Dokumen]',
-            default => '[Pesan]',
-        };
+        $text = $message->type === 'text' && filled($message->body) ? Str::limit(trim((string) $message->body), 100) : (MessageContent::preview($message) ?? 'Pesan');
 
         $this->send($this->recipients($tenant, $lead, withAdmins: $lead->owner_id === null), 'notify_messages', [
             'title' => 'Pesan WhatsApp dari '.($lead->name ?: $lead->phone),

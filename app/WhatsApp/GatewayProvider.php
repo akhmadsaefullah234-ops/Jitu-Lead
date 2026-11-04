@@ -92,7 +92,7 @@ class GatewayProvider implements WhatsAppProvider
                         from: PhoneNumber::normalize($from) ?? $from,
                         type: $type,
                         body: $request->input('text'),
-                        media: is_array($request->input('media')) ? $request->input('media') : null,
+                        media: $this->mediaOf($request, $type),
                         sentAt: InboundMessage::at($request->input('timestamp')),
                         contactName: $request->input('name'),
                         // A chat that starts from a Click-to-WhatsApp ad (contextInfo.externalAdReply).
@@ -124,6 +124,45 @@ class GatewayProvider implements WhatsAppProvider
         }
 
         return ['messages' => $messages, 'statuses' => $statuses, 'session' => $session, 'session_reason' => $reason ?? null];
+    }
+
+    /**
+     * The media details of a picture, voice note, sticker or video (a file too big for the webhook waits at the
+     * gateway under the message id: `fetch`), or what a location, contact card or reaction says.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function mediaOf(Request $request, string $type): ?array
+    {
+        $media = match ($type) {
+            'location' => MessageContent::location($request->input('location')),
+            'contacts' => ($contacts = MessageContent::contacts($request->input('contacts'))) ? ['contacts' => $contacts] : null,
+            'reaction' => MessageContent::reaction($request->input('reaction')),
+            default => MessageContent::media($request->input('media')),
+        };
+
+        if (($media['fetch'] ?? false) === true) {
+            unset($media['fetch'], $media['data']);
+            $media['id'] = (string) $request->input('id');
+        }
+
+        return $media === [] ? null : $media;
+    }
+
+    /** The bytes of a file the gateway kept because it was too big for the webhook, or null when it is gone. */
+    public function downloadMedia(string $messageId): ?string
+    {
+        if ($this->configurationProblem() !== null) {
+            return null;
+        }
+
+        try {
+            $response = $this->http()->timeout(45)->accept('application/octet-stream')->get($this->url('/media/'.rawurlencode($messageId)));
+
+            return $response->successful() && $response->body() !== '' ? $response->body() : null;
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     /** Starts a pairing session; returns a problem text, or null when the gateway is ready to show a QR. */

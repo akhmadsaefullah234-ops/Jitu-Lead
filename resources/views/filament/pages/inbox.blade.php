@@ -64,6 +64,22 @@
         .wa-m .b { white-space: pre-wrap; }
         .wa-m .meta { font-size: .68rem; color: var(--gray-500); margin-top: .15rem; }
         .wa-m.failed { border-color: var(--danger-600); }
+        .wa-m { position: relative; }
+        /* A sticker stands on its own, without a bubble behind it. */
+        .wa-m.sticker, .dark .wa-m.sticker, .dark .wa-m.out.sticker { background: none; border: 0; padding: 0; }
+        .wa-m.sticker img { display: block; max-width: 140px; max-height: 140px; }
+        .wa-m.has-react { margin-bottom: .55rem; }
+        .wa-react { position: absolute; bottom: -.7rem; right: .4rem; display: flex; gap: .1rem; font-size: .8rem; line-height: 1; background: white; border: 1px solid var(--gray-200); border-radius: 9999px; padding: .1rem .3rem; }
+        .wa-m.out .wa-react { right: auto; left: .4rem; }
+        .dark .wa-react { background: var(--gray-800); border-color: var(--gray-700); }
+        .wa-vn-label { font-size: .75rem; font-weight: 600; color: var(--gray-600); margin-bottom: .2rem; }
+        .wa-m audio { display: block; width: min(16rem, 62vw); max-width: 100%; height: 2.5rem; }
+        .wa-m video { display: block; max-width: 100%; max-height: 18rem; border-radius: .5rem; background: black; }
+        .wa-transcript { margin-top: .25rem; font-size: .75rem; color: var(--gray-600); font-style: italic; white-space: pre-wrap; }
+        .wa-card { display: block; min-width: 11rem; border-radius: .5rem; background: var(--gray-50); border: 1px solid var(--gray-200); padding: .4rem .55rem; font-size: .8rem; }
+        .wa-card + .wa-card { margin-top: .3rem; }
+        .wa-card a, .wa-card button { font-weight: 600; text-decoration: underline; }
+        .dark .wa-card { background: var(--gray-800); border-color: var(--gray-700); }
         /* The compose box never shrinks; the messages and a long AI suggestion give up room (and scroll) instead,
            so the send and attach buttons stay on screen. */
         .wa-compose { flex: none; padding: .6rem .7rem .7rem; border-top: 1px solid var(--gray-200); min-width: 0; }
@@ -91,6 +107,7 @@
                 <button type="button" class="wa-item" wire:key="c-{{ $c->id }}" wire:click="open({{ $c->lead_id }})" aria-current="{{ $conversation?->id === $c->id ? 'true' : 'false' }}">
                     <div class="n"><span>{{ $c->lead->name }}</span>@if ($c->unread_count)<span class="wa-badge">{{ $c->unread_count }}</span>@endif</div>
                     <div class="p">{{ $c->lead->phone }} · {{ $c->last_message_at?->diffForHumans() }}</div>
+                    @if ($preview = \App\WhatsApp\MessageContent::preview($c->latestMessage))<div class="p wa-last" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ $c->latestMessage->direction === 'out' ? 'Anda: ' : '' }}{{ $preview }}</div>@endif
                     @if ($seesAll && $c->lead->owner)<div class="p">Agen: {{ $c->lead->owner->name }}</div>@endif
                     @if ($c->lead->property)<span class="wa-prod" title="Produk yang ditanyakan">{{ $c->lead->property->name }}</span>@endif
                 </button>
@@ -139,22 +156,63 @@
                 </div>
                 <div class="wa-msgs" x-data x-init="$el.scrollTop = $el.scrollHeight" x-on:livewire:updated.window="$el.scrollTop = $el.scrollHeight">
                     @forelse ($conversation->messages as $m)
-                        <div wire:key="m-{{ $m->id }}" class="wa-m {{ $m->direction === 'out' ? 'out' : '' }} {{ $m->channel && ! $m->channel->isOfficial() ? 'gw' : '' }} {{ $m->status === \App\Enums\MessageStatus::Failed ? 'failed' : '' }}">
+                        @php($reactions = array_filter((array) $m->reactions, fn ($e) => is_string($e) && $e !== ''))
+                        <div wire:key="m-{{ $m->id }}" class="wa-m {{ $m->direction === 'out' ? 'out' : '' }} {{ $m->channel && ! $m->channel->isOfficial() ? 'gw' : '' }} {{ $m->status === \App\Enums\MessageStatus::Failed ? 'failed' : '' }} {{ $m->type === 'sticker' && isset($m->media['path']) ? 'sticker' : '' }} {{ $reactions ? 'has-react' : '' }}">
                             @if ($m->type === 'image')
                                 @if (isset($m->media['path']))
                                     <a href="{{ route('wa.media', $m->id) }}" target="_blank" rel="noopener"><img src="{{ route('wa.media', $m->id) }}" alt="Gambar dari chat" loading="lazy" style="display:block;max-width:100%;max-height:18rem;border-radius:.5rem"></a>
-                                @elseif (isset($m->media['error']))
-                                    <div class="b">[Gambar tidak bisa ditampilkan{{ ($m->media['error'] ?? '') === 'too_large' ? ': ukurannya terlalu besar' : '' }}]</div>
                                 @else
-                                    <div class="b">[Gambar sedang dimuat…]</div>
+                                    <div class="b">{{ \App\WhatsApp\MessageContent::unavailable($m) }}</div>
                                 @endif
                                 @if (filled($m->body))<div class="b" style="margin-top:.25rem">{{ $m->body }}</div>@endif
+                            @elseif ($m->type === 'audio')
+                                @php($duration = \App\WhatsApp\MessageContent::duration($m))
+                                <div class="wa-vn-label">{{ \App\WhatsApp\MessageContent::isVoiceNote($m) ? '🎤 Voice note' : '🎵 Audio' }}{{ $duration ? ' '.$duration : '' }}</div>
+                                @if (isset($m->media['path']))
+                                    <audio controls preload="none" src="{{ route('wa.media', $m->id) }}" aria-label="Putar voice note"></audio>
+                                @else
+                                    <div class="b">{{ \App\WhatsApp\MessageContent::unavailable($m) }}</div>
+                                @endif
+                                @if (filled($m->transcript))<div class="wa-transcript" title="Transkripsi otomatis">“{{ $m->transcript }}”</div>@endif
+                            @elseif ($m->type === 'sticker')
+                                @if (isset($m->media['path']))
+                                    <img src="{{ route('wa.media', $m->id) }}" alt="Stiker" loading="lazy">
+                                @else
+                                    <div class="b">{{ \App\WhatsApp\MessageContent::unavailable($m) }}</div>
+                                @endif
+                            @elseif ($m->type === 'video')
+                                @if (isset($m->media['path']))
+                                    <video controls preload="metadata" playsinline src="{{ route('wa.media', $m->id) }}"></video>
+                                @else
+                                    <div class="b">{{ \App\WhatsApp\MessageContent::unavailable($m) }}</div>
+                                @endif
+                                @if (filled($m->body))<div class="b" style="margin-top:.25rem">{{ $m->body }}</div>@endif
+                            @elseif ($m->type === 'location')
+                                @php($place = \App\WhatsApp\MessageContent::location($m->media))
+                                <div class="wa-card">
+                                    <div>📍 {{ $place ? (implode(' · ', array_filter([$place['name'] ?? null, $place['address'] ?? null])) ?: (($place['live'] ?? false) ? 'Lokasi terkini' : 'Lokasi')) : ($m->body ?: 'Lokasi') }}</div>
+                                    @if ($maps = \App\WhatsApp\MessageContent::mapsUrl($m))<a href="{{ $maps }}" target="_blank" rel="noopener nofollow">Buka di Google Maps</a>@endif
+                                </div>
+                            @elseif ($m->type === 'contacts')
+                                @forelse (\App\WhatsApp\MessageContent::contacts($m->media['contacts'] ?? null) ?? [] as $card)
+                                    <div class="wa-card">
+                                        <div>👤 <strong>{{ $card['name'] ?? 'Kontak' }}</strong></div>
+                                        @foreach ($card['phones'] as $phone)
+                                            <div>{{ $phone }} <button type="button" x-data x-on:click="navigator.clipboard?.writeText(@js($phone)); $el.textContent = 'Tersalin'" style="margin-left:.35rem">Salin</button></div>
+                                        @endforeach
+                                    </div>
+                                @empty
+                                    <div class="b">[Kartu kontak]</div>
+                                @endforelse
                             @elseif ($m->type === 'document' && isset($m->media['path']))
                                 <a class="b" href="{{ route('wa.media', $m->id) }}" target="_blank" rel="noopener" style="display:block;font-weight:600;text-decoration:underline">&#128206; {{ $m->media['filename'] ?? 'Dokumen' }}</a>
                                 @if (filled($m->body))<div class="b" style="margin-top:.25rem">{{ $m->body }}</div>@endif
+                            @elseif ($m->type === 'unsupported')
+                                <div class="b">[Jenis pesan ini belum bisa ditampilkan di sini. Lihat di WhatsApp HP.]</div>
                             @else
                                 <div class="b">{{ $m->body ?? '['.$m->type.']' }}</div>
                             @endif
+                            @if ($reactions)<span class="wa-react" title="Reaksi">@foreach ($reactions as $emoji)<span>{{ $emoji }}</span>@endforeach</span>@endif
                             <div class="meta">
                                 {{ $m->sent_at?->format('d M H:i') }}
                                 @if ($m->channel) · {{ $m->channel->name }}@endif

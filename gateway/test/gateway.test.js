@@ -272,9 +272,9 @@ test('connector: gambar diunduh dan dikirim ke CRM; gagal atau terlalu besar tid
   const by = Object.fromEntries(f.events.messages.map((m) => [m.id, m]));
   assert.equal(by.ok.type, 'image');
   assert.equal(by.ok.text, 'rumahnya');
-  assert.deepEqual(by.ok.media, { mime_type: 'image/png', data: Buffer.from('PNGDATA').toString('base64') });
+  assert.deepEqual(by.ok.media, { mime_type: 'image/png', bytes: 7, data: Buffer.from('PNGDATA').toString('base64') });
   assert.deepEqual(by.bad.media, { mime_type: 'image/png', error: 'download_failed' });
-  assert.deepEqual(by.big.media, { mime_type: 'image/png', error: 'too_large' });
+  assert.deepEqual(by.big.media, { mime_type: 'image/png', bytes: 5000, error: 'too_large' });
   assert.ok(f.logs.some((l) => l.level === 'warn' && l.id === 'bad' && /gagal diunduh/.test(l.text)));
 });
 
@@ -351,7 +351,7 @@ test('connector: balasan dari aplikasi WhatsApp di HP diteruskan (teks dan gamba
 
   assert.deepEqual(f.events.messages.map((m) => m.id), ['hp1', 'hp2']);
   assert.ok(f.events.messages.every((m) => m.from_me === true && m.from === '6281234567890'));
-  assert.deepEqual(f.events.messages[1].media, { mime_type: 'image/jpeg', data: Buffer.from('IMG').toString('base64') });
+  assert.deepEqual(f.events.messages[1].media, { mime_type: 'image/jpeg', bytes: 3, data: Buffer.from('IMG').toString('base64') });
 });
 
 test('connector: pesan keluar disimpan untuk getMessage (kirim ulang atas permintaan WhatsApp)', async () => {
@@ -690,4 +690,134 @@ test('connector: resyncLabels mengosongkan versi app state lalu meminta 5 koleks
   const err = Object.assign(new Error('Stream Errored (conflict)'), { output: { statusCode: 440 }, data: { tag: 'conflict', attrs: { type: 'device_removed' } } });
   f.sock.ev.emit('connection.update', { connection: 'close', lastDisconnect: { error: err } });
   assert.equal(f.events.closes.at(-1).loggedOut, true);
+});
+
+// --- Voice note, stiker, video, lokasi, kontak, reaksi ---
+
+test('typeOf: stiker, lokasi, kontak, reaksi, video bulat dan pesan berbungkus dikenali (bukan unsupported)', () => {
+  const { typeOf } = require('../src/whatsapp');
+  assert.equal(typeOf({ stickerMessage: { mimetype: 'image/webp' } }), 'sticker');
+  assert.equal(typeOf({ locationMessage: { degreesLatitude: -6.2, degreesLongitude: 106.8 } }), 'location');
+  assert.equal(typeOf({ liveLocationMessage: { degreesLatitude: -6.2, degreesLongitude: 106.8 } }), 'location');
+  assert.equal(typeOf({ contactMessage: { displayName: 'A' } }), 'contacts');
+  assert.equal(typeOf({ contactsArrayMessage: { contacts: [] } }), 'contacts');
+  assert.equal(typeOf({ reactionMessage: { key: { id: 'X' }, text: '👍' } }), 'reaction');
+  assert.equal(typeOf({ ptvMessage: { mimetype: 'video/mp4' } }), 'video');
+  assert.equal(typeOf({ audioMessage: { ptt: true } }), 'audio');
+  assert.equal(typeOf({ ephemeralMessage: { message: { audioMessage: { ptt: true } } } }), 'audio');
+  assert.equal(typeOf({ viewOnceMessageV2: { message: { imageMessage: {} } } }), 'image');
+  assert.equal(typeOf({ pollCreationMessage: {} }), 'unsupported');
+});
+
+test('toInbound: lokasi, kontak (nomor dari vCard) dan reaksi dikirim sebagai data, reaksi tidak lagi dianggap pesan sistem', () => {
+  const at = (message) => toInbound(msgFrom({ key: { id: 'd1' }, message }));
+
+  assert.deepEqual(at({ locationMessage: { degreesLatitude: -6.2, degreesLongitude: 106.81, name: 'Rumah Budi', address: 'Jl. Melati 3, Bekasi' } }).location,
+    { latitude: -6.2, longitude: 106.81, name: 'Rumah Budi', address: 'Jl. Melati 3, Bekasi' });
+  assert.equal(at({ liveLocationMessage: { degreesLatitude: -6.2, degreesLongitude: 106.81 } }).location.live, true);
+  assert.equal(at({ locationMessage: { degreesLatitude: 500, degreesLongitude: 1 } }).location, undefined);
+
+  const vcard = 'BEGIN:VCARD\nVERSION:3.0\nFN:Siti Aminah\nitem1.TEL;waid=6281234567890:+62 812-3456-7890\nTEL;type=HOME:021 555 1234\nEND:VCARD';
+  assert.deepEqual(at({ contactMessage: { displayName: 'Siti', vcard } }).contacts, [{ name: 'Siti', phones: ['6281234567890', '0215551234'] }]);
+  assert.deepEqual(at({ contactsArrayMessage: { contacts: [{ vcard }, { displayName: 'Tanpa nomor' }] } }).contacts, [{ name: 'Siti Aminah', phones: ['6281234567890', '0215551234'] }, { name: 'Tanpa nomor', phones: [] }]);
+
+  const reaction = at({ reactionMessage: { key: { id: '3EB0ABC', remoteJid: '6281234567890@s.whatsapp.net', fromMe: true }, text: '👍' } });
+  assert.equal(reaction.type, 'reaction');
+  assert.deepEqual(reaction.reaction, { message_id: '3EB0ABC', emoji: '👍' });
+  assert.equal(at({ reactionMessage: { key: { id: '3EB0ABC' }, text: '' } }).reaction.emoji, '', 'reaksi yang ditarik');
+  assert.equal(classify(msgFrom({ message: { reactionMessage: { key: { id: 'x' }, text: '❤' } } })).action, 'forward');
+});
+
+test('connector: voice note, stiker dan video diunduh dengan mimetype, durasi, ptt dan animasi; batas ukuran per jenis', async () => {
+  const at = (id, message) => msgFrom({ key: { id }, message });
+  const f = await fakeConnector({ download: async (m) => Buffer.from('DATA-' + m.key.id) });
+
+  f.sock.ev.emit('messages.upsert', { type: 'notify', messages: [
+    at('vn', { audioMessage: { mimetype: 'audio/ogg; codecs=opus', seconds: 23, ptt: true, fileLength: 9 } }),
+    at('au', { audioMessage: { mimetype: 'audio/mpeg', seconds: 200 } }),
+    at('st', { stickerMessage: { mimetype: 'image/webp', isAnimated: true } }),
+    at('vd', { videoMessage: { mimetype: 'video/mp4', seconds: 12, caption: 'tampak depan' } }),
+    at('vn-big', { audioMessage: { mimetype: 'audio/ogg; codecs=opus', ptt: true, seconds: 900, fileLength: 17 * 1024 * 1024 } }),
+    at('st-big', { stickerMessage: { mimetype: 'image/webp', fileLength: 2 * 1024 * 1024 } }),
+    at('vd-big', { videoMessage: { mimetype: 'video/mp4', fileLength: 20 * 1024 * 1024 } }),
+  ] });
+  await new Promise((r) => setTimeout(r, 40));
+
+  const by = Object.fromEntries(f.events.messages.map((m) => [m.id, m]));
+  const b64 = (id) => Buffer.from('DATA-' + id).toString('base64');
+  assert.deepEqual(by.vn.media, { mime_type: 'audio/ogg; codecs=opus', bytes: 7, seconds: 23, ptt: true, data: b64('vn') });
+  assert.equal(by.vn.type, 'audio');
+  assert.deepEqual(by.au.media, { mime_type: 'audio/mpeg', bytes: 7, seconds: 200, ptt: false, data: b64('au') });
+  assert.deepEqual(by.st.media, { mime_type: 'image/webp', bytes: 7, animated: true, data: b64('st') });
+  assert.equal(by.st.type, 'sticker');
+  assert.deepEqual(by.vd.media, { mime_type: 'video/mp4', bytes: 7, seconds: 12, data: b64('vd') });
+  assert.equal(by.vd.text, 'tampak depan');
+  assert.equal(by['vn-big'].media.error, 'too_large');
+  assert.equal(by['vn-big'].media.ptt, true);
+  assert.equal(by['st-big'].media.error, 'too_large');
+  assert.equal(by['vd-big'].media.error, 'too_large');
+});
+
+test('connector: unduhan media yang ternyata melebihi batas atau gagal tetap meneruskan pesannya', async () => {
+  const f = await fakeConnector({ download: async (m) => { if (m.key.id === 'bad') throw new Error('gone'); return Buffer.alloc(2000); }, maxBytes: { sticker: 1000 } });
+  f.sock.ev.emit('messages.upsert', { type: 'notify', messages: [
+    msgFrom({ key: { id: 'big' }, message: { stickerMessage: { mimetype: 'image/webp' } } }),
+    msgFrom({ key: { id: 'bad' }, message: { audioMessage: { ptt: true, seconds: 4 } } }),
+  ] });
+  await new Promise((r) => setTimeout(r, 30));
+  const by = Object.fromEntries(f.events.messages.map((m) => [m.id, m]));
+  assert.deepEqual(by.big.media, { mime_type: 'image/webp', bytes: 2000, animated: false, error: 'too_large' });
+  assert.deepEqual(by.bad.media, { mime_type: 'audio/ogg', seconds: 4, ptt: true, error: 'download_failed' });
+});
+
+test('connector: file di atas batas webhook disimpan di gateway (fetch: true); tanpa tempat simpan dianggap terlalu besar', async () => {
+  const f = await fakeConnector({ download: async () => Buffer.alloc(3000, 1), inlineMaxBytes: 1000 });
+  // fakeConnector has no keepMedia handler: the file cannot wait, so the CRM is told it was too big
+  f.sock.ev.emit('messages.upsert', { type: 'notify', messages: [msgFrom({ key: { id: 'v1' }, message: { videoMessage: { mimetype: 'video/mp4', seconds: 30 } } })] });
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(f.events.messages[0].media.error, 'too_large');
+});
+
+test('sesi: video besar menunggu di gateway dan bisa diambil CRM lewat GET /media/:id (hanya sesi pemiliknya)', async () => {
+  const g = await boot();
+  await g.call('POST', '/session/start', HOOK);
+  const buffer = Buffer.from('VIDEO-BYTES');
+  assert.equal(await g.sockets[0].handlers.keepMedia('3EB0VIDEO1', buffer), true);
+  assert.equal(await g.sockets[0].handlers.keepMedia('../escape', buffer), false);
+
+  const port = g.server.address().port;
+  const get = (url, sid = SID) => fetch(`http://127.0.0.1:${port}${url}`, { headers: { Authorization: `Bearer ${KEY}`, 'X-Session-Id': sid } });
+  const ok = await get('/media/3EB0VIDEO1');
+  assert.equal(ok.status, 200);
+  assert.equal(Buffer.from(await ok.arrayBuffer()).toString(), 'VIDEO-BYTES');
+  assert.equal((await get('/media/3EB0VIDEO1', 'zzzzzzzz12345678')).status, 404);
+  assert.equal((await get('/media/TIDAKADA')).status, 404);
+  assert.equal((await fetch(`http://127.0.0.1:${port}/media/3EB0VIDEO1`, { headers: { 'X-Session-Id': SID } })).status, 401);
+
+  // Files older than a day are removed
+  const old = path.join(g.sessions.mediaDir(SID), '3EB0VIDEO1');
+  fs.utimesSync(old, new Date(Date.now() - 2 * 86400000), new Date(Date.now() - 2 * 86400000));
+  assert.equal((await get('/media/3EB0VIDEO1')).status, 404);
+  await g.sessions.pruneMedia(SID);
+  assert.equal(fs.existsSync(old), false);
+  g.close();
+});
+
+test('connector: dengan keepMedia, file besar dikirim sebagai fetch: true tanpa data', async () => {
+  const { EventEmitter } = require('node:events');
+  const real = await import('@whiskeysockets/baileys');
+  const sock = { ev: new EventEmitter(), signalRepository: { lidMapping: { getPNForLID: async () => null } }, end() {} };
+  const lib = { ...real, default: () => sock, fetchLatestBaileysVersion: async () => ({ version: [2, 3000, 1] }) };
+  const log = { debug() {}, info() {}, warn() {}, error() {}, child: () => log };
+  const got = [];
+  const kept = [];
+  connector({ log, loadLib: async () => lib, download: async () => Buffer.alloc(3000, 2), inlineMaxBytes: 1000 })({
+    authDir: fs.mkdtempSync(path.join(os.tmpdir(), 'gw-auth-')),
+    handlers: { onQr() {}, onOpen() {}, onClose() {}, onStatus() {}, onMessage: (m) => got.push(m), keepMedia: async (id, buf) => (kept.push([id, buf.length]), true) },
+  });
+  await new Promise((r) => setTimeout(r, 50));
+  sock.ev.emit('messages.upsert', { type: 'notify', messages: [msgFrom({ key: { id: 'BIGVIDEO1' }, message: { videoMessage: { mimetype: 'video/mp4', seconds: 30 } } })] });
+  await new Promise((r) => setTimeout(r, 30));
+  assert.deepEqual(kept, [['BIGVIDEO1', 3000]]);
+  assert.deepEqual(got[0].media, { mime_type: 'video/mp4', bytes: 3000, seconds: 30, fetch: true });
 });

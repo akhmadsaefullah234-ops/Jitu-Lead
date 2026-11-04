@@ -77,6 +77,28 @@ Gambar: `type` bernilai `image`, `text` berisi keterangan gambar, dan gambarnya 
 
 Batas 5 MB. Bila gambar gagal diunduh atau terlalu besar, kirim `media` tanpa `data` tetapi dengan `"error": "download_failed"` atau `"too_large"`; pesannya tetap masuk. CRM memeriksa isi file sebenarnya (hanya JPEG, PNG, WebP, GIF) dan menyimpannya di disk privat, bukan di database.
 
+Voice note, audio, stiker, video: `type` bernilai `audio`, `sticker` atau `video`, dengan `media` yang sama seperti gambar ditambah `bytes`, `seconds` (audio/video), `ptt` (audio: `true` untuk voice note), `animated` (stiker):
+
+```json
+{ "event": "message", "id": "m125", "from": "6281234567890", "type": "audio", "text": null,
+  "media": { "mime_type": "audio/ogg; codecs=opus", "bytes": 9120, "seconds": 23, "ptt": true, "data": "<base64>" } }
+```
+
+Batas: audio 16 MB, stiker 1 MB, video 16 MB (lebih besar: `"error": "too_large"`). File sampai 5 MB ikut di webhook (`data`). File lebih besar disimpan sementara di gateway (24 jam) dan webhook membawa `"fetch": true` tanpa `data`; CRM mengambilnya lewat `GET /media/<id pesan>` (header `Authorization` dan `X-Session-Id` sama seperti permintaan lain, jawaban `application/octet-stream`, 404 bila sudah tidak ada). CRM memeriksa isi file (audio OGG/MP3/M4A/AMR/AAC/WAV/WebM, stiker WebP, video MP4/3GP/MOV/WebM).
+
+Lokasi, kontak, reaksi (tanpa `media`):
+
+```json
+{ "event": "message", "id": "m126", "from": "6281234567890", "type": "location",
+  "location": { "latitude": -6.2, "longitude": 106.81, "name": "Rumah Budi", "address": "Jl. Melati 3", "live": true } }
+{ "event": "message", "id": "m127", "from": "6281234567890", "type": "contacts",
+  "contacts": [{ "name": "Siti", "phones": ["6281234567890"] }] }
+{ "event": "message", "id": "m128", "from": "6281234567890", "type": "reaction",
+  "reaction": { "message_id": "<id pesan yang direaksi>", "emoji": "👍" } }
+```
+
+Reaksi tidak menjadi pesan baru: CRM menempelkannya ke pesan yang direaksi (emoji kosong berarti reaksi ditarik); reaksi ke pesan yang tidak dikenal CRM diabaikan. Stiker dan reaksi tidak memicu balasan AI.
+
 ### Status pesan keluar
 
 ```json

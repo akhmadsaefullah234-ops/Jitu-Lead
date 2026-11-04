@@ -7,6 +7,7 @@ use App\Ai\HandoffRules;
 use App\Ai\KnowledgeBase;
 use App\Ai\ProductContext;
 use App\Ai\ShopTools;
+use App\Ai\VoiceNoteTranscript;
 use App\Billing\PlanLimits;
 use App\Catalog\ProductMatcher;
 use App\Enums\AiMode;
@@ -20,6 +21,7 @@ use App\Models\User;
 use App\Models\WaConversation;
 use App\Models\WaMessage;
 use App\Support\CurrentTenant;
+use App\WhatsApp\MessageContent;
 use App\WhatsApp\RouteKind;
 use App\WhatsApp\RouteSelector;
 use App\WhatsApp\WhatsAppException;
@@ -41,6 +43,12 @@ class GenerateAiReply
 
     public const HANDOFF = 'HANDOFF';
 
+    /** The answer to a voice note the AI cannot hear (no transcription). The AI never guesses what it said. */
+    public const VOICE_NOTE_REPLY = 'Maaf kak, voice note-nya belum bisa kami dengar lewat chat otomatis. Boleh diketik singkat pertanyaannya ya kak 🙏';
+
+    /** Message types the AI answers; stickers, reactions and the rest are only context. */
+    public const ANSWERS = ['text', 'location', 'audio'];
+
     /** How many library items the model is shown, and how many it may send with one answer. */
     public const MAX_LIBRARY_ITEMS = 30;
 
@@ -61,9 +69,15 @@ class GenerateAiReply
         $conversation = $inbound->conversation()->with('lead')->first();
         $channel = $inbound->channel;
         $mode = $channel?->ai_mode;
-        $text = trim((string) $inbound->body);
 
-        if ($inbound->direction !== 'in' || $inbound->type !== 'text' || $text === '' || $mode === null || $mode === AiMode::Off || ! $this->ai->configured()) {
+        if ($inbound->direction !== 'in' || ! in_array($inbound->type, self::ANSWERS, true) || $mode === null || $mode === AiMode::Off || ! $this->ai->configured()) {
+            return null;
+        }
+
+        // Text as typed; a location as words the AI can use for an address or shipping. A voice note is read further down.
+        $text = $inbound->type === 'audio' ? '' : trim((string) MessageContent::forAi($inbound));
+
+        if ($text === '' && $inbound->type !== 'audio') {
             return null;
         }
 
@@ -77,6 +91,15 @@ class GenerateAiReply
         }
 
         $tenant = $this->current->get();
+
+        if ($inbound->type === 'audio') {
+            // Transcribed when that is set up and the plan still has AI left; otherwise the customer is asked to type.
+            $text = PlanLimits::for($tenant)->denyAi() === null ? trim((string) app(VoiceNoteTranscript::class)->for($inbound)) : '';
+
+            if ($text === '') {
+                return $this->askToType($inbound, $mode);
+            }
+        }
 
         if ($this->handoff->matches($text, $tenant->ai_handoff_keywords)) {
             return $this->handoffTo($inbound, 'Klien meminta bicara dengan agen atau menyebut hal sensitif');
@@ -150,6 +173,40 @@ class GenerateAiReply
     }
 
     /**
+     * A voice note the AI cannot hear: the lead gets a note for the agent to listen to it, and the customer a
+     * polite request to type the question (once an hour per chat; a second voice note just goes to the agent).
+     * No model is called, so nothing is guessed about what was said.
+     */
+    private function askToType(WaMessage $inbound, AiMode $mode): ?AiDraft
+    {
+        $conversation = $inbound->conversation;
+        $duration = MessageContent::duration($inbound);
+
+        $conversation->lead->activities()->create([
+            'type' => 'note',
+            'body' => 'Pelanggan mengirim voice note'.($duration ? " ({$duration})" : '').' yang belum bisa didengar AI. Mohon dengarkan di Inbox lalu balas.',
+            'meta' => ['message_id' => $inbound->getKey()],
+        ]);
+
+        $askedRecently = AiDraft::query()->where('conversation_id', $conversation->getKey())->where('body', self::VOICE_NOTE_REPLY)
+            ->where('created_at', '>=', now()->subHour())->exists();
+
+        if ($askedRecently) {
+            return $this->draft($inbound, null, AiDraft::HANDOFF, 'Pelanggan mengirim voice note lagi; dengarkan di Inbox');
+        }
+
+        if (PlanLimits::for($this->current->get())->readOnly()) {
+            return null;
+        }
+
+        if ($mode === AiMode::Draft) {
+            return $this->draft($inbound, self::VOICE_NOTE_REPLY, AiDraft::PENDING, 'Voice note belum bisa didengar AI; dengarkan dulu sebelum membalas');
+        }
+
+        return $this->sendAutomatically($inbound, self::VOICE_NOTE_REPLY, apiCall: false);
+    }
+
+    /**
      * The model ends its answer with "LAMPIRAN: 12, 15" to ask for library items. Only ids that really are
      * sendable items of this agency are kept, at most two, so the model cannot send anything else.
      *
@@ -173,7 +230,7 @@ class GenerateAiReply
      * @param  list<int>  $assetIds
      * @param  list<array{type: string, input: array, result: array}>  $actions
      */
-    private function sendAutomatically(WaMessage $inbound, string $answer, array $assetIds = [], array $actions = []): AiDraft
+    private function sendAutomatically(WaMessage $inbound, string $answer, array $assetIds = [], array $actions = [], bool $apiCall = true): AiDraft
     {
         $conversation = $inbound->conversation;
 
@@ -181,14 +238,14 @@ class GenerateAiReply
             ->where('status', AiDraft::SENT)->where('created_at', '>=', now()->subHour())->count();
 
         if ($recent >= self::MAX_AUTO_PER_HOUR) {
-            return $this->draft($inbound, $answer, AiDraft::PENDING, 'Batas balasan otomatis per jam tercapai', true, $assetIds, $actions);
+            return $this->draft($inbound, $answer, AiDraft::PENDING, 'Batas balasan otomatis per jam tercapai', $apiCall, $assetIds, $actions);
         }
 
         // The answer took a moment to write; an agent may have started on the chat since.
         $conversation->refresh();
 
         if ($conversation->aiPaused()) {
-            return $this->draft($inbound, $answer, AiDraft::PENDING, 'Agen sedang membalas chat ini, AI tidak mengirim sendiri', true, $assetIds, $actions);
+            return $this->draft($inbound, $answer, AiDraft::PENDING, 'Agen sedang membalas chat ini, AI tidak mengirim sendiri', $apiCall, $assetIds, $actions);
         }
 
         $decision = $this->routes->decide($conversation);
@@ -196,13 +253,13 @@ class GenerateAiReply
         $actor = $this->actor($conversation->lead);
 
         if (! $free || $actor === null) {
-            return $this->draft($inbound, $answer, AiDraft::PENDING, 'Tidak ada jalur gratis untuk membalas otomatis', true, $assetIds, $actions);
+            return $this->draft($inbound, $answer, AiDraft::PENDING, 'Tidak ada jalur gratis untuk membalas otomatis', $apiCall, $assetIds, $actions);
         }
 
         $message = ($this->send)($conversation, $actor, $answer);
 
         if ($message->status === MessageStatus::Failed) {
-            return $this->draft($inbound, $answer, AiDraft::PENDING, 'Pengiriman otomatis gagal: '.$message->error, true, $assetIds, $actions);
+            return $this->draft($inbound, $answer, AiDraft::PENDING, 'Pengiriman otomatis gagal: '.$message->error, $apiCall, $assetIds, $actions);
         }
 
         $failed = $this->sendAttachments($conversation, $actor, $assetIds);
@@ -216,7 +273,7 @@ class GenerateAiReply
         // The order the answer confirms is written only now that the buyer has really been told
         $actions = $this->applyActions($conversation->lead, $actions, $actor, 'AI');
 
-        return $this->draft($inbound, $answer, AiDraft::SENT, null, true, $assetIds, $actions);
+        return $this->draft($inbound, $answer, AiDraft::SENT, null, $apiCall, $assetIds, $actions);
     }
 
     /**
@@ -324,9 +381,22 @@ class GenerateAiReply
     {
         $turns = [];
 
-        foreach ($conversation->messages()->whereNotNull('body')->where('type', '!=', 'template')->reorder()->orderByDesc('id')->limit(10)->get()->reverse() as $m) {
+        $recent = $conversation->messages()->whereNotIn('type', ['template', 'reaction', 'unsupported'])->reorder()->orderByDesc('id')->limit(12)->get()->reverse();
+
+        foreach ($recent as $m) {
+            // Voice notes, locations and stickers as words; a sticker or a reaction is only context, never a question.
+            $content = MessageContent::forAi($m);
+
+            if ($content === null || $content === '') {
+                continue;
+            }
+
             $role = $m->direction === 'in' ? 'user' : 'assistant';
-            $content = mb_substr((string) $m->body, 0, 1500);
+            $content = mb_substr($content, 0, 1500);
+
+            if ($m->direction === 'out' && filled($m->reactions['in'] ?? null)) {
+                $content .= ' (pelanggan memberi reaksi '.$m->reactions['in'].')';
+            }
 
             if ($turns && end($turns)['role'] === $role) {
                 $turns[array_key_last($turns)]['content'] .= "\n".$content;

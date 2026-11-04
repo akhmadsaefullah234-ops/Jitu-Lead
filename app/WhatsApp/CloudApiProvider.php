@@ -185,7 +185,7 @@ class CloudApiProvider implements WhatsAppProvider
                 return null;
             }
 
-            $file = $this->http()->withOptions(['allow_redirects' => false])->get($url);
+            $file = $this->http()->timeout(45)->withOptions(['allow_redirects' => false])->get($url);
 
             return $file->successful() ? $file->body() : null;
         } catch (Throwable) {
@@ -250,16 +250,20 @@ class CloudApiProvider implements WhatsAppProvider
 
     private function mediaOf(array $message, string $type): ?array
     {
+        $part = is_array($message[$type] ?? null) ? $message[$type] : [];
+
         return match ($type) {
-            'image', 'document', 'video', 'audio' => array_filter([
-                'id' => $message[$type]['id'] ?? null,
-                'mime_type' => $message[$type]['mime_type'] ?? null,
-                'filename' => $message[$type]['filename'] ?? null,
-            ]),
-            'location' => array_filter([
-                'latitude' => $message['location']['latitude'] ?? null,
-                'longitude' => $message['location']['longitude'] ?? null,
-            ]),
+            'image', 'document', 'video', 'audio', 'sticker' => array_filter([
+                'id' => $part['id'] ?? null,
+                'mime_type' => $part['mime_type'] ?? null,
+                'filename' => $part['filename'] ?? null,
+                // A voice note recorded in the app; a sticker that moves.
+                'ptt' => $type === 'audio' && isset($part['voice']) ? (bool) $part['voice'] : null,
+                'animated' => $type === 'sticker' && isset($part['animated']) ? (bool) $part['animated'] : null,
+            ], fn ($v) => $v !== null),
+            'location' => MessageContent::location($part),
+            'contacts' => ($contacts = MessageContent::contacts($message['contacts'] ?? null)) ? ['contacts' => $contacts] : null,
+            'reaction' => MessageContent::reaction($part),
             default => null,
         };
     }
