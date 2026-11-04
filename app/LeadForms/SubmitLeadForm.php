@@ -4,6 +4,7 @@ namespace App\LeadForms;
 
 use App\Actions\RegisterLead;
 use App\Automation\StageAutomation;
+use App\Catalog\ProductMatcher;
 use App\Jobs\SendConversionEvents;
 use App\LandingPages\Buttons;
 use App\LandingPages\PageData;
@@ -11,6 +12,7 @@ use App\LandingPages\WhatsAppRotation;
 use App\Models\LandingPage;
 use App\Models\Lead;
 use App\Models\LeadForm;
+use App\Models\Property;
 use App\Models\Tenant;
 use App\Models\TrackingSetting;
 use App\Push\Alerts;
@@ -50,6 +52,7 @@ class SubmitLeadForm
         [$lead, $created] = ($this->register)($result['lead'] + ['name' => 'Tanpa nama'], $source, 'form', null, $campaign, $page?->property_id);
 
         $this->applyAnswers($lead, $created, $form, $result, $tenant);
+        $this->product($lead, $form, $result);
 
         if ($created) {
             PipelineConversions::rememberBrowserIds($lead, $data);
@@ -119,6 +122,38 @@ class SubmitLeadForm
                     .(isset($result['lead']['shipping_address']) && blank($lead->payment_type) ? "\nCara bayar belum ditanyakan." : ''),
                 'meta' => ['formulir' => $form->getKey()],
             ]);
+        }
+    }
+
+    /**
+     * The product the lead asks about: the buyer's answer when it names a catalogue product, otherwise the form's
+     * own product. A product an agent picked stays. A form with neither leaves the lead as it was.
+     */
+    private function product(Lead $lead, LeadForm $form, array $result): void
+    {
+        if ($lead->product_source === 'agent' && $lead->property_id !== null) {
+            return;
+        }
+
+        $answer = trim((string) ($result['lead']['product'] ?? ''));
+        $product = null;
+
+        if ($answer !== '') {
+            $product = Property::query()->whereRaw('lower(name) = ?', [mb_strtolower($answer)])->first()
+                ?? app(ProductMatcher::class)->match(null, $answer)['product'] ?? null;
+        }
+
+        $detail = $product ? $answer : $form->name;
+        $product ??= $form->property_id ? Property::query()->find($form->property_id) : null;
+
+        if ($product === null || $lead->property_id === $product->getKey()) {
+            return;
+        }
+
+        try {
+            ProductMatcher::set($lead, $product, 'form', $detail);
+        } catch (Throwable $e) {
+            report($e);
         }
     }
 

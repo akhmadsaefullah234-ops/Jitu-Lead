@@ -100,7 +100,7 @@ class FollowUpRuleResource extends Resource
     public static function table(Table $table): Table
     {
         return $table->defaultSort('delay_days')
-            ->modifyQueryUsing(fn (Builder $query) => $query->whereNull('property_id')->with('stage')->withCount([
+            ->modifyQueryUsing(fn (Builder $query) => $query->whereNull('property_id')->whereNull('kind')->with('stage')->withCount([
                 'logs as sent_count' => fn ($q) => $q->where('status', 'sent'),
             ]))
             ->columns([

@@ -7,6 +7,7 @@ use App\Catalog\ProductMatcher;
 use App\Enums\AiMode;
 use App\Enums\MessageStatus;
 use App\Enums\WaChannelStatus;
+use App\FollowUps\AskProduct;
 use App\Jobs\FetchWhatsAppMedia;
 use App\Jobs\GenerateAiReplyJob;
 use App\Models\Lead;
@@ -269,7 +270,9 @@ class HandleInboundWhatsApp
 
     /**
      * The ad a chat came from goes on the lead (id, title, link), and the lead gets the product the ad or the
-     * first message points to (App\Catalog\ProductMatcher). A product never stops the message from being saved.
+     * first message points to (App\Catalog\ProductMatcher). A lead still without a product gets one from a later
+     * message: a number answering the "Tanya produk" list, or words naming a product. A product never stops the
+     * message from being saved.
      */
     private function rememberAd(Lead $lead, InboundMessage $incoming, bool $isNewLead): void
     {
@@ -284,12 +287,19 @@ class HandleInboundWhatsApp
             ])->save();
         }
 
-        if ($ad === null && ! $isNewLead) {
+        // A lead still without a product: a number answering the "Tanya produk" list, or a later message naming one.
+        $later = $ad === null && ! $isNewLead && $lead->property_id === null;
+
+        if ($ad === null && ! $isNewLead && ! $later) {
             return;
         }
 
         try {
-            $this->products->assign($lead, $ad, $isNewLead ? $incoming->body : null);
+            if ($later && AskProduct::answer($lead, $incoming->body) !== null) {
+                return;
+            }
+
+            $this->products->assign($lead, $ad, $isNewLead || $later ? $incoming->body : null);
         } catch (Throwable $e) {
             report($e);
         }

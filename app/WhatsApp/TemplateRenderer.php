@@ -2,16 +2,18 @@
 
 namespace App\WhatsApp;
 
+use App\FollowUps\AskProduct;
 use App\Models\Lead;
 use App\Models\User;
 use App\Support\Industry;
 
 /**
- * Fills {nama}, {agen}, {agensi} and {properti} or {produk} (the same thing in shop words) in message templates.
+ * Fills {nama}, {agen}, {agensi}, {properti} or {produk} (the same thing in shop words), and {daftar_produk}
+ * (the numbered list of active products, see App\FollowUps\AskProduct) in message templates.
  */
 class TemplateRenderer
 {
-    public const PLACEHOLDERS = ['nama', 'agen', 'agensi', 'properti', 'produk'];
+    public const PLACEHOLDERS = ['nama', 'agen', 'agensi', 'properti', 'produk', 'daftar_produk'];
 
     /**
      * @return array{text: string, parameters: array<int, string>} Parameters are in order of appearance, as Meta's positional template variables expect.
@@ -24,6 +26,8 @@ class TemplateRenderer
             'agensi' => $agencyName,
             'properti' => $item = $lead->property?->name ?? $lead->location ?? Industry::of($lead->tenant)->term('item_fallback'),
             'produk' => $item,
+            // Only worked out when the message uses it: the numbered list of active products.
+            'daftar_produk' => str_contains($template, '{daftar_produk}') ? AskProduct::listText(AskProduct::products()) : '',
         ];
 
         $parameters = [];

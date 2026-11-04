@@ -3,6 +3,7 @@
 namespace App\Billing;
 
 use App\Enums\StageType;
+use App\FollowUps\AskProduct;
 use App\Models\AiDraft;
 use App\Models\FollowUpRule;
 use App\Models\LandingPage;
@@ -93,7 +94,8 @@ class PlanLimits
             'wa' => WaChannel::withoutGlobalScope('tenant')->where('tenant_id', $id)->count(),
             'ai' => AiDraft::withoutGlobalScope('tenant')->where('tenant_id', $id)->where('api_call', true)
                 ->where('created_at', '>=', $this->subscription()->usageSince())->count(),
-            'followups' => FollowUpRule::withoutGlobalScope('tenant')->where('tenant_id', $id)->count(),
+            // The built-in "Tanya produk" message is not one of the agency's own rules.
+            'followups' => FollowUpRule::withoutGlobalScope('tenant')->where('tenant_id', $id)->where(fn ($q) => $q->whereNull('kind')->orWhere('kind', '!=', AskProduct::KIND))->count(),
             'landing_pages' => LandingPage::withoutGlobalScope('tenant')->where('tenant_id', $id)->count(),
             default => 0,
         };

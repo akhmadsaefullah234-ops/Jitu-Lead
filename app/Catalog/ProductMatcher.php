@@ -22,6 +22,8 @@ class ProductMatcher
         'keyword' => 'kata kunci di pesan pertama',
         'agent' => 'dipilih agen',
         'ai' => 'percakapan dengan AI',
+        'ask_reply' => 'balasan pesan tanya produk',
+        'form' => 'formulir',
     ];
 
     /** An entry of only digits this long is a Meta ad id, never a word to look for. */

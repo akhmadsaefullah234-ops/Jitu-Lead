@@ -5,8 +5,10 @@ namespace App\Filament\Resources\Properties\RelationManagers;
 use App\Billing\Deny;
 use App\Billing\PlanLimits;
 use App\Filament\Resources\FollowUpRules\FollowUpRuleResource;
+use App\FollowUps\GeneralFollowUps;
 use App\Models\FollowUpRule;
 use App\Models\Property;
+use App\Support\CurrentTenant;
 use App\Support\Industry;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -25,6 +27,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
+use Illuminate\Support\HtmlString;
 
 /**
  * This product's own follow-up sequence. For a stage it covers, a lead of this product gets only these steps, not
@@ -68,7 +71,7 @@ class FollowUpsRelationManager extends RelationManager
 
         return $table->recordTitleAttribute('name')
             ->heading('Follow-up khusus '.$item.' ini')
-            ->description("Lead yang menanyakan {$product->name} menerima rangkaian ini, bukan follow-up umum, di tahap yang diaturnya. Tahap lain tetap memakai follow-up umum.")
+            ->description(fn () => $this->description())
             ->modifyQueryUsing(fn (Builder $query) => $query->with('stage')->withCount([
                 'logs as sent_30d' => fn ($q) => $q->where('status', 'sent')->where('created_at', '>=', now()->subDays(30)),
             ]))
@@ -98,7 +101,27 @@ class FollowUpsRelationManager extends RelationManager
             ])
             ->recordActions([EditAction::make(), DeleteAction::make()])
             ->emptyStateHeading('Belum ada follow-up khusus')
-            ->emptyStateDescription("Lead {$item} ini memakai follow-up umum. Tambah langkah, atau salin dari follow-up umum lalu sesuaikan isinya.");
+            ->emptyStateDescription(fn () => (GeneralFollowUps::for(app(CurrentTenant::class)->get())->applies()
+                ? "Lead {$item} ini memakai follow-up umum. "
+                : '').'Tambah langkah, atau salin dari follow-up umum lalu sesuaikan isinya.');
+    }
+
+    /** What this sequence does, with a warning when this product's leads would get no follow-up at all. */
+    private function description(): HtmlString
+    {
+        $product = $this->getOwnerRecord();
+        $item = Industry::t('catalog_item');
+        $general = GeneralFollowUps::for(app(CurrentTenant::class)->get())->applies();
+        $text = e($general
+            ? "Lead yang menanyakan {$product->name} menerima rangkaian ini, bukan follow-up umum, di tahap yang diaturnya. Tahap lain tetap memakai follow-up umum."
+            : "Lead yang menanyakan {$product->name} hanya menerima rangkaian ini: follow-up umum sedang tidak dipakai.");
+
+        if (! $general && $product->status !== 'sold' && ! $product->followUpRules()->where('active', true)->exists()) {
+            $text = '<span class="fu-warn" style="display:block;margin-bottom:.35rem;padding:.45rem .7rem;border-radius:.5rem;background:#fef3c7;color:#92400e;font-weight:600">'
+                .e("Lead {$item} ini belum akan menerima follow-up. Tambah langkah atau salin dari follow-up umum, lalu aktifkan.").'</span>'.$text;
+        }
+
+        return new HtmlString($text);
     }
 
     /** @return array<int, string> */
@@ -126,7 +149,7 @@ class FollowUpsRelationManager extends RelationManager
         return Action::make('copyGeneral')->label('Salin dari follow-up umum')->icon(Heroicon::OutlinedGlobeAlt)
             ->requiresConfirmation()
             ->modalDescription('Semua aturan follow-up umum disalin ke '.Industry::t('catalog_item').' ini dalam keadaan NONAKTIF. Sesuaikan isinya, lalu aktifkan.')
-            ->action(fn (Action $action) => $this->copy(FollowUpRule::query()->whereNull('property_id')->get(), $action));
+            ->action(fn (Action $action) => $this->copy(FollowUpRule::query()->whereNull('property_id')->whereNull('kind')->get(), $action));
     }
 
     private function copyProductAction(): Action
