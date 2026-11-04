@@ -37,6 +37,7 @@ class User extends Authenticatable implements FilamentUser, HasTenants, MustVeri
             'contact_consent_at' => 'datetime',
             'whatsapp_prompt_dismissed_at' => 'datetime',
             'trial_emails_unsubscribed_at' => 'datetime',
+            'whatsapp_verified_at' => 'datetime',
         ];
     }
 
@@ -44,6 +45,12 @@ class User extends Authenticatable implements FilamentUser, HasTenants, MustVeri
     public function setWhatsapp(?string $number): void
     {
         $this->whatsapp = PhoneNumber::whatsapp($number);
+    }
+
+    /** Whether the WhatsApp number on the profile is the one confirmed with a code (App\Reports\WhatsAppVerification). */
+    public function hasVerifiedWhatsapp(): bool
+    {
+        return filled($this->whatsapp) && $this->whatsapp_verified_at !== null && $this->whatsapp_verified_number === $this->whatsapp;
     }
 
     public function pushSubscriptions(): HasMany

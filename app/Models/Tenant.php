@@ -25,6 +25,7 @@ class Tenant extends Model
             'show_property_fields' => 'boolean',
             'shipping' => 'array',
             'stage_automation' => 'array',
+            'daily_report' => 'array',
         ];
     }
 

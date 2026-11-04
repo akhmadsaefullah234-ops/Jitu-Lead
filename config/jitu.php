@@ -21,6 +21,18 @@ return [
     // (stage Trial, then Berlangganan or Tidak lanjut), so the owner's follow-up rules can reach it on WhatsApp.
     'platform_sales_tenant' => env('PLATFORM_SALES_TENANT'),
 
+    // Daily WhatsApp report to owners and admins (Pengaturan > Laporan harian, `reports:daily` every 5 minutes).
+    'reports' => [
+        // Id of the WhatsApp number (wa_channels.id) of the PLATFORM_SALES_TENANT agency that sends the reports and the
+        // verification codes. Never an agency's own number. Not connected or a failed send: the report goes by email.
+        'channel' => env('PLATFORM_REPORT_CHANNEL'),
+        // WhatsApp messages per minute at most, and how many minutes the reports of one send time are spread over.
+        'per_minute' => (int) env('REPORT_PER_MINUTE', 20),
+        'spread_minutes' => (int) env('REPORT_SPREAD_MINUTES', 10),
+        // A report found this many hours after its send time (server was down) is skipped for the day.
+        'late_hours' => 3,
+    ],
+
     // Web Push (notifications on phones and computers). Keys come from `php artisan push:keys`; never regenerate
     // them once people have subscribed, because every device would have to subscribe again.
     'push' => [
