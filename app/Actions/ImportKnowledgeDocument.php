@@ -25,27 +25,28 @@ class ImportKnowledgeDocument
      *
      * @throws DocumentException
      */
-    public function __invoke(string $path, string $originalName, ?string $title = null): array
+    public function __invoke(string $path, string $originalName, ?string $title = null, ?int $propertyId = null): array
     {
         $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
         $text = $this->reader->read($path, $extension);
         $name = trim($title ?: pathinfo($originalName, PATHINFO_FILENAME));
 
         if ($extension === 'csv' && ($rows = $this->questionRows($text)) !== null) {
-            return $this->saveRows($rows);
+            return $this->saveRows($rows, $propertyId);
         }
 
         $truncated = mb_strlen($text) > self::MAX_CHARS;
         $parts = $this->chunker->chunk(mb_substr($text, 0, self::MAX_CHARS));
         $total = count($parts);
 
-        DB::transaction(function () use ($parts, $total, $name) {
+        DB::transaction(function () use ($parts, $total, $name, $propertyId) {
             foreach ($parts as $i => $part) {
                 AiKnowledgeItem::query()->create([
                     'title' => mb_substr($total > 1 ? sprintf('%s (bagian %d/%d)', $name, $i + 1, $total) : $name, 0, 120),
                     'content' => $part,
                     'source' => 'upload',
                     'active' => true,
+                    'property_id' => $propertyId,
                 ]);
             }
         });
@@ -83,13 +84,13 @@ class ImportKnowledgeDocument
     }
 
     /** @param  list<array{string, string}>  $rows */
-    private function saveRows(array $rows): array
+    private function saveRows(array $rows, ?int $propertyId): array
     {
         if ($rows === []) {
             throw new DocumentException('Tidak ada baris yang terisi. Isi kolom pertanyaan dan jawaban.');
         }
 
-        DB::transaction(function () use ($rows) {
+        DB::transaction(function () use ($rows, $propertyId) {
             foreach ($rows as [$question, $answer]) {
                 AiKnowledgeItem::query()->create([
                     'title' => mb_substr($question, 0, 120),
@@ -97,6 +98,7 @@ class ImportKnowledgeDocument
                     'content' => mb_substr($answer, 0, 4000),
                     'source' => 'upload',
                     'active' => true,
+                    'property_id' => $propertyId,
                 ]);
             }
         });

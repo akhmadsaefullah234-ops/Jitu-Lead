@@ -125,5 +125,10 @@
         .fi-ta-table-stacked-on-mobile > tbody > tr:has(> .fi-ta-cell-name) > .fi-ta-cell-phone.lg\:fi-visible { display: none; }
     }
     @media (max-width: 1023px) and (display-mode: standalone) { .fi-topbar { box-shadow: 0 1px 0 #fecaca; } }
+    /* Product page: the four tabs as a 2x2 grid on a phone instead of a row that scrolls out of sight */
+    @media (max-width: 639px) {
+        .product-tabs > .fi-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: .25rem; overflow-x: visible; width: 100%; }
+        .product-tabs > .fi-tabs > .fi-tabs-item { justify-content: flex-start; }
+    }
     @media (prefers-reduced-motion: reduce) { * { transition-duration: .01ms !important; animation-duration: .01ms !important; } }
 </style>
