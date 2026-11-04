@@ -23,7 +23,11 @@ use Illuminate\Support\Collection;
  * Sends the automatic follow-ups that have come due for one agency.
  *
  * A rule fires once per lead and stage, H+N days after the lead entered that
- * stage, at the rule's sending time. It stays quiet when the lead has written
+ * stage, at the rule's sending time. A lead whose product has its own active
+ * rules for its stage gets only that product's sequence; every other lead gets
+ * the general one (rules without a product), never both. A lead whose product
+ * changes mid-sequence picks up the new sequence from where it is: a step at or
+ * before one already sent (or skipped) in this stage is not sent. It stays quiet when the lead has written
  * back since or when only a paid Meta template could carry the message; those
  * leads are looked at again on the next run until the catch-up window closes.
  */
@@ -56,7 +60,7 @@ class RunFollowUps
             $touched = [];
             $timezone = $tenant->timezone ?: config('app.timezone');
 
-            $rules = FollowUpRule::query()->where('active', true)->orderBy('delay_days')->get();
+            $rules = FollowUpRule::query()->where('active', true)->orderBy('delay_days')->orderBy('send_time')->get();
 
             foreach ($rules as $rule) {
                 foreach ($this->due($rule, $timezone) as $lead) {
@@ -92,6 +96,16 @@ class RunFollowUps
             ->open()
             ->whereNotNull('phone')
             ->when($rule->stage_id, fn (Builder $q) => $q->where('stage_id', $rule->stage_id))
+            ->when(
+                $rule->property_id,
+                fn (Builder $q) => $q->where('property_id', $rule->property_id),
+                // The general sequence only for leads whose product has no active rule of its own for this stage.
+                fn (Builder $q) => $q->whereNotExists(fn ($own) => $own->selectRaw('1')->from('follow_up_rules as own')
+                    ->whereColumn('own.tenant_id', 'leads.tenant_id')
+                    ->whereColumn('own.property_id', 'leads.property_id')
+                    ->where('own.active', true)
+                    ->where(fn ($s) => $s->whereColumn('own.stage_id', 'leads.stage_id')->orWhereNull('own.stage_id'))),
+            )
             // Loose bounds in SQL; the exact local-time check follows below.
             ->whereRaw("$anchor <= ?", [$now->copy()->subDays($rule->delay_days - 1)])
             ->whereRaw("$anchor >= ?", [$now->copy()->subDays($rule->delay_days + 2)])
@@ -99,6 +113,15 @@ class RunFollowUps
                 ->whereColumn('follow_up_logs.lead_id', 'leads.id')
                 ->whereColumn('follow_up_logs.stage_id', 'leads.stage_id')
                 ->where('follow_up_logs.follow_up_rule_id', $rule->getKey()))
+            // Never backwards and never twice after a product change: a step of any sequence at the same point
+            // or later was already handled for this lead in this stage.
+            ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('follow_up_logs')
+                ->join('follow_up_rules as done', 'done.id', '=', 'follow_up_logs.follow_up_rule_id')
+                ->whereColumn('follow_up_logs.lead_id', 'leads.id')
+                ->whereColumn('follow_up_logs.stage_id', 'leads.stage_id')
+                ->where('done.id', '!=', $rule->getKey())
+                ->where(fn ($later) => $later->where('done.delay_days', '>', $rule->delay_days)
+                    ->orWhere(fn ($same) => $same->where('done.delay_days', $rule->delay_days)->where('done.send_time', '>=', $rule->send_time))))
             ->with(['owner', 'property'])
             ->orderBy('id')
             ->get()

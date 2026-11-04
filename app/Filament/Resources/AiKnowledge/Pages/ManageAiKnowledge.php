@@ -8,6 +8,8 @@ use App\Ai\DocumentException;
 use App\Ai\DocumentReader;
 use App\Filament\Resources\AiKnowledge\AiKnowledgeResource;
 use App\Support\CurrentTenant;
+use App\Support\Industry;
+use Closure;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\CreateAction;
@@ -28,17 +30,24 @@ class ManageAiKnowledge extends ManageRecords
         'template-tanya-jawab.csv' => 'Template tanya-jawab (CSV)',
     ];
 
+    public function getTitle(): string
+    {
+        return 'Pengetahuan umum (semua '.Industry::t('catalog_item').')';
+    }
+
     public function getSubheading(): ?string
     {
+        $item = Industry::t('catalog_item');
+
         return app(AnthropicClient::class)->configured()
-            ? 'Semua yang AI ketahui tentang agensi Anda ada di sini. AI hanya menjawab dari catatan ini. Memilih siapa yang membalas chat (agen sendiri atau AI) ada di menu Mode AI.'
+            ? "Yang berlaku untuk semua {$item}: alamat, jam buka, cara bayar, aturan umum. Pengetahuan khusus satu {$item} (harga, promo, cara pakai) diatur di halaman {$item} itu, tab Pengetahuan AI. AI hanya menjawab dari catatan ini dan catatan {$item} yang sedang dibahas. Memilih siapa yang membalas chat ada di menu Mode AI."
             : 'Layanan AI belum diaktifkan di server ini, hubungi penyedia aplikasi. Catatan di sini tetap tersimpan.';
     }
 
     protected function getHeaderActions(): array
     {
         return [
-            $this->uploadAction(),
+            self::uploadAction(),
             ActionGroup::make(collect(self::TEMPLATES)->map(fn (string $label, string $file) => Action::make('template-'.pathinfo($file, PATHINFO_FILENAME))
                 ->label($label)->icon(Heroicon::OutlinedArrowDownTray)
                 ->action(fn () => response()->download(resource_path("ai-templates/$file"), $file)))->values()->all())
@@ -48,7 +57,8 @@ class ManageAiKnowledge extends ManageRecords
         ];
     }
 
-    private function uploadAction(): Action
+    /** @param  Closure(): ?int|null  $propertyId  the product the new items belong to; none = general */
+    public static function uploadAction(?Closure $propertyId = null): Action
     {
         return Action::make('upload')->label('Unggah dokumen')->icon(Heroicon::OutlinedArrowUpTray)
             ->modalHeading('Unggah dokumen pengetahuan')
@@ -63,7 +73,7 @@ class ManageAiKnowledge extends ManageRecords
                     ->helperText('Maksimal 5 MB. Jangan unggah dokumen berisi data pribadi klien.'),
                 TextInput::make('title')->label('Judul (opsional)')->maxLength(100)->helperText('Kosongkan untuk memakai nama file.'),
             ])
-            ->action(function (array $data) {
+            ->action(function (array $data) use ($propertyId) {
                 $file = $data['file'];
 
                 if (! $file instanceof TemporaryUploadedFile) {
@@ -73,7 +83,7 @@ class ManageAiKnowledge extends ManageRecords
                 }
 
                 try {
-                    $result = app(ImportKnowledgeDocument::class)($file->getRealPath(), $file->getClientOriginalName(), $data['title'] ?? null);
+                    $result = app(ImportKnowledgeDocument::class)($file->getRealPath(), $file->getClientOriginalName(), $data['title'] ?? null, $propertyId ? $propertyId() : null);
                 } catch (DocumentException $e) {
                     Notification::make()->title('Dokumen belum bisa dipakai')->body($e->getMessage())->danger()->send();
 

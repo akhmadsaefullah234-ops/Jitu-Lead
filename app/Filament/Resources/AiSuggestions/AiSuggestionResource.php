@@ -5,8 +5,12 @@ namespace App\Filament\Resources\AiSuggestions;
 use App\Filament\Resources\AiSuggestions\Pages\ManageAiSuggestions;
 use App\Models\AiKnowledgeItem;
 use App\Models\AiSuggestion;
+use App\Models\Lead;
+use App\Models\Property;
+use App\Support\Industry;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
@@ -51,10 +55,18 @@ class AiSuggestionResource extends Resource
         ])->recordActions([
             Action::make('approve')->label('Setujui')->icon(Heroicon::OutlinedCheck)->color('success')
                 ->modalHeading('Jadikan pengetahuan AI')
-                ->fillForm(fn (AiSuggestion $record) => $record->only(['question', 'answer']))
+                // Saved to the product the conversation was about, unless the owner picks another or none.
+                ->fillForm(fn (AiSuggestion $record) => [
+                    ...$record->only(['question', 'answer']),
+                    'property_id' => Lead::query()->whereKey($record->lead_id)->value('property_id'),
+                ])
                 ->schema([
                     Textarea::make('question')->label('Pertanyaan')->required()->rows(2)->maxLength(500),
                     Textarea::make('answer')->label('Jawaban')->required()->rows(5)->maxLength(2000),
+                    Select::make('property_id')->label('Simpan ke')->searchable()
+                        ->options(fn () => Property::query()->orderBy('name')->pluck('name', 'id'))
+                        ->placeholder('Pengetahuan umum (semua '.Industry::t('catalog_item').')')
+                        ->helperText('Bawaan: '.Industry::t('catalog_item').' yang dibahas di chat itu. Kosongkan bila jawabannya berlaku untuk semua '.Industry::t('catalog_item').'.'),
                 ])
                 ->action(function (AiSuggestion $record, array $data) {
                     AiKnowledgeItem::query()->create([
@@ -63,6 +75,7 @@ class AiSuggestionResource extends Resource
                         'content' => $data['answer'],
                         'source' => 'learned',
                         'active' => true,
+                        'property_id' => filled($data['property_id'] ?? null) ? Property::query()->whereKey($data['property_id'])->value('id') : null,
                     ]);
                     $record->update(['status' => 'approved']);
                     Notification::make()->title('Masuk ke pengetahuan AI')->success()->send();

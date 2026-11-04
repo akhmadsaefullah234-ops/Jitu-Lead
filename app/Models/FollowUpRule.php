@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['name', 'stage_id', 'delay_days', 'send_time', 'body', 'active', 'media_asset_id'])]
+#[Fillable(['name', 'stage_id', 'property_id', 'delay_days', 'send_time', 'body', 'active', 'media_asset_id'])]
 class FollowUpRule extends Model
 {
     use BelongsToTenant;
@@ -33,6 +33,11 @@ class FollowUpRule extends Model
                 && ! Stage::withoutGlobalScopes()->whereKey($rule->stage_id)->where('tenant_id', $rule->tenant_id ?? app(CurrentTenant::class)->id())->exists()) {
                 throw new \LogicException('Rule stage must belong to the rule\'s tenant.');
             }
+
+            if ($rule->property_id !== null && $rule->isDirty('property_id')
+                && ! Property::withoutGlobalScopes()->whereKey($rule->property_id)->where('tenant_id', $rule->tenant_id ?? app(CurrentTenant::class)->id())->exists()) {
+                throw new \LogicException('Rule product must belong to the rule\'s tenant.');
+            }
         });
     }
 
@@ -44,6 +49,12 @@ class FollowUpRule extends Model
     public function stage(): BelongsTo
     {
         return $this->belongsTo(Stage::class);
+    }
+
+    /** The product this rule is for; null means the general sequence (every product). */
+    public function property(): BelongsTo
+    {
+        return $this->belongsTo(Property::class);
     }
 
     public function logs(): HasMany

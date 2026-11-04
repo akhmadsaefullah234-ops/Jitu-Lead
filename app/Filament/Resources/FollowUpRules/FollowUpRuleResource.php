@@ -4,10 +4,16 @@ namespace App\Filament\Resources\FollowUpRules;
 
 use App\Filament\Resources\FollowUpRules\Pages\ManageFollowUpRules;
 use App\Models\FollowUpRule;
+use App\Models\Lead;
 use App\Models\MediaFolder;
+use App\Models\Property;
 use App\Models\Stage;
+use App\Models\User;
+use App\Support\CurrentTenant;
+use App\Support\Industry;
 use App\WhatsApp\TemplateRenderer;
 use BackedEnum;
+use Closure;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
@@ -16,6 +22,8 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\TimePicker;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Text;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
@@ -39,9 +47,19 @@ class FollowUpRuleResource extends Resource
 
     public static function form(Schema $schema): Schema
     {
+        return $schema->components(self::fields());
+    }
+
+    /**
+     * The rule's fields, shared by the general menu and a product's Follow-up tab.
+     *
+     * @param  (Closure(mixed): ?Property)|null  $product  the product the preview fills in; none = an example product
+     */
+    public static function fields(?Closure $product = null): array
+    {
         $placeholders = collect(TemplateRenderer::PLACEHOLDERS)->map(fn ($p) => '{'.$p.'}')->implode(' ');
 
-        return $schema->components([
+        return [
             TextInput::make('name')->label('Nama aturan')->required()->maxLength(80)->placeholder('Contoh: Sapaan H+1'),
             Select::make('stage_id')->label('Berlaku di tahap')
                 ->options(fn () => Stage::query()->where('type', 'open')->orderBy('position')->pluck('name', 'id'))
@@ -53,19 +71,36 @@ class FollowUpRuleResource extends Resource
                 ->helperText('H+1 = sehari setelah lead masuk tahap, H+2 = dua hari setelahnya, dan seterusnya.'),
             TimePicker::make('send_time')->label('Jam kirim (WIB)')->required()->seconds(false)->default('09:00')
                 ->helperText('Contoh: lead masuk 9 Oktober pukul 12:00 dengan aturan H+1 jam 09:00, pesan terkirim 10 Oktober pukul 09:00.'),
-            Textarea::make('body')->label('Isi pesan')->required()->rows(5)->maxLength(1000)
+            Textarea::make('body')->label('Isi pesan')->required()->rows(5)->maxLength(1000)->live(debounce: 500)
                 ->helperText("Variabel yang bisa dipakai: $placeholders"),
+            Text::make(fn (Get $get, $livewire) => self::preview((string) $get('body'), $product ? $product($livewire) : null))
+                ->extraAttributes(['class' => 'fu-preview', 'style' => 'white-space:pre-line;padding:.6rem .8rem;border-radius:.5rem;background:rgba(37,211,102,.08);border:1px solid rgba(37,211,102,.25)'])
+                ->visible(fn (Get $get) => filled($get('body'))),
             Select::make('media_asset_id')->label('Lampiran dari pustaka media (opsional)')->searchable()
                 ->options(fn () => MediaFolder::groupedOptions())
                 ->helperText('Dikirim tepat setelah pesan di atas, misalnya price list atau foto rumah. Tidak terkirim bila jalur chat belum terbuka.'),
             Toggle::make('active')->label('Aktif')->default(true),
-        ]);
+        ];
     }
 
+    /** The message as a client would read it, with an example client and agent and the given product filled in. */
+    public static function preview(string $body, ?Property $product): string
+    {
+        $tenant = app(CurrentTenant::class)->get();
+        $lead = new Lead(['name' => 'Rina Kartika']);
+        $lead->tenant_id = $tenant?->getKey();
+        $lead->setRelation('property', $product);
+        $lead->setRelation('tenant', $tenant);
+        $agent = auth()->user() ?? new User(['name' => 'Agen']);
+
+        return 'Pratinjau: '.app(TemplateRenderer::class)->render($body, $lead, $agent, (string) $tenant?->name)['text'];
+    }
+
+    /** General rules only (for every product); a product's own rules live on that product's page. */
     public static function table(Table $table): Table
     {
         return $table->defaultSort('delay_days')
-            ->modifyQueryUsing(fn (Builder $query) => $query->with('stage')->withCount([
+            ->modifyQueryUsing(fn (Builder $query) => $query->whereNull('property_id')->with('stage')->withCount([
                 'logs as sent_count' => fn ($q) => $q->where('status', 'sent'),
             ]))
             ->columns([
@@ -76,8 +111,8 @@ class FollowUpRuleResource extends Resource
                 ToggleColumn::make('active')->label('Aktif'),
             ])
             ->recordActions([EditAction::make(), DeleteAction::make()])
-            ->emptyStateHeading('Belum ada aturan follow-up')
-            ->emptyStateDescription('Tambahkan aturan agar pesan sapaan terkirim otomatis sesuai tahap pipeline.');
+            ->emptyStateHeading('Belum ada follow-up umum')
+            ->emptyStateDescription('Tambahkan aturan agar pesan sapaan terkirim otomatis sesuai tahap pipeline. Follow-up khusus satu '.Industry::t('catalog_item').' diatur di halaman '.Industry::t('catalog_item').' itu.');
     }
 
     public static function getPages(): array
