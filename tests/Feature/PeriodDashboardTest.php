@@ -18,6 +18,7 @@ use App\Filament\Widgets\Dashboard\LeadFunnel;
 use App\Filament\Widgets\Dashboard\PeriodStats;
 use App\Filament\Widgets\Dashboard\ProductPerformance;
 use App\Filament\Widgets\LeadsBySource;
+use App\Models\Banner;
 use App\Models\Lead;
 use App\Models\LeadSource;
 use App\Models\Property;
@@ -245,6 +246,31 @@ class PeriodDashboardTest extends TestCase
         $this->assertSame(2, app(DashboardData::class)->summary($period)['new']['now']);
         $this->assertSame([], app(DashboardData::class)->agents($period));
         $this->assertSame(['Tas Badminton'], collect(app(DashboardData::class)->products($period))->pluck('name')->all());
+    }
+
+    public function test_the_compact_picker_is_a_dropdown_with_its_dates_beside_it(): void
+    {
+        $this->assertSame('4 Nov 2026 · dibanding 3 Nov', Period::caption('today', null, null, compare: true));
+        $this->assertSame('29 Okt – 4 Nov 2026 · dibanding 22 Okt – 28 Okt', Period::caption('7d', null, null, compare: true));
+        $this->assertSame('1 Nov – 4 Nov 2026', Period::caption('custom', '2026-11-01', '2026-11-04'));
+        $this->assertSame('Pilih tanggal dari dan sampai', Period::caption('custom', null, null));
+        $this->assertSame('Semua tanggal', Period::caption('all', null, null, all: true));
+
+        Banner::create(['title' => 'Promo', 'image_path' => 'banners/x.png', 'is_active' => true, 'sort_order' => 1]);
+        $this->actingInTenant($this->admin, $this->shop);
+
+        Livewire::test(Dashboard::class)
+            ->assertSeeHtml('<select')->assertSee('Kustom…')->assertSee('29 Okt – 4 Nov 2026 · dibanding 22 Okt – 28 Okt')
+            ->set('filters.periode', 'custom')->assertSee('Dari')->assertSee('Sampai');
+
+        // The banner sits above the picker, once.
+        $html = $this->get('/app/'.$this->shop->slug)->assertOk()->getContent();
+        $this->assertSame(1, substr_count($html, 'class="jl-banner-track"'));
+        $this->assertLessThan(strpos($html, 'Kustom…'), strpos($html, 'class="jl-banner-track"'));
+        $this->assertStringNotContainsString('Status saat ini tidak mengikuti periode', $html);
+
+        Livewire::test(Pipeline::class)->assertSeeHtml('<select')->assertSee('Semua waktu')->assertSee('Semua tanggal');
+        Livewire::test(Reports::class)->assertSeeHtml('<select')->assertSee('6 Okt – 4 Nov 2026');
     }
 
     public function test_dashboard_reads_the_period_from_the_link_and_every_widget_renders(): void

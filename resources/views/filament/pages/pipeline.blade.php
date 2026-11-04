@@ -13,8 +13,7 @@
         .jl-colhead .t span { color: var(--gray-500); font-weight: 500; }
         .jl-colhead .a { font-size: .75rem; color: var(--gray-500); }
         .jl-colhead .v { font-size: .75rem; font-weight: 600; color: var(--success-700); font-variant-numeric: tabular-nums; }
-        .jl-period { margin: .75rem 0 1rem; padding: .75rem 1rem; border: 1px solid var(--gray-200); border-radius: .75rem; background: white; }
-        .dark .jl-period { background: var(--gray-900); border-color: var(--gray-700); }
+        .jl-period { margin: .75rem 0 1rem; }
         .jl-cards { overflow-y: auto; padding: .25rem .5rem .75rem; display: flex; flex-direction: column; gap: .5rem; }
         .jl-card { display: flex; flex-direction: column; gap: .4rem; background: white; border: 1px solid var(--gray-200); border-radius: .625rem; padding: .6rem .7rem; cursor: grab; }
         .jl-card:hover { border-color: var(--gray-400); }

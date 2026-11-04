@@ -29,7 +29,13 @@
     .fi-ta-header-cell { background: #fef2f2; }
     .fi-btn.fi-color-primary:not(.fi-outlined) { background: var(--jl-red); }
     .fi-btn.fi-color-primary:not(.fi-outlined):hover { background: var(--jl-red-dark); }
-    /* Toggle buttons (period chips, interest): only the chosen one is filled */
+    /* Period picker (App\Support\Period::fields): a dropdown, full width on phones, about 220px from tablets up, with its dates beside it */
+    .jl-period-row { gap: .25rem .75rem; }
+    .jl-period-select { width: 100%; }
+    @media (min-width: 768px) { .jl-period-select { width: 14rem; } }
+    .jl-period-caption { line-height: 1.25rem; }
+    @media (min-width: 768px) { .jl-period-caption { padding-bottom: .55rem; } }
+    /* Toggle buttons (interest): only the chosen one is filled */
     .fi-fo-toggle-buttons-input:not(:checked) + .fi-btn.fi-color-primary,
     .fi-fo-toggle-buttons-input:not(:checked) + .fi-btn.fi-color-primary:hover { background: #fff; color: var(--gray-700); box-shadow: inset 0 0 0 1px var(--gray-300); }
     .fi-fo-toggle-buttons-input:not(:checked) + .fi-btn.fi-color-primary:hover { background: var(--gray-50); }

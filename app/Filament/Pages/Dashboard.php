@@ -24,7 +24,6 @@ use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Dashboard as BaseDashboard;
 use Filament\Pages\Dashboard\Concerns\HasFiltersForm;
-use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 
@@ -51,11 +50,22 @@ class Dashboard extends BaseDashboard
     public function getWidgets(): array
     {
         return [
-            WhatsAppPrompt::class, BannerSlider::class, GettingStarted::class,
+            GettingStarted::class,
             PeriodStats::class, CurrentStatus::class, LeadFunnel::class, LeadsBySource::class,
             ProductPerformance::class, AdPerformance::class, AutomationActivity::class, AgentPerformance::class,
             OverdueTasks::class, RecentLeads::class,
         ];
+    }
+
+    /** Above the period picker: the WhatsApp number prompt and the banner strip, so a phone sees them first. */
+    protected function getHeaderWidgets(): array
+    {
+        return [WhatsAppPrompt::class, BannerSlider::class];
+    }
+
+    public function getHeaderWidgetsColumns(): int|array
+    {
+        return 1;
     }
 
     public function mount(): void
@@ -73,10 +83,7 @@ class Dashboard extends BaseDashboard
 
     public function filtersForm(Schema $schema): Schema
     {
-        return $schema->columns(1)->components([
-            Section::make()->compact()->columnSpanFull()->schema(Period::fields())
-                ->description(fn () => 'Dibanding '.$this->period()->previous()->label().'. Status saat ini tidak mengikuti periode.'),
-        ]);
+        return $schema->columns(1)->components(Period::fields(compare: true));
     }
 
     public function period(): Period

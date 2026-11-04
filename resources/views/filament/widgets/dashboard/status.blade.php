@@ -1,5 +1,5 @@
 <x-filament-widgets::widget>
-    <x-filament::section heading="Status saat ini" description="Tidak mengikuti periode." compact>
+    <x-filament::section heading="Status saat ini" description="Kondisi sekarang, tidak mengikuti periode." compact>
         <div class="jl-status">
             @forelse ($channels as $c)
                 <span class="pill"><span @class(['dot', 'ok' => $c->isConnected(), 'bad' => ! $c->isConnected()])></span>{{ $c->name }} · {{ $c->isConnected() ? 'tersambung' : 'terputus' }}</span>
