@@ -13,7 +13,7 @@ class RecentLeads extends TableWidget
 {
     use VisibleLeads;
 
-    protected static ?int $sort = 5;
+    protected static ?int $sort = 10;
 
     protected static ?string $heading = 'Lead terbaru';
 

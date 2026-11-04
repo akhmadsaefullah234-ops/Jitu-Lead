@@ -120,7 +120,7 @@ class DashboardAndScreensTest extends TestCase
         Livewire::test(Reports::class)->assertOk()->assertViewHas('summary', fn ($s) => $s['Lead masuk'] === '1');
 
         $this->actingInTenant($this->adminOf($this->tenant), $this->tenant);
-        Livewire::test(Reports::class)->assertViewHas('summary', fn ($s) => $s['Lead masuk'] === '2')->call('$set', 'days', 7)->assertOk();
+        Livewire::test(Reports::class)->assertViewHas('summary', fn ($s) => $s['Lead masuk'] === '2')->set('periode', '7d')->assertOk();
     }
 
     public function test_property_permissions(): void

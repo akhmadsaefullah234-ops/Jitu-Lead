@@ -3,9 +3,8 @@
         @include('billing.locked', ['reason' => $this->lockedReason()])
     @else
     <style>
-        .rp-bar { display: flex; flex-wrap: wrap; gap: .5rem; }
-        .rp-chip { border: 1px solid var(--gray-300); background: #fff; border-radius: 9999px; padding: .3rem .9rem; font-size: .8125rem; font-weight: 500; }
-        .rp-chip[aria-pressed="true"] { background: var(--primary-600); border-color: var(--primary-600); color: #fff; }
+        .rp-period { padding: .75rem 1rem; border: 1px solid var(--gray-200); border-radius: .75rem; background: #fff; }
+        .dark .rp-period { background: var(--gray-900); border-color: var(--gray-700); }
         .rp-kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: .75rem; }
         @media (min-width: 1024px) { .rp-kpis { grid-template-columns: repeat(4, 1fr); } }
         .rp-kpi { border: 1px solid var(--gray-200); border-radius: .85rem; padding: 1rem; background: #fff; }
@@ -38,11 +37,7 @@
         }
     </style>
 
-    <div class="rp-bar">
-        @foreach ($periods as $d => $label)
-            <button type="button" class="rp-chip" aria-pressed="{{ $days === $d ? 'true' : 'false' }}" wire:click="$set('days', {{ $d }})">{{ $label }}</button>
-        @endforeach
-    </div>
+    <div class="rp-period">{{ $this->periodForm }}</div>
 
     <div class="rp-kpis">
         @foreach ($summary as $label => $value)
@@ -51,7 +46,7 @@
     </div>
 
     <div class="rp-grid">
-        <x-filament::section heading="Corong pipeline" description="Jumlah lead yang masuk pada periode ini, menurut tahap sekarang.">
+        <x-filament::section heading="Corong pipeline" description="Lead yang masuk pada periode ini ({{ $period->label() }}), menurut tahap sekarang.">
             @foreach ($funnel as $row)
                 <div class="rp-f"><span>{{ $row['name'] }}</span><span class="b"><i class="{{ $row['type'] }}" style="width: {{ $row['count'] / $max * 100 }}%"></i></span><b>{{ $row['count'] }}</b></div>
             @endforeach
