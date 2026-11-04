@@ -9,6 +9,8 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('followups:run')->everyFiveMinutes()->withoutOverlapping();
+// Form welcomes: each has its own delayed job; this catches any whose job was lost or that waited for 05:00.
+Schedule::command('welcome:send')->everyMinute()->withoutOverlapping();
 Schedule::command('leads:reassign')->everyFiveMinutes()->withoutOverlapping();
 // Shops: delivered, silent and unpaid leads move by themselves (Pengaturan > Otomatisasi tahap).
 Schedule::command('stages:automate')->hourly()->withoutOverlapping();

@@ -297,8 +297,12 @@ class LeadFormBuilderTest extends TestCase
         $this->tenant->regenerateCaptureToken();
         $this->tenant->forceFill(['capture_settings' => ['title' => 'Info Cluster', 'color' => '#123456']])->save();
         $migration = require database_path('migrations/2026_11_07_000100_create_lead_forms.php');
+        // Later migrations hang off lead_forms; they are taken off and put back around it.
+        $welcome = require database_path('migrations/2026_11_18_000100_create_welcome_messages.php');
+        $welcome->down();
         $migration->down();
         $migration->up();
+        $welcome->up();
 
         $form = $this->inTenant(fn () => LeadForm::query()->where('is_primary', true)->firstOrFail());
         $this->assertSame('Info Cluster', $form->design['title']);

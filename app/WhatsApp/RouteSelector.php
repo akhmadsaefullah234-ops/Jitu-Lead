@@ -2,9 +2,11 @@
 
 namespace App\WhatsApp;
 
+use App\Enums\MessageStatus;
 use App\Enums\WaChannelType;
 use App\Models\WaChannel;
 use App\Models\WaConversation;
+use App\Support\PhoneNumber;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -13,7 +15,8 @@ use Illuminate\Support\Collection;
  *
  *  1. Free 72-hour window after replying to an ad: official number.
  *  2. The client wrote in the last 24 hours: answer from the number they wrote to.
- *  3. Otherwise a gateway number starts the follow-up, at no Meta cost.
+ *  3. Otherwise a gateway number starts the follow-up, at no Meta cost: the one that already wrote to this
+ *     client, else the lead owner's own number, else the first in the list.
  *  4. With no gateway connected, only a paid official template is left.
  */
 class RouteSelector
@@ -48,7 +51,7 @@ class RouteSelector
         }
 
         if ($gateways->isNotEmpty()) {
-            $channel = $gateways->first();
+            $channel = $this->preferredGateway($conversation, $gateways);
             $introduced = $conversation->messages()->where('channel_id', $channel->getKey())->exists();
 
             return new RouteDecision(
@@ -85,6 +88,27 @@ class RouteSelector
         return WaChannel::query()->connected()->ofType(WaChannelType::Gateway)->orderBy('position')->orderBy('id')->get()
             ->sortBy(fn (WaChannel $c) => $c->is($first) ? 0 : 1)
             ->values();
+    }
+
+    /**
+     * The gateway this client already heard from keeps the chat on one number (and needs no second intro);
+     * otherwise the number of the agent who owns the lead (the WhatsApp rotation hands leads to agents by it).
+     *
+     * @param  Collection<int, WaChannel>  $gateways
+     */
+    private function preferredGateway(WaConversation $conversation, Collection $gateways): WaChannel
+    {
+        $last = $conversation->messages()->where('direction', 'out')->where('status', '!=', MessageStatus::Failed)
+            ->whereIn('channel_id', $gateways->modelKeys())->latest('id')->value('channel_id');
+
+        if ($last !== null) {
+            return $gateways->firstWhere('id', $last);
+        }
+
+        $owner = PhoneNumber::whatsapp($conversation->lead?->owner?->whatsapp);
+
+        return ($owner !== null ? $gateways->first(fn (WaChannel $c) => PhoneNumber::whatsapp($c->phone) === $owner) : null)
+            ?? $gateways->first();
     }
 
     private function remaining(?Carbon $until): string

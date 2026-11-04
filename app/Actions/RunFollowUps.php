@@ -33,7 +33,8 @@ use Illuminate\Support\Collection;
  * before one already sent (or skipped) in this stage is not sent. When the
  * general follow-ups are not used (App\FollowUps\GeneralFollowUps, e.g. a
  * shop with many products), they are skipped and a lead without a product
- * gets the one "Tanya produk" message (App\FollowUps\AskProduct) instead. It stays quiet when the lead has written
+ * gets the one "Tanya produk" message (App\FollowUps\AskProduct) instead. A follow-up due within two hours
+ * of the form's WhatsApp welcome (App\Welcome) waits for those two hours. It stays quiet when the lead has written
  * back since or when only a paid Meta template could carry the message; those
  * leads are looked at again on the next run until the catch-up window closes.
  */
@@ -41,6 +42,9 @@ class RunFollowUps
 {
     /** A follow-up later than this past its sending time is dropped, e.g. after an outage. */
     public const CATCH_UP_HOURS = 24;
+
+    /** A follow-up due this soon after the form's WhatsApp welcome waits until this much time has passed. */
+    public const AFTER_WELCOME_HOURS = 2;
 
     public function __construct(
         private CurrentTenant $current,
@@ -164,6 +168,13 @@ class RunFollowUps
 
         if ($conversation->last_inbound_at !== null && $conversation->last_inbound_at->greaterThan($this->quietSince($lead))) {
             return $this->log($rule, $lead, 'skipped', 'Lead sudah membalas');
+        }
+
+        // Right after the form's WhatsApp welcome the follow-up waits, so the buyer never gets two in a row.
+        // The welcome is the shop writing, not the buyer, so it never stops the sequence.
+        if ($conversation->messages()->where('origin', 'welcome')->where('status', '!=', MessageStatus::Failed)
+            ->where('sent_at', '>', now()->subHours(self::AFTER_WELCOME_HOURS))->exists()) {
+            return null;
         }
 
         $decision = $this->routes->decide($conversation);

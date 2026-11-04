@@ -19,6 +19,7 @@ use App\Push\Alerts;
 use App\Tracking\ConversionPayload;
 use App\Tracking\PipelineConversions;
 use App\Tracking\PixelEvents;
+use App\Welcome\WelcomeSender;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Str;
@@ -26,8 +27,8 @@ use Throwable;
 
 /**
  * One visitor sending a built form: the lead is always saved first (new, or noted on the existing one), its
- * answers land on the lead, the ad platforms hear about it with the browser's event_id, and then the form's
- * "after sending" step is worked out (message, thank-you page, or WhatsApp with the answers). Runs inside the tenant.
+ * answers land on the lead, the ad platforms hear about it with the browser's event_id, the WhatsApp welcome is
+ * booked (App\Welcome\WelcomeSender), and then the form's "after sending" step is worked out (message, thank-you page, or WhatsApp with the answers). Runs inside the tenant.
  */
 class SubmitLeadForm
 {
@@ -87,6 +88,13 @@ class SubmitLeadForm
         }
 
         $form->newQuery()->whereKey($form->getKey())->increment('submissions');
+
+        // The WhatsApp welcome, after the form's delay, even when the buyer never opens the chat.
+        try {
+            app(WelcomeSender::class)->schedule($form, $page, $lead, $created, $result['vars']['ringkasan'] ?? null);
+        } catch (Throwable $e) {
+            report($e);
+        }
 
         return ['lead' => $lead, 'created' => $created, 'action' => $this->after($tenant, $form, $lead, $result['vars'], $page)];
     }

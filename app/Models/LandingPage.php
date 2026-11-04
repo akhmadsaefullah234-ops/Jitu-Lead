@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['title', 'slug', 'status', 'color', 'description', 'property_id', 'blocks', 'published_at', 'font', 'logo', 'whatsapp_number', 'meta_title', 'og_image', 'template', 'page_events', 'navigation', 'layout'])]
+#[Fillable(['title', 'slug', 'status', 'color', 'description', 'property_id', 'blocks', 'published_at', 'font', 'logo', 'whatsapp_number', 'meta_title', 'og_image', 'template', 'page_events', 'navigation', 'layout', 'welcome'])]
 class LandingPage extends Model
 {
     use BelongsToTenant;
@@ -26,6 +26,7 @@ class LandingPage extends Model
     {
         return [
             'blocks' => 'array',
+            'welcome' => 'array',
             'published_at' => 'datetime',
             'page_events' => 'array',
             'navigation' => 'array',

@@ -31,12 +31,24 @@ class SendWhatsAppMessage
 {
     public const MAX_LENGTH = 4096;
 
+    /** Where the messages come from when not typed by an agent, e.g. "welcome" (App\Welcome). */
+    private ?string $origin = null;
+
     public function __construct(
         private RouteSelector $routes,
         private Providers $providers,
         private TemplateRenderer $renderer,
         private CurrentTenant $current,
     ) {}
+
+    /** The same sender, marking what it sends as coming from $origin. */
+    public function from(string $origin): static
+    {
+        $sender = clone $this;
+        $sender->origin = $origin;
+
+        return $sender;
+    }
 
     /**
      * @param  bool  $confirmPaid  The agent agreed that Meta bills this message.
@@ -127,12 +139,15 @@ class SendWhatsAppMessage
     {
         $conversation->forceFill(['last_message_at' => $message->sent_at, 'unread_count' => 0])->save();
 
+        $what = $this->origin === 'welcome' ? 'Pesan sambutan WhatsApp' : 'Chat WhatsApp';
+
         $conversation->lead->activities()->create([
-            'user_id' => $actor->getKey(),
+            // An automatic welcome is not the owner answering, so it never counts as the lead being attended to.
+            'user_id' => $this->origin === 'welcome' ? null : $actor->getKey(),
             'type' => 'whatsapp_out',
             'body' => $message->status === MessageStatus::Failed
-                ? 'Chat WhatsApp gagal terkirim'
-                : 'Chat WhatsApp terkirim lewat '.($message->channel?->isOfficial() ? 'nomor resmi' : 'gateway'),
+                ? $what.' gagal terkirim'.($this->origin === 'welcome' && filled($message->error) ? ': '.$message->error : '')
+                : $what.' terkirim lewat '.($message->channel?->isOfficial() ? 'nomor resmi' : 'gateway'),
             'meta' => ['message_id' => $message->getKey(), 'paid' => $message->is_paid],
         ]);
 
@@ -239,6 +254,7 @@ class SendWhatsAppMessage
             'template_name' => $templateName,
             'is_intro' => $intro,
             'is_paid' => $paid,
+            'origin' => $this->origin,
             'status' => MessageStatus::Sent,
             'external_id' => $result->externalId,
             'sent_at' => now(),
@@ -261,6 +277,7 @@ class SendWhatsAppMessage
             'template_name' => $templateName,
             'is_intro' => $intro,
             'is_paid' => $paid,
+            'origin' => $this->origin,
             'status' => MessageStatus::Failed,
             'error' => $result->error,
             'sent_at' => now(),
