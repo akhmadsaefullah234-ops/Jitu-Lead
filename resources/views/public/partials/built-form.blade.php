@@ -96,7 +96,10 @@
                     <input id="{{ $id }}" type="{{ $type }}" name="{{ $name }}" placeholder="{{ $f['placeholder'] ?? '' }}" {{ $extra }} @if ($req($f)) required @endif></label>
         @endif
     @endforeach
-    <input name="website" tabindex="-1" autocomplete="off" aria-hidden="true" class="lf-trap">
+    {{-- Robot trap (App\LeadForms\SpamGuard): a meaningless name per page view, hidden with display:none so autofill skips it. --}}
+    @php($guard = \App\LeadForms\SpamGuard::fields())
+    <div class="lf-trap" style="display:none" aria-hidden="true"><input type="text" name="{{ $guard['trap'] }}" value="" tabindex="-1" autocomplete="off" data-lpignore="true" data-1p-ignore data-form-type="other"></div>
+    <input type="hidden" name="{{ \App\LeadForms\SpamGuard::STAMP }}" value="{{ $guard['stamp'] }}">
     <p class="lf-err" role="alert" hidden></p>
     <button type="submit" class="jb jb-{{ $color }} jb-{{ $size }} lf-btn">@if ($icon)<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ $icon }}"/></svg>@endif<span>{{ $submit['label'] }}</span></button>
     @if (filled($privacy))<p class="lf-priv">{{ $privacy }}</p>@endif

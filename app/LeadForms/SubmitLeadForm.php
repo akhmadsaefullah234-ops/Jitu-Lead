@@ -40,12 +40,21 @@ class SubmitLeadForm
 
     /**
      * @param  array<string, mixed>  $data  validated input: f[...] plus page, event_id, source_url, utm_*, fbp...
-     * @return array{lead: Lead, created: bool, action: array<string, mixed>}
+     *                                      A submission that SpamGuard rejects as a robot saves nothing (lead null, logged and counted) and gets the
+     *                                      form's plain message; one it only suspects is saved, marked, and handled like any other.
+     * @return array{lead: ?Lead, created: bool, action: array<string, mixed>}
      */
     public function __invoke(Tenant $tenant, LeadForm $form, array $data, Request $request): array
     {
         $fields = $form->fieldList();
         $result = FormFields::answers($fields, (array) ($data['f'] ?? []));
+        $spam = SpamGuard::check($request, $result['lead']['phone'] ?? null);
+
+        if ($spam['verdict'] === SpamGuard::REJECT) {
+            SpamGuard::reject($request, $tenant->getKey(), $form->getKey(), 'form', $spam['reasons']);
+
+            return ['lead' => null, 'created' => false, 'action' => ['type' => 'message', 'message' => (string) ($form->after_submit['message'] ?? '') ?: 'Terima kasih!']];
+        }
         $page = filled($data['page'] ?? null) ? LandingPage::query()->find($data['page']) : null;
         $source = $page ? 'Landing: '.$page->title : ($form->is_primary ? 'Formulir web' : 'Formulir: '.$form->name);
         $campaign = array_filter(array_intersect_key($data, array_flip(self::CAMPAIGN_FIELDS)));
@@ -53,6 +62,10 @@ class SubmitLeadForm
         [$lead, $created] = ($this->register)($result['lead'] + ['name' => 'Tanpa nama'], $source, 'form', null, $campaign, $page?->property_id);
 
         $this->applyAnswers($lead, $created, $form, $result, $tenant);
+
+        if ($spam['verdict'] === SpamGuard::SUSPECT) {
+            SpamGuard::mark($lead, $created, $spam['reasons'], $request->userAgent());
+        }
         $this->product($lead, $form, $result);
 
         if ($created) {

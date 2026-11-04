@@ -8,6 +8,7 @@ use App\Filament\Resources\LeadForms\Pages\EditLeadForm;
 use App\Jobs\SendConversionEvents;
 use App\LandingPages\Buttons;
 use App\LeadForms\FormFields;
+use App\LeadForms\SpamGuard;
 use App\Models\LandingPage;
 use App\Models\Lead;
 use App\Models\LeadForm;
@@ -215,7 +216,8 @@ class LeadFormBuilderTest extends TestCase
     {
         $form = $this->orderForm();
 
-        $this->postJson('/f/griya-prima/pesan-kaos', $this->answers() + ['website' => 'spam.example'])->assertOk();
+        // A clear robot: the trap filled and sent the moment the page loaded (App\LeadForms\SpamGuard).
+        $this->postJson('/f/griya-prima/pesan-kaos', $this->answers() + ['lf_hp_ab12cd34' => 'spam.example', 'lf_ts' => SpamGuard::fields()['stamp']])->assertOk();
         $form->forceFill(['status' => 'inactive'])->save();
         $this->postJson('/f/griya-prima/pesan-kaos', $this->answers())->assertNotFound();
         $this->get('/f/griya-prima/pesan-kaos')->assertNotFound();
@@ -299,10 +301,13 @@ class LeadFormBuilderTest extends TestCase
         $migration = require database_path('migrations/2026_11_07_000100_create_lead_forms.php');
         // Later migrations hang off lead_forms; they are taken off and put back around it.
         $welcome = require database_path('migrations/2026_11_18_000100_create_welcome_messages.php');
+        $rejections = require database_path('migrations/2026_11_21_000100_create_lead_form_rejections.php');
+        $rejections->down();
         $welcome->down();
         $migration->down();
         $migration->up();
         $welcome->up();
+        $rejections->up();
 
         $form = $this->inTenant(fn () => LeadForm::query()->where('is_primary', true)->firstOrFail());
         $this->assertSame('Info Cluster', $form->design['title']);
