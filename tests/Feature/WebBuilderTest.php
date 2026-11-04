@@ -75,7 +75,7 @@ class WebBuilderTest extends TestCase
         $this->tenant->forceFill(['capture_settings' => ['title' => 'Daftar Open House', 'button' => 'Ikut sekarang', 'color' => '#0044ff']])->save();
 
         $this->get("/f/{$this->token}")->assertOk()->assertSee('Daftar Open House')->assertSee('Ikut sekarang')->assertSee('#0044ff')
-            ->assertSee('name="f[whatsapp]"', false)->assertSee('name="website"', false)->assertSee('noindex', false);
+            ->assertSee('name="f[whatsapp]"', false)->assertSee('name="lf_hp_', false)->assertDontSee('name="website"', false)->assertSee('noindex', false);
 
         $this->get('/f/salah')->assertNotFound();
         $this->tenant->forceFill(['status' => 'suspended'])->save();

@@ -163,6 +163,12 @@ class Lead extends Model
         return $this->stage_entered_at ?? $this->created_at;
     }
 
+    /** @return list<string> why the form submission that made this lead looked like a robot (App\LeadForms\SpamGuard); empty when it did not */
+    public function spamReasons(): array
+    {
+        return array_values((array) (((array) $this->custom_fields)['spam']['reasons'] ?? []));
+    }
+
     public function isOverdue(): bool
     {
         return $this->next_action_due_at !== null && $this->next_action_due_at->isPast();

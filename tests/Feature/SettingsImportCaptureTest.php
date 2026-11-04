@@ -252,7 +252,8 @@ class SettingsImportCaptureTest extends TestCase
         $this->postJson('/capture/salah', ['name' => 'X', 'phone' => '0812'])->assertNotFound();
         $this->postJson("/capture/{$token}", ['phone' => '081200000000'])->assertUnprocessable();
         $this->postJson("/capture/{$token}", ['name' => 'Tanpa kontak'])->assertUnprocessable();
-        $this->postJson("/capture/{$token}", ['name' => 'Bot', 'phone' => '081200000000', 'website' => 'http://spam'])->assertOk();
+        // Trap filled and no valid WhatsApp number: a robot. (Trap filled with a valid number is kept, marked: FormSpamGuardTest.)
+        $this->postJson("/capture/{$token}", ['name' => 'Bot', 'phone' => '021555', 'website' => 'http://spam'])->assertOk();
 
         $this->assertSame(0, $this->inTenant(fn () => Lead::count()));
     }

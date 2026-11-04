@@ -61,11 +61,8 @@ class LeadFormController extends Controller
             abort_unless($form->isActive(), 404);
             $fields = $form->fieldList();
 
-            // Bots fill the hidden field; they get the usual thank-you and nothing is stored.
-            if (filled($request->input('website'))) {
-                return $this->respond($request, ['type' => 'message', 'message' => (string) ($form->after_submit['message'] ?? 'Terima kasih!')]);
-            }
-
+            // A filled robot trap no longer throws the submission away here: App\LeadForms\SpamGuard (inside
+            // SubmitLeadForm) saves it marked as suspected spam, and only rejects, logs and counts a clear robot.
             try {
                 $data = $request->validate([
                     ...FormFields::rules($fields),

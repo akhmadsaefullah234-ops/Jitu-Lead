@@ -12,6 +12,7 @@ use App\LeadForms\FormFields;
 use App\LeadForms\FormTemplates;
 use App\Models\LandingPage;
 use App\Models\LeadForm;
+use App\Models\LeadFormRejection;
 use App\Support\CurrentTenant;
 use App\Support\Industry;
 use App\Tracking\PixelEvents;
@@ -174,6 +175,8 @@ class LeadFormResource extends Resource
 
     public static function table(Table $table): Table
     {
+        $rejections = null;
+
         return $table->defaultSort('updated_at', 'desc')->columns([
             TextColumn::make('name')->label('Formulir')->weight('bold')->searchable()
                 ->description(fn (LeadForm $r) => '/f/'.$r->tenant->slug.'/'.$r->slug.($r->is_primary ? ' · formulir utama' : '')),
@@ -182,6 +185,14 @@ class LeadFormResource extends Resource
                 ->color(fn (string $state) => $state === 'inactive' ? 'gray' : 'success'),
             TextColumn::make('submissions')->label('Terkirim')->numeric()->sortable(),
             TextColumn::make('views')->label('Dilihat')->numeric()->sortable(),
+            // Robots turned away by App\LeadForms\SpamGuard, so an owner sees when something is being filtered.
+            TextColumn::make('spam_rejected')->label('Ditolak spam (7 hari)')->numeric()
+                ->state(function (LeadForm $record) use (&$rejections) {
+                    $rejections ??= LeadFormRejection::lastWeekPerForm((int) $record->tenant_id);
+
+                    return $rejections[$record->getKey()] ?? 0;
+                })
+                ->color(fn ($state) => $state > 0 ? 'warning' : 'gray'),
             TextColumn::make('updated_at')->label('Diubah')->since()->sortable(),
         ])->recordActions([
             Action::make('open')->label('Buka')->icon(Heroicon::OutlinedArrowTopRightOnSquare)->color('gray')

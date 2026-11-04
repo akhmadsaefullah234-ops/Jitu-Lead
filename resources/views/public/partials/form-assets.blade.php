@@ -28,7 +28,7 @@
     .rg-none { padding: .7rem .75rem; color: #6b7280; font-weight: 400; }
     .lf-btn { width: 100%; }
     .lf-btn:disabled { opacity: .6; cursor: wait; }
-    .lf-trap { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+    .lf-trap { display: none !important; }
     .lf-err { margin: 0; color: #b91c1c; font-size: .875rem; }
     .lf-priv, .lf-note { margin: 0; color: #6b7280; font-size: .75rem; font-weight: 400; }
     .lf [hidden] { display: none !important; }

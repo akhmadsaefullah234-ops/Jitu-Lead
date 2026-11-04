@@ -54,6 +54,7 @@
         .wa-prod { display: inline-block; margin-top: .2rem; font-size: .68rem; font-weight: 600; color: var(--primary-700); background: var(--primary-50); border-radius: 9999px; padding: .05rem .5rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .wa-prod.none { color: var(--gray-500); background: var(--gray-100); }
         .dark .wa-prod { background: var(--gray-800); color: var(--primary-300); }
+        .wa-spam { background: #fef3c7; color: #92400e; border-radius: 9999px; padding: 0 .45rem; font-size: .7rem; white-space: nowrap; }
         .wa-badge { background: var(--primary-600); color: white; border-radius: 9999px; padding: 0 .45rem; font-size: .7rem; }
         .wa-chat { display: flex; flex-direction: column; max-height: calc(100vh - 12rem); }
         .wa-proof { font-size: .75rem; font-weight: 600; color: #92400e; background: #fef3c7; border-radius: 9999px; padding: .15rem .55rem; }
@@ -105,7 +106,7 @@
         <aside class="wa-list" aria-label="Daftar percakapan">
             @forelse ($conversations as $c)
                 <button type="button" class="wa-item" wire:key="c-{{ $c->id }}" wire:click="open({{ $c->lead_id }})" aria-current="{{ $conversation?->id === $c->id ? 'true' : 'false' }}">
-                    <div class="n"><span>{{ $c->lead->name }}</span>@if ($c->unread_count)<span class="wa-badge">{{ $c->unread_count }}</span>@endif</div>
+                    <div class="n"><span>{{ $c->lead->name }}</span>@if ($c->lead->spamReasons())<span class="wa-spam" title="{{ implode(', ', $c->lead->spamReasons()) }}">Dicurigai spam</span>@endif@if ($c->unread_count)<span class="wa-badge">{{ $c->unread_count }}</span>@endif</div>
                     <div class="p">{{ $c->lead->phone }} · {{ $c->last_message_at?->diffForHumans() }}</div>
                     @if ($preview = \App\WhatsApp\MessageContent::preview($c->latestMessage))<div class="p wa-last" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ $c->latestMessage->direction === 'out' ? 'Anda: ' : '' }}{{ $preview }}</div>@endif
                     @if ($seesAll && $c->lead->owner)<div class="p">Agen: {{ $c->lead->owner->name }}</div>@endif

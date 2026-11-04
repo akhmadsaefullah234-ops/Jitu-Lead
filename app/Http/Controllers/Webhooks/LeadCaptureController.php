@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Webhooks;
 use App\Actions\RegisterLead;
 use App\Http\Controllers\Controller;
 use App\Jobs\SendConversionEvents;
+use App\LeadForms\SpamGuard;
 use App\Models\LandingPage;
 use App\Models\Tenant;
 use App\Models\TrackingSetting;
@@ -45,17 +46,25 @@ class LeadCaptureController extends Controller
             ...array_fill_keys([...self::CAMPAIGN_FIELDS, ...self::BROWSER_IDS], ['nullable', 'string', 'max:200']),
         ]);
 
-        // Bots fill the hidden field; they get the same thank-you and nothing is stored.
-        if (filled($data['website'] ?? null)) {
+        // A filled robot trap ("website") is saved and marked unless it is clearly a robot (App\LeadForms\SpamGuard).
+        $spam = SpamGuard::check($request, $data['phone'] ?? null);
+
+        if ($spam['verdict'] === SpamGuard::REJECT) {
+            SpamGuard::reject($request, $tenant->getKey(), null, 'capture', $spam['reasons']);
+
             return $this->thanks($request, $tenant);
         }
 
-        $current->run($tenant, function () use ($request, $tenant, $data, $register) {
+        $current->run($tenant, function () use ($request, $tenant, $data, $register, $spam) {
             $page = filled($data['page'] ?? null) ? LandingPage::query()->find($data['page']) : null;
             $source = $page ? 'Landing: '.$page->title : (($data['source'] ?? null) ?: 'Formulir web');
             $campaign = array_filter(array_intersect_key($data, array_flip(self::CAMPAIGN_FIELDS)));
 
             [$lead, $created] = $register($data, $source, 'form', null, $campaign, $page?->property_id);
+
+            if ($spam['verdict'] === SpamGuard::SUSPECT) {
+                SpamGuard::mark($lead, $created, $spam['reasons'], $request->userAgent());
+            }
 
             if ($created) {
                 PipelineConversions::rememberBrowserIds($lead, $data);
