@@ -15,6 +15,13 @@ return [
     // Pictures customers send are kept on the server (private disk) so agents can see them in the Inbox.
     'max_image_bytes' => 5 * 1024 * 1024,
 
+    // Voice notes, stickers and videos are kept the same way, each up to its own size (bigger: "too large" in the chat).
+    'max_media_bytes' => [
+        'audio' => 16 * 1024 * 1024,
+        'sticker' => 1024 * 1024,
+        'video' => 16 * 1024 * 1024,
+    ],
+
     // Optional gateway run by the platform operator. When set, agencies connect a number by scanning
     // a QR code and never see an address or key. Without it, agencies enter their own gateway details.
     'gateway' => [

@@ -14,6 +14,8 @@ const MAX_CHAT_LABELS = 5000; // chats whose labels are remembered, to skip putt
 const masked = (phone) => '…' + String(phone).replace(/\D/g, '').slice(-4);
 const V7 = 'baileys7'; // written once a login has connected under the current library
 const LOGGED_OUT = 'perangkat tertaut dilepas dari HP';
+const MEDIA_ID = /^[A-Za-z0-9_-]{4,128}$/;
+const MEDIA_TTL_MS = 24 * 60 * 60 * 1000; // a file waiting for the CRM is kept this long
 
 class SessionError extends Error {
   /** `code`: a word the CRM acts on (label_not_found, not_business), sent as `error` with the text as `message`. */
@@ -197,6 +199,7 @@ class SessionManager {
         onLabel: (label) => this.rememberLabel(session, label),
         onLabelAssociation: ({ type, chatId, labelId }) => this.rememberChatLabel(session, chatId, labelId, type !== 'remove'),
         onMessage: (m) => this.emit(session, { event: 'message', ...m }),
+        keepMedia: (messageId, buffer) => this.keepMedia(id, messageId, buffer),
         onStatus: (s) => this.emit(session, { event: 'status', ...s }),
       },
     });
@@ -433,6 +436,47 @@ class SessionManager {
     }
 
     this.wipe(id);
+  }
+
+  mediaDir(id) {
+    return path.join(this.dir(id), 'media');
+  }
+
+  /** Keeps a file too big for the webhook until the CRM fetches it (GET /media/:id). Files older than a day are removed. */
+  async keepMedia(id, messageId, buffer) {
+    if (!MEDIA_ID.test(String(messageId))) return false;
+
+    const dir = this.mediaDir(id);
+    try {
+      await fs.promises.mkdir(dir, { recursive: true, mode: 0o750 });
+      await fs.promises.writeFile(path.join(dir, messageId), buffer, { mode: 0o640 });
+      this.pruneMedia(id).catch(() => {});
+
+      return true;
+    } catch (err) {
+      this.log?.error({ id, err: err.message }, 'file media gagal disimpan di gateway');
+
+      return false;
+    }
+  }
+
+  async pruneMedia(id, now = Date.now()) {
+    const dir = this.mediaDir(id);
+    for (const name of await fs.promises.readdir(dir).catch(() => [])) {
+      const file = path.join(dir, name);
+      const stat = await fs.promises.stat(file).catch(() => null);
+      if (stat && now - stat.mtimeMs > (this.config.mediaTtlMs ?? MEDIA_TTL_MS)) await fs.promises.rm(file, { force: true });
+    }
+  }
+
+  /** The path of a kept file, for the CRM to fetch. */
+  mediaFile(id, messageId) {
+    const file = MEDIA_ID.test(String(messageId)) ? path.join(this.mediaDir(id), messageId) : null;
+    const stat = file ? fs.statSync(file, { throwIfNoEntry: false }) : null;
+
+    if (!stat?.isFile() || Date.now() - stat.mtimeMs > (this.config.mediaTtlMs ?? MEDIA_TTL_MS)) throw new SessionError('File tidak ditemukan.', 404);
+
+    return { file, bytes: stat.size };
   }
 
   wipe(id) {

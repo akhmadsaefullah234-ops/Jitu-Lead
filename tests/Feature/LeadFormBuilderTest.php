@@ -298,7 +298,7 @@ class LeadFormBuilderTest extends TestCase
         $this->tenant->forceFill(['capture_settings' => ['title' => 'Info Cluster', 'color' => '#123456']])->save();
         $migration = require database_path('migrations/2026_11_07_000100_create_lead_forms.php');
         // Later migrations hang off lead_forms; they are taken off and put back around it.
-        $welcome = require database_path('migrations/2026_11_17_000100_create_welcome_messages.php');
+        $welcome = require database_path('migrations/2026_11_18_000100_create_welcome_messages.php');
         $welcome->down();
         $migration->down();
         $migration->up();

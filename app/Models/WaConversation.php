@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 use LogicException;
 
@@ -50,6 +51,12 @@ class WaConversation extends Model
     public function messages(): HasMany
     {
         return $this->hasMany(WaMessage::class, 'conversation_id')->orderBy('sent_at')->orderBy('id');
+    }
+
+    /** The newest message, for the line under the chat in the Inbox list. */
+    public function latestMessage(): HasOne
+    {
+        return $this->hasOne(WaMessage::class, 'conversation_id')->latestOfMany();
     }
 
     /** An agent is working this chat, so the assistant must not reply on its own. */
