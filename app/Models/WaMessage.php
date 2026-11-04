@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['conversation_id', 'channel_id', 'user_id', 'direction', 'type', 'body', 'media', 'template_name', 'is_intro', 'is_paid', 'status', 'external_id', 'error', 'sent_at', 'from_phone'])]
+#[Fillable(['conversation_id', 'channel_id', 'user_id', 'direction', 'type', 'body', 'media', 'template_name', 'is_intro', 'is_paid', 'status', 'external_id', 'error', 'sent_at', 'from_phone', 'origin'])]
 class WaMessage extends Model
 {
     use BelongsToTenant;

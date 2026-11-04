@@ -14,6 +14,12 @@ class SendLibraryItem
 {
     public function __construct(private SendWhatsAppMessage $send) {}
 
+    /** The same sender, marking what it sends as coming from $origin (see SendWhatsAppMessage::from). */
+    public function from(string $origin): static
+    {
+        return new static($this->send->from($origin));
+    }
+
     public function __invoke(WaConversation $conversation, User $actor, MediaAsset $asset, ?string $caption = null): WaMessage
     {
         if ($asset->isLink()) {

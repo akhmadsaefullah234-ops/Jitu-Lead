@@ -15,6 +15,8 @@ use App\Models\LeadForm;
 use App\Support\CurrentTenant;
 use App\Support\Industry;
 use App\Tracking\PixelEvents;
+use App\Welcome\WelcomeFields;
+use App\Welcome\WelcomeSettings;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -146,6 +148,11 @@ class LeadFormResource extends Resource
                                         .', serta {nama}, {telepon}, {email}, {alamat}, {jumlah}, {varian}, {judul}.'),
                             ]),
                         ]),
+                    Section::make('Pesan sambutan WhatsApp')->collapsible()->collapsed()->icon(Heroicon::OutlinedChatBubbleLeftRight)
+                        ->description(fn (Get $get) => $get('welcome.active')
+                            ? 'Aktif: pembeli dikirimi WhatsApp '.(WelcomeSettings::DELAYS[(int) $get('welcome.delay')] ?? WelcomeSettings::DELAYS[WelcomeSettings::DEFAULT_DELAY]).' setelah mengisi.'
+                            : 'Mati. Nyalakan agar pembeli langsung disapa di WhatsApp setelah mengisi formulir.')
+                        ->schema(WelcomeFields::form()),
                     Section::make('Tombol tambahan')->collapsible()->collapsed()
                         ->description('Tampil di bawah tombol kirim, misalnya "Chat langsung via WhatsApp".')
                         ->schema([Buttons::repeater('buttons', 'Tombol', [], 3)->hiddenLabel()]),

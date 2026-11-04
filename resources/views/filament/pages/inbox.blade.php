@@ -159,6 +159,7 @@
                                 {{ $m->sent_at?->format('d M H:i') }}
                                 @if ($m->channel) · {{ $m->channel->name }}@endif
                                 @if ($m->is_intro) · perkenalan @endif
+                                @if ($m->origin === 'welcome' && ! $m->is_intro) · Sambutan otomatis @endif
                                 @if ($m->from_phone) · dari WhatsApp HP @endif
                                 @if ($m->is_paid) · berbayar @endif
                                 @if ($m->direction === 'out') · {{ $m->status->value }}@endif

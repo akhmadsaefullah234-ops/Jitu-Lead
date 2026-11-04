@@ -13,7 +13,7 @@ langsung.
 | Detail produk | Nama, kategori, harga, stok, berat dan ukuran (toko), rincian tambahan. |
 | Pengetahuan AI | Catatan AI khusus produk ini (`ai_knowledge_items.property_id`). Tulis, ubah, nonaktifkan, hapus, dan Unggah dokumen; hasil unggahan otomatis milik produk ini. Badge = jumlah catatan aktif. |
 | Follow-up | Rangkaian follow-up khusus produk ini (`follow_up_rules.property_id`), dikelompokkan per tahap dengan nomor langkah (mis. "Order masuk 1/4"), jadwal, aktif, dan terkirim 30 hari. Form sama dengan follow-up umum, dengan pratinjau pesan yang sudah terisi nama produk. "Salin rangkaian" dari follow-up umum atau dari produk lain; salinan selalu NONAKTIF. |
-| Iklan & promo | Harga coret, teks promo, pengenal iklan. |
+| Iklan & promo | Harga coret, teks promo, pengenal iklan, teks sambutan WhatsApp formulir ([welcome-message.md](welcome-message.md)). |
 
 Detail dan Iklan & promo adalah satu form: Simpan di salah satu tab menyimpan keduanya. Daftar produk menampilkan
 jumlah Pengetahuan dan jumlah Follow-up aktif per produk, keduanya tautan ke tab masing-masing.

@@ -18,6 +18,7 @@ use App\Models\Property;
 use App\Support\CurrentTenant;
 use App\Support\Industry;
 use App\Tracking\PixelEvents;
+use App\Welcome\WelcomeFields;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -121,6 +122,9 @@ class LandingPageResource extends Resource
                                 ->options(fn () => Property::query()->orderBy('name')->pluck('name', 'id'))->searchable()
                                 ->helperText('Lead dari halaman ini otomatis tercatat tertarik pada '.Industry::t('catalog_item').' ini.'),
                         ]),
+                    ]),
+                    Tab::make('Pesan sambutan')->icon(Heroicon::OutlinedChatBubbleLeftRight)->schema([
+                        Section::make('Pesan sambutan WhatsApp')->description('Untuk pembeli yang mengisi formulir di halaman ini.')->schema(WelcomeFields::page()),
                     ]),
                     Tab::make('Tampilan')->icon(Heroicon::OutlinedSwatch)->schema([
                         Section::make('Warna dan huruf')->columns(2)->schema([

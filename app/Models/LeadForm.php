@@ -6,6 +6,7 @@ use App\LeadForms\FormFields;
 use App\LeadForms\FormTemplates;
 use App\Models\Concerns\BelongsToTenant;
 use App\Support\CurrentTenant;
+use App\Welcome\WelcomeSettings;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * A lead form built under "Formulir", shown at /f/{agency}/{slug}, inside landing pages, and in iframes on other
  * sites. The agency's "Formulir utama" (is_primary) is also what the older /f/{capture_token} link shows.
  */
-#[Fillable(['name', 'slug', 'is_primary', 'status', 'template', 'design', 'fields', 'submit', 'after_submit', 'buttons', 'page_events', 'property_id'])]
+#[Fillable(['name', 'slug', 'is_primary', 'status', 'template', 'design', 'fields', 'submit', 'after_submit', 'buttons', 'page_events', 'property_id', 'welcome'])]
 class LeadForm extends Model
 {
     use BelongsToTenant;
@@ -22,6 +23,14 @@ class LeadForm extends Model
     public const BACKGROUNDS = ['white' => 'Putih', 'soft' => 'Abu-abu muda', 'tint' => 'Warna utama lembut', 'brand' => 'Warna utama', 'dark' => 'Gelap'];
 
     public const AFTER = ['message' => 'Tampilkan pesan', 'redirect' => 'Arahkan ke halaman terima kasih', 'whatsapp' => 'Buka WhatsApp dengan pesan otomatis'];
+
+    protected static function booted(): void
+    {
+        // A new form starts with the WhatsApp welcome on for a shop (forms made before it existed stay off).
+        static::creating(function (LeadForm $form) {
+            $form->welcome ??= WelcomeSettings::newForm(Tenant::query()->find($form->tenant_id));
+        });
+    }
 
     protected function casts(): array
     {
@@ -33,6 +42,7 @@ class LeadForm extends Model
             'after_submit' => 'array',
             'buttons' => 'array',
             'page_events' => 'array',
+            'welcome' => 'array',
         ];
     }
 
