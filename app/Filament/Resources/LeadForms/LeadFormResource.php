@@ -97,6 +97,9 @@ class LeadFormResource extends Resource
                         self::nameField(),
                         self::slugField(),
                         Select::make('status')->label('Status')->options(['active' => 'Aktif (bisa diisi)', 'inactive' => 'Nonaktif'])->default('active')->required()->native(false),
+                        Select::make('property_id')->label(ucfirst(Industry::t('catalog_item')).' formulir ini (opsional)')->columnSpanFull()
+                            ->relationship('property', 'name')->searchable()->preload()->placeholder('Tidak ada / dari jawaban pembeli')
+                            ->helperText('Lead dari formulir ini langsung tercatat menanyakan '.Industry::t('catalog_item').' ini, sehingga AI dan follow-up '.Industry::t('catalog_item').' itu yang dipakai. Bila formulir punya kolom "'.FormFields::MAPS['product'].'", jawaban pembeli yang cocok dengan nama '.Industry::t('catalog_item').' didahulukan.'),
                     ]),
                     Section::make('Tampilan')->collapsible()->columns(['default' => 1, 'sm' => 2])->schema([
                         TextInput::make('design.title')->label('Judul')->required()->maxLength(120)->columnSpanFull(),

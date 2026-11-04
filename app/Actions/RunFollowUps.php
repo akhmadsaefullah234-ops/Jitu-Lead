@@ -5,6 +5,8 @@ namespace App\Actions;
 use App\Billing\PlanLimits;
 use App\Enums\MessageStatus;
 use App\Enums\Role;
+use App\FollowUps\AskProduct;
+use App\FollowUps\GeneralFollowUps;
 use App\Models\FollowUpLog;
 use App\Models\FollowUpRule;
 use App\Models\Lead;
@@ -16,6 +18,7 @@ use App\WhatsApp\RouteKind;
 use App\WhatsApp\RouteSelector;
 use App\WhatsApp\TemplateRenderer;
 use App\WhatsApp\WhatsAppException;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
@@ -27,7 +30,10 @@ use Illuminate\Support\Collection;
  * rules for its stage gets only that product's sequence; every other lead gets
  * the general one (rules without a product), never both. A lead whose product
  * changes mid-sequence picks up the new sequence from where it is: a step at or
- * before one already sent (or skipped) in this stage is not sent. It stays quiet when the lead has written
+ * before one already sent (or skipped) in this stage is not sent. When the
+ * general follow-ups are not used (App\FollowUps\GeneralFollowUps, e.g. a
+ * shop with many products), they are skipped and a lead without a product
+ * gets the one "Tanya produk" message (App\FollowUps\AskProduct) instead. It stays quiet when the lead has written
  * back since or when only a paid Meta template could carry the message; those
  * leads are looked at again on the next run until the catch-up window closes.
  */
@@ -60,7 +66,21 @@ class RunFollowUps
             $touched = [];
             $timezone = $tenant->timezone ?: config('app.timezone');
 
-            $rules = FollowUpRule::query()->where('active', true)->orderBy('delay_days')->orderBy('send_time')->get();
+            // A shop with many products follows up per product; the general rules are then skipped (not changed)
+            // and leads without a product get the one "Tanya produk" message instead.
+            $general = GeneralFollowUps::for($tenant)->applies();
+
+            if (! $general) {
+                AskProduct::rule();
+            }
+
+            $rules = FollowUpRule::query()->where('active', true)
+                ->when(
+                    $general,
+                    fn (Builder $q) => $q->where(fn ($q) => $q->whereNull('kind')->orWhere('kind', '!=', AskProduct::KIND)),
+                    fn (Builder $q) => $q->where(fn ($q) => $q->whereNotNull('property_id')->orWhere('kind', AskProduct::KIND)),
+                )
+                ->orderBy('delay_days')->orderBy('send_time')->get();
 
             foreach ($rules as $rule) {
                 foreach ($this->due($rule, $timezone) as $lead) {
@@ -96,6 +116,11 @@ class RunFollowUps
             ->open()
             ->whereNotNull('phone')
             ->when($rule->stage_id, fn (Builder $q) => $q->where('stage_id', $rule->stage_id))
+            // "Tanya produk": once per lead, only while it has no product.
+            ->when($rule->kind === AskProduct::KIND, fn (Builder $q) => $q->whereNull('property_id')
+                ->whereNotExists(fn ($sent) => $sent->selectRaw('1')->from('follow_up_logs')
+                    ->whereColumn('follow_up_logs.lead_id', 'leads.id')
+                    ->where('follow_up_logs.follow_up_rule_id', $rule->getKey())))
             ->when(
                 $rule->property_id,
                 fn (Builder $q) => $q->where('property_id', $rule->property_id),
@@ -137,7 +162,7 @@ class RunFollowUps
     {
         $conversation = WaConversation::query()->firstOrCreate(['lead_id' => $lead->getKey()], ['phone' => $lead->phone]);
 
-        if ($conversation->last_inbound_at !== null && $conversation->last_inbound_at->greaterThan($lead->stageEnteredAt())) {
+        if ($conversation->last_inbound_at !== null && $conversation->last_inbound_at->greaterThan($this->quietSince($lead))) {
             return $this->log($rule, $lead, 'skipped', 'Lead sudah membalas');
         }
 
@@ -153,6 +178,13 @@ class RunFollowUps
             return null;
         }
 
+        // The products a "Tanya produk" list shows, kept in its order so a reply "2" maps to the second.
+        $listed = str_contains($rule->body, '{daftar_produk}') ? AskProduct::products()->modelKeys() : null;
+
+        if ($listed === []) {
+            return $this->log($rule, $lead, 'skipped', 'Belum ada produk aktif untuk ditawarkan');
+        }
+
         $text = $this->renderer->render($rule->body, $lead, $actor, $tenant->name)['text'];
         $message = ($this->send)($conversation, $actor, $text);
 
@@ -160,7 +192,23 @@ class RunFollowUps
             return $this->log($rule, $lead, 'failed', (string) $message->error);
         }
 
-        return $this->log($rule, $lead, 'sent', $rule->name.$this->attach($rule, $conversation, $actor));
+        return $this->log($rule, $lead, 'sent', $rule->name.$this->attach($rule, $conversation, $actor), $listed);
+    }
+
+    /**
+     * Since when a reply from the lead stops its follow-ups: entering the stage, or, for a lead that picked its
+     * product by answering "Tanya produk" with a number, that answer (it starts the product's sequence).
+     */
+    private function quietSince(Lead $lead): CarbonInterface
+    {
+        $since = $lead->stageEnteredAt();
+
+        if ($lead->product_source === 'ask_reply') {
+            $picked = $lead->activities()->reorder()->where('meta->product_source', 'ask_reply')->latest('id')->value('created_at');
+            $since = $picked !== null && $picked->greaterThan($since) ? $picked : $since;
+        }
+
+        return $since;
     }
 
     /** The rule's library item follows the text. A problem with it never undoes the message already sent. */
@@ -186,9 +234,11 @@ class RunFollowUps
         return $lead->owner ?? $tenant->activeUsers()->wherePivot('role', Role::Admin->value)->first();
     }
 
-    private function log(FollowUpRule $rule, Lead $lead, string $status, ?string $note): string
+    /** @param  list<int>|null  $productIds  what a "Tanya produk" message listed, in order */
+    private function log(FollowUpRule $rule, Lead $lead, string $status, ?string $note, ?array $productIds = null): string
     {
         FollowUpLog::query()->create([
+            'product_ids' => $productIds,
             'follow_up_rule_id' => $rule->getKey(),
             'lead_id' => $lead->getKey(),
             'stage_id' => $lead->stage_id,

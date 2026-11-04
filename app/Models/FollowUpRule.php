@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['name', 'stage_id', 'property_id', 'delay_days', 'send_time', 'body', 'active', 'media_asset_id'])]
+#[Fillable(['name', 'stage_id', 'property_id', 'kind', 'delay_days', 'send_time', 'body', 'active', 'media_asset_id'])]
 class FollowUpRule extends Model
 {
     use BelongsToTenant;

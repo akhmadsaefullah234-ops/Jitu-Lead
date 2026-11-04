@@ -8,12 +8,13 @@ use App\Models\Concerns\BelongsToTenant;
 use App\Support\CurrentTenant;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * A lead form built under "Formulir", shown at /f/{agency}/{slug}, inside landing pages, and in iframes on other
  * sites. The agency's "Formulir utama" (is_primary) is also what the older /f/{capture_token} link shows.
  */
-#[Fillable(['name', 'slug', 'is_primary', 'status', 'template', 'design', 'fields', 'submit', 'after_submit', 'buttons', 'page_events'])]
+#[Fillable(['name', 'slug', 'is_primary', 'status', 'template', 'design', 'fields', 'submit', 'after_submit', 'buttons', 'page_events', 'property_id'])]
 class LeadForm extends Model
 {
     use BelongsToTenant;
@@ -33,6 +34,12 @@ class LeadForm extends Model
             'buttons' => 'array',
             'page_events' => 'array',
         ];
+    }
+
+    /** The product every lead from this form asks about; none = taken from an answer, if any. */
+    public function property(): BelongsTo
+    {
+        return $this->belongsTo(Property::class);
     }
 
     public function isActive(): bool
