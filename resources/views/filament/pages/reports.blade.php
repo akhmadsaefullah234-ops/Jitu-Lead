@@ -3,8 +3,6 @@
         @include('billing.locked', ['reason' => $this->lockedReason()])
     @else
     <style>
-        .rp-period { padding: .75rem 1rem; border: 1px solid var(--gray-200); border-radius: .75rem; background: #fff; }
-        .dark .rp-period { background: var(--gray-900); border-color: var(--gray-700); }
         .rp-kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: .75rem; }
         @media (min-width: 1024px) { .rp-kpis { grid-template-columns: repeat(4, 1fr); } }
         .rp-kpi { border: 1px solid var(--gray-200); border-radius: .85rem; padding: 1rem; background: #fff; }

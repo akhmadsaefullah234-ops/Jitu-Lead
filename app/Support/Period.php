@@ -4,9 +4,12 @@ namespace App\Support;
 
 use Carbon\CarbonImmutable;
 use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\ToggleButtons;
+use Filament\Forms\Components\Select;
+use Filament\Schemas\Components\Flex;
 use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Support\Enums\TextSize;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 
@@ -126,10 +129,7 @@ final class Period
     public function label(): string
     {
         if ($this->key === self::CUSTOM || $this->key === 'previous') {
-            $a = $this->localStart();
-            $b = $this->end->setTimezone($this->timezone);
-
-            return $a->isSameDay($b) ? $a->translatedFormat('j M Y') : $a->translatedFormat('j M').' – '.$b->translatedFormat('j M Y');
+            return $this->range();
         }
 
         return self::OPTIONS[$this->key];
@@ -212,22 +212,60 @@ final class Period
         return app(CurrentTenant::class)->get()?->timezone ?: 'Asia/Jakarta';
     }
 
+    /** "4 Nov 2026", or "29 Okt – 4 Nov 2026"; without the year when $year is false. */
+    public function range(bool $year = true): string
+    {
+        $a = $this->localStart();
+        $b = $this->end->setTimezone($this->timezone);
+        $last = $b->translatedFormat($year ? 'j M Y' : 'j M');
+
+        return $a->isSameDay($b) ? $last : $a->translatedFormat('j M').' – '.$last;
+    }
+
     /**
-     * The one picker every page uses: period chips, and two dates for "Kustom". Bound to "periode", "dari" and
-     * "sampai" under $path.
+     * The small grey line under the picker: the dates the choice covers, and with $compare what it is compared
+     * with ("4 Nov 2026 · dibanding 3 Nov").
+     */
+    public static function caption(?string $key, ?string $from, ?string $to, bool $all = false, bool $compare = false): string
+    {
+        if ($key === self::CUSTOM && (blank($from) || blank($to))) {
+            return 'Pilih tanggal dari dan sampai';
+        }
+
+        $period = $all ? self::optional($key, $from, $to) : self::make($key, $from, $to);
+
+        if ($period === null) {
+            return 'Semua tanggal';
+        }
+
+        return $period->range().($compare ? ' · dibanding '.$period->previous()->range(year: false) : '');
+    }
+
+    /**
+     * The one compact picker every page uses: a dropdown with a small line of dates beside it (under it on phones),
+     * and two dates for "Kustom". Bound to "periode", "dari" and "sampai" under $path.
      *
      * @param  bool  $all  offer "Semua waktu" (lists and boards that show everything by default)
+     * @param  ?string  $label  shown above the dropdown (filter forms); null hides it
+     * @param  bool  $compare  name the period the numbers are compared with (Dashboard)
      * @return list<mixed>
      */
-    public static function fields(bool $all = false, string $label = 'Periode'): array
+    public static function fields(bool $all = false, ?string $label = null, bool $compare = false): array
     {
         $custom = fn (Get $get) => $get('periode') === self::CUSTOM;
+        $options = ($all ? [self::ALL => 'Semua waktu'] : []) + array_replace(self::OPTIONS, [self::CUSTOM => 'Kustom…']);
 
         return [
-            ToggleButtons::make('periode')->label($label)->inline()->grouped(false)
-                ->options(($all ? [self::ALL => 'Semua waktu'] : []) + self::OPTIONS)
-                ->default($all ? self::ALL : self::DEFAULT)
-                ->live()->columnSpanFull(),
+            Flex::make([
+                Select::make('periode')->label($label ?? 'Periode')->hiddenLabel($label === null)
+                    ->native()->selectablePlaceholder(false)->options($options)
+                    ->default($all ? self::ALL : self::DEFAULT)->live()
+                    // A filter opened for the first time has no value yet: show the period it actually uses.
+                    ->afterStateHydrated(fn (Select $component, $state) => blank($state) ? $component->state($all ? self::ALL : self::DEFAULT) : null)
+                    ->extraFieldWrapperAttributes(['class' => 'jl-period-select'])->grow(false),
+                Text::make(fn (Get $get) => self::caption($get('periode'), $get('dari'), $get('sampai'), $all, $compare))
+                    ->color('gray')->size(TextSize::Small)->extraAttributes(['class' => 'jl-period-caption']),
+            ])->from('md')->verticallyAlignEnd()->columnSpanFull()->extraAttributes(['class' => 'jl-period-row']),
             Grid::make(['default' => 2])->columnSpanFull()->visible($custom)->schema([
                 DatePicker::make('dari')->label('Dari')->live(onBlur: true)
                     ->maxDate(fn () => now(self::tenantTimezone())->toDateString()),

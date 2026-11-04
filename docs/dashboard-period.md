@@ -1,8 +1,12 @@
 # Periode laporan dan Dasbor
 
-Dasbor, menu Lead, Pipeline, dan Laporan memakai satu pemilih periode yang sama (`App\Support\Period`): tombol chip
-**Hari ini, Kemarin, 7 hari terakhir, 30 hari terakhir, Bulan ini, Bulan lalu, Kustom** (dua tanggal, paling panjang
-366 hari). Lead dan Pipeline juga punya **Semua waktu**.
+Dasbor, menu Lead, Pipeline, dan Laporan memakai satu pemilih periode yang sama (`App\Support\Period::fields()`):
+satu dropdown **Hari ini, Kemarin, 7 hari terakhir, 30 hari terakhir, Bulan ini, Bulan lalu, Kustom…** (penuh di HP,
+±220px di desktop) dengan satu baris kecil abu-abu berisi rentang tanggalnya; di Dasbor ditambah pembandingnya, mis.
+"4 Nov 2026 · dibanding 3 Nov". Tanggal Dari/Sampai (paling panjang 366 hari) muncul hanya saat Kustom dipilih. Lead
+dan Pipeline juga punya **Semua waktu**.
+
+Di Dasbor, pesan "Lengkapi nomor WhatsApp" dan banner tampil paling atas (header widget), di atas pemilih periode.
 
 ## Aturan periode
 
