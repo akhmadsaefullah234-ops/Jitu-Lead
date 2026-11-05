@@ -130,7 +130,7 @@ class ShippingSettingsPage extends Page
                 TextInput::make('sender_phone')->label('Nomor HP pengirim')->tel()->maxLength(20)->required(fn (Get $get) => filled($get('provider'))),
                 Textarea::make('sender_address')->label('Alamat lengkap pengirim')->rows(2)->maxLength(300)->columnSpanFull()->required(fn (Get $get) => filled($get('provider'))),
                 Select::make('origin_id')->label('Lokasi asal (kelurahan)')->columnSpanFull()->searchable()
-                    ->helperText('Ketik kode pos atau nama kelurahan/kecamatan, lalu pilih. Simpan kredensial dulu agar pencarian berjalan.')
+                    ->helperText('Ketik kode pos (paling cepat) atau nama kelurahan/kecamatan, lalu pilih. Simpan kredensial dulu agar pencarian berjalan.')
                     ->getSearchResultsUsing(fn (string $search) => $this->searchLocations($search))
                     ->getOptionLabelUsing(fn ($value) => $this->account()?->setting('origin_id') == $value ? ($this->account()->setting('origin_label') ?: $value) : (cache()->get('carrier-loc-label:'.$value) ?? $value)),
             ]),

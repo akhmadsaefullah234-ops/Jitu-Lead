@@ -14,9 +14,10 @@ final class CarrierLocation
         public readonly ?string $postalCode,
     ) {}
 
+    /** "Sekeloa, Coblong, Kota Bandung, Jawa Barat (40134)" */
     public function label(): string
     {
-        return implode(', ', array_filter([$this->subDistrict, $this->district, $this->city, $this->province, $this->postalCode]));
+        return implode(', ', array_filter([$this->subDistrict, $this->district, $this->city, $this->province])).($this->postalCode ? ' ('.$this->postalCode.')' : '');
     }
 
     public function toArray(): array

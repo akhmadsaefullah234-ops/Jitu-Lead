@@ -23,6 +23,7 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Models\WaChannel;
 use App\Models\WaMessage;
+use App\Shipping\Carriers\CarrierException;
 use App\Shipping\Carriers\Carriers;
 use App\Shipping\Carriers\ShipmentStatus;
 use App\Shipping\Shipments\Shipments;
@@ -34,6 +35,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -76,6 +78,11 @@ class EverproShippingTest extends TestCase
     private bool $noAwb = false;
 
     private ?string $orderError = null;
+
+    private bool $locationDown = false;
+
+    /** The documented answer of GET /balance/v1/detail. */
+    private array $balanceAnswer = ['cash' => 750000, 'name' => 'Quicker Sport'];
 
     protected function setUp(): void
     {
@@ -122,11 +129,17 @@ class EverproShippingTest extends TestCase
         }
 
         return match (true) {
-            $path === '/balance/v1/detail' => $ok(['balance' => 750000]),
-            $path === '/location/v1/postalcode' => $ok([
-                ['sub_district_id' => 'SD-SEKELOA', 'sub_district_name' => 'Sekeloa', 'district_name' => 'Coblong', 'city_name' => 'Kota Bandung', 'province_name' => 'Jawa Barat', 'postal_code' => '40134'],
-                ['sub_district_id' => 'SD-LEBAK', 'sub_district_name' => 'Lebak Gede', 'district_name' => 'Coblong', 'city_name' => 'Kota Bandung', 'province_name' => 'Jawa Barat', 'postal_code' => '40132'],
-            ]),
+            $path === '/balance/v1/detail' => $ok($this->balanceAnswer),
+            $path === '/location/v1/postalcode' => $this->postalCode($r),
+            $path === '/location/v1/sub-districts' && isset($r->data()['district_id']) => $r->data()['district_id'] === 'D-KDW'
+                ? $ok([['sub_district_id' => 'SD-KDW', 'sub_district_name' => 'Kedungwaringin', 'postal_code' => '17540'], ['sub_district_id' => 'SD-KDJ', 'sub_district_name' => 'Karangsambung', 'postal_code' => '17540']])
+                : Http::response(['message' => 'not found', 'data' => []], 404),
+            $path === '/location/v1/sub-districts' => strtolower($r->data()['sub_district_name'] ?? '') === 'sekeloa'
+                ? $ok([['sub_district_id' => 'SD-SEKELOA', 'sub_district_name' => 'Sekeloa', 'postal_code' => '40134']])
+                : Http::response(['message' => 'not found', 'data' => []], 404),
+            $path === '/location/v1/districts' => strtolower($r->data()['district_name'] ?? '') === 'kedungwaringin'
+                ? $ok([['district_id' => 'D-KDW', 'district_name' => 'Kedungwaringin']])
+                : Http::response(['message' => 'not found', 'data' => []], 404),
             $path === '/shipment/v2/rates' => $ok([
                 ['rate_code' => 'JNE_REG', 'logistic_name' => 'JNE', 'rate_name' => 'REG', 'shipment_price' => 18000, 'cod_fee' => ($r->data()['payment_type'] ?? null) === 'COD' ? 3000 : 0, 'min_duration' => 2, 'max_duration' => 3],
                 ['rate_code' => 'SICEPAT_REG', 'logistic_name' => 'SiCepat', 'rate_name' => 'REG', 'shipment_price' => 16000, 'cod_fee' => 0],
@@ -141,6 +154,29 @@ class EverproShippingTest extends TestCase
             $path === '/shipment/v1/orders/track' => $ok(array_shift($this->track) ?? []),
             str_ends_with($path, '/track') => $ok(array_shift($this->track) ?? ['awb_number' => 'JNE0001234', 'status' => 'WAITING', 'tracking_history' => []]),
             default => Http::response(['message' => 'not found'], 404),
+        };
+    }
+
+    /** Like production: only a 5-digit postal code. */
+    private function postalCode(Request $r)
+    {
+        if ($this->locationDown) {
+            return Http::response(['message' => 'internal error'], 500);
+        }
+
+        $code = (string) ($r->data()['postal_code'] ?? '');
+
+        if (! preg_match('/^\d{5}$/', $code)) {
+            return Http::response(['message' => 'PostalCode must be 5 characters in length', 'data' => null], 400);
+        }
+
+        $place = fn ($id, $village, $district, $city, $province) => ['sub_district_id' => $id, 'sub_district_name' => $village, 'district_name' => $district,
+            'city_name' => $city, 'province_name' => $province, 'postal_code' => $code];
+
+        return match ($code) {
+            '40134' => Http::response(['data' => [$place('SD-SEKELOA', 'Sekeloa', 'Coblong', 'Kota Bandung', 'Jawa Barat'), $place('SD-LEBAK', 'Lebak Gede', 'Coblong', 'Kota Bandung', 'Jawa Barat')]]),
+            '17540' => Http::response(['data' => [$place('SD-KDW', 'Kedungwaringin', 'Kedungwaringin', 'Kab. Bekasi', 'Jawa Barat'), $place('SD-KDJ', 'Karangsambung', 'Kedungwaringin', 'Kab. Bekasi', 'Jawa Barat')]]),
+            default => Http::response(['message' => 'not found', 'data' => []], 404),
         };
     }
 
@@ -261,6 +297,118 @@ class EverproShippingTest extends TestCase
 
         Log::shouldNotHaveReceived('warning', fn ($m, $ctx = []) => str_contains(json_encode($ctx), self::SECRET) || str_contains(json_encode($ctx), 'tok-'));
         $this->assertStringNotContainsString(self::SECRET, (string) DB::table('carrier_accounts')->value('credentials'), 'Stored encrypted.');
+    }
+
+    public function test_the_balance_is_read_from_data_cash_and_unknown_answers_log_only_their_keys(): void
+    {
+        Log::spy();
+        $carrier = Carriers::make($this->configure());
+
+        $this->assertSame(750000, $carrier->balance());
+
+        $this->balanceAnswer = ['balance' => 5000];
+        $this->assertSame(5000, $carrier->balance(), 'Other names still work.');
+
+        $this->balanceAnswer = ['wallet' => 99000, 'name' => 'Quicker Sport'];
+        $this->assertNull($carrier->balance());
+        Log::shouldHaveReceived('warning')->withArgs(fn ($m, $ctx) => $m === 'Everpro balance not found in the answer' && $ctx['keys'] === ['wallet', 'name']
+            && ! str_contains(json_encode($ctx), '99000') && ! str_contains(json_encode($ctx), 'Quicker'))->once();
+    }
+
+    // ---- Location search ---------------------------------------------------------------------------------------
+
+    /** @return list<string> labels of the places found */
+    private function find(?string $postal, ?string $area = null): array
+    {
+        return array_map(fn ($l) => $l->label(), Carriers::make(CarrierAccount::query()->withoutGlobalScopes()->firstOrFail())->locations($postal, $area));
+    }
+
+    private function postalCalls(): array
+    {
+        return array_map(fn ($c) => $c['body']['postal_code'] ?? null, $this->callsTo('/location/v1/postalcode'));
+    }
+
+    public function test_a_postal_code_is_looked_up_directly(): void
+    {
+        $this->configure();
+
+        $this->assertSame(['Sekeloa, Coblong, Kota Bandung, Jawa Barat (40134)', 'Lebak Gede, Coblong, Kota Bandung, Jawa Barat (40134)'], $this->find('40134'));
+        $this->find('40134');
+        $this->assertSame(['40134'], $this->postalCalls(), 'Cached after the first answer.');
+    }
+
+    public function test_a_kelurahan_name_is_found_through_everpros_list(): void
+    {
+        $this->configure();
+
+        $this->assertSame(['Sekeloa, Coblong, Kota Bandung, Jawa Barat (40134)'], $this->find(null, 'Sekeloa'));
+        $this->assertSame(['40134'], $this->postalCalls());
+    }
+
+    public function test_a_kecamatan_name_is_found_through_everpros_list_or_the_imported_regions(): void
+    {
+        $this->configure();
+
+        $this->assertSame(['Karangsambung, Kedungwaringin, Kab. Bekasi, Jawa Barat (17540)', 'Kedungwaringin, Kedungwaringin, Kab. Bekasi, Jawa Barat (17540)'], $this->find(null, 'kedungwaringin'));
+
+        // With the regions imported, the postal code comes from them and Everpro's list is not needed.
+        $this->calls = [];
+        Cache::flush();
+        DB::table('regions')->insert([
+            ['code' => '32', 'parent_code' => null, 'level' => 1, 'name' => 'Jawa Barat', 'search' => 'jawa barat', 'postal_code' => null],
+            ['code' => '32.16', 'parent_code' => '32', 'level' => 2, 'name' => 'Kabupaten Bekasi', 'search' => 'bekasi', 'postal_code' => null],
+            ['code' => '32.16.22', 'parent_code' => '32.16', 'level' => 3, 'name' => 'Kedungwaringin', 'search' => 'kedungwaringin', 'postal_code' => null],
+            ['code' => '32.16.22.2001', 'parent_code' => '32.16.22', 'level' => 4, 'name' => 'Karangsambung', 'search' => 'karangsambung', 'postal_code' => '17540'],
+        ]);
+
+        $this->assertCount(2, $this->find(null, 'Kec. Kedungwaringin'));
+        $this->assertSame([], array_merge($this->callsTo('/location/v1/districts'), $this->callsTo('/location/v1/sub-districts')));
+        $this->assertSame(['17540'], $this->postalCalls());
+    }
+
+    public function test_text_that_matches_nothing_finds_nothing_and_postalcode_always_gets_five_digits(): void
+    {
+        $this->configure();
+
+        $this->assertSame([], $this->find(null, 'antah berantah'));
+        $this->assertSame([], $this->find('123'));
+        $this->assertSame([], $this->find(null, 'ab'));
+        $this->assertSame([], $this->postalCalls(), 'Never called without a 5-digit code.');
+
+        // The settings search: name or postal code.
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+        $options = Livewire::test(ShippingSettingsPage::class)->instance()->getSchema('carrierForm')->getFlatFields(withHidden: true)['origin_id'];
+        $this->assertSame(['SD-KDJ', 'SD-KDW'], array_keys($options->getSearchResults('kedungwaringin')));
+        $this->assertSame([], $options->getSearchResults('antah berantah'));
+        Livewire::test(ShippingSettingsPage::class)->assertSee('Ketik kode pos (paling cepat) atau nama kelurahan/kecamatan');
+    }
+
+    public function test_an_everpro_error_is_not_cached_as_an_empty_answer(): void
+    {
+        $this->configure();
+        $this->locationDown = true;
+
+        try {
+            $this->find('40134');
+            $this->fail('The error reaches the caller.');
+        } catch (CarrierException $e) {
+            $this->assertStringContainsString('Everpro sedang tidak bisa memproses', $e->getMessage());
+        }
+
+        $this->locationDown = false;
+        $this->assertCount(2, $this->find('40134'), 'Asked again, not an empty answer from the cache.');
+    }
+
+    public function test_buat_resi_maps_an_address_without_postal_code_by_its_names(): void
+    {
+        $this->configure();
+        $lead = $this->order('cod', '6281234567890', ['shipping_address_parts' => ['street' => 'Jl. Mawar', 'kelurahan' => 'Sekeloa', 'kecamatan' => 'Coblong', 'kota' => 'Kota Bandung']]);
+
+        $draft = $this->inShop(fn () => app(Shipments::class)->draft($lead));
+
+        $this->assertTrue($draft->ok(), implode(' ', $draft->problems));
+        $this->assertSame('SD-SEKELOA', $draft->destination->id);
+        $this->assertNotContains(null, $this->postalCalls());
     }
 
     // ---- Preview and booking -----------------------------------------------------------------------------------
