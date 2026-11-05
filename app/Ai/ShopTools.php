@@ -180,6 +180,12 @@ class ShopTools
         return preg_match($house, preg_replace('/\b\d{5}\b/', ' ', $rest)) ? null : 'Tanyakan nomor rumah atau patokan alamat kirim.';
     }
 
+    /** Drops the orders of an answer that was not used, before the model is asked again. */
+    public function forget(): void
+    {
+        $this->orders = [];
+    }
+
     /** @return list<array{name: string, input: array, result: array}> the orders the AI recorded in this answer */
     public function orders(): array
     {
@@ -200,7 +206,7 @@ class ShopTools
             'Untuk ongkir WAJIB memanggil tool '.self::CHECK.'. Jangan menghitung, menjumlahkan, mengalikan, atau menebak ongkir maupun total sendiri. Sebut hanya angka yang tertulis di hasil tool, apa adanya.',
             'Bila kota/kabupaten tujuan belum jelas, tanyakan kota atau kecamatannya dulu, jangan memanggil tool.',
             'Bila pembeli menulis singkatan atau nama tidak resmi (mis. Jaksel, Tangsel, Kab Bdg, Jogja), sebut tujuannya dengan nama resmi persis seperti kolom "tujuan" di hasil '.self::CHECK.', dan pakai nama resmi itu di alamat pesanan.',
-            'Bila hasil tool berstatus '.ShippingQuote::NEEDS_ADMIN.' atau '.ShippingQuote::NOT_AVAILABLE.', balas hanya dengan kata HANDOFF.',
+            'Bila hasil tool berstatus '.ShippingQuote::NEEDS_ADMIN.' atau '.ShippingQuote::NOT_AVAILABLE.', panggil tool '.ReplySignals::HANDOFF_TOOL.'.',
             'Begitu data pesanan lengkap (nama penerima, alamat dengan RT/RW dan nomor rumah atau patokan, kota, produk, warna/ukuran, jumlah) tapi pembeli belum konfirmasi, panggil '.self::RECORD.' dengan status draft, lalu rangkum pesanannya dan minta pembeli konfirmasi, pilih kurir, dan cara bayar (transfer atau COD).',
             'Setelah pembeli memastikan pesanan, kurir, dan cara bayar, panggil '.self::RECORD.' dengan status konfirmasi dan pembayaran transfer atau cod, lalu sampaikan total dari hasil tool. Untuk transfer minta pembeli membayar; untuk COD sampaikan pesanan segera dikemas.',
             'Jangan pernah menyatakan pembayaran sudah diterima, sudah masuk, atau lunas. Bila pembeli mengirim atau menyebut bukti transfer, katakan admin akan mengeceknya dulu.',

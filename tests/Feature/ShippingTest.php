@@ -237,7 +237,7 @@ class ShippingTest extends TestCase
         $this->assertStringContainsString('Rp 28.000', $this->sent()[0]);
 
         Http::assertSent(fn (Request $r) => str_contains($r->url(), 'anthropic')
-            && collect($r['tools'] ?? [])->pluck('name')->all() === ['cek_ongkir', 'catat_pesanan']
+            && collect($r['tools'] ?? [])->pluck('name')->all() === ['cek_ongkir', 'catat_pesanan', 'serahkan_ke_admin', 'tanpa_balasan']
             && str_contains($r['system'], 'WAJIB memanggil tool cek_ongkir')
             && str_contains($r['system'], $this->kaos->id.' | Kaos Lari | Rp 89.000 | 300 g'));
 
@@ -365,14 +365,15 @@ class ShippingTest extends TestCase
         $this->assertTrue(ShopTools::inventsShippingCost('Ongkir 15rb, Kak.', [], 'Kaos Lari | Rp 89.000'));
     }
 
-    public function test_agencies_without_shipping_get_no_tools(): void
+    public function test_agencies_without_shipping_get_no_shipping_tools(): void
     {
         $this->shop->forceFill(['shipping' => null])->save();
         $channel = $this->channel(AiMode::Draft);
 
         $this->inbound($channel, 'Halo kak');
 
-        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'anthropic') && ! isset($r['tools']));
+        // Only the signals: handing the chat to a person, or no reply needed.
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'anthropic') && collect($r['tools'])->pluck('name')->all() === ['serahkan_ke_admin', 'tanpa_balasan']);
     }
 
     // The inbox and the settings

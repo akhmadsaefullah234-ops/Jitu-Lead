@@ -39,9 +39,11 @@ class AnthropicClient
      * @param  list<array{role: 'user'|'assistant', content: string|array}>  $messages
      * @param  list<array{name: string, description: string, input_schema: array}>  $tools
      * @param  callable(string, array): array  $run
+     * @param  list<string>  $stopTools  tools that end the answer at once (e.g. handing the chat to a person): their
+     *                                   call is returned with no result and no text, and the model is not asked again
      * @return array{text: string, calls: list<array{name: string, input: array, result: array}>}
      */
-    public function converse(string $system, array $messages, array $tools, callable $run, int $maxTokens = 1024, int $maxRounds = 4): array
+    public function converse(string $system, array $messages, array $tools, callable $run, int $maxTokens = 1024, int $maxRounds = 4, array $stopTools = []): array
     {
         $calls = [];
 
@@ -51,6 +53,14 @@ class AnthropicClient
 
             if ($stop !== 'tool_use') {
                 return ['text' => in_array($stop, ['max_tokens', 'refusal'], true) ? '' : $this->text($response), 'calls' => $calls];
+            }
+
+            foreach ($response['content'] as $block) {
+                if (($block['type'] ?? null) === 'tool_use' && in_array($block['name'] ?? null, $stopTools, true)) {
+                    $calls[] = ['name' => (string) $block['name'], 'input' => is_array($block['input'] ?? null) ? $block['input'] : [], 'result' => []];
+
+                    return ['text' => '', 'calls' => $calls];
+                }
             }
 
             // The assistant turn goes back exactly as it came; every result answers it in one user turn.
