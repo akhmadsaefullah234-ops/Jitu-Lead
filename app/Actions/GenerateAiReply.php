@@ -5,6 +5,7 @@ namespace App\Actions;
 use App\Ai\AnthropicClient;
 use App\Ai\HandoffRules;
 use App\Ai\KnowledgeBase;
+use App\Ai\PackageStatus;
 use App\Ai\ProductContext;
 use App\Ai\ShopTools;
 use App\Ai\VoiceNoteTranscript;
@@ -110,11 +111,22 @@ class GenerateAiReply
             return PlanLimits::for($tenant)->readOnly() ? null : $this->handoffTo($inbound, $denied);
         }
 
+        // "Paketnya sampai mana?": only from the parcel data we hold; without any, a person answers.
+        $package = null;
+
+        if ($tenant->industry()->key === 'retail' && $conversation->lead !== null && PackageStatus::asks($text)) {
+            $package = PackageStatus::context($conversation->lead);
+
+            if ($package === null) {
+                return $this->handoffTo($inbound, 'Pembeli menanyakan posisi paket, tapi belum ada resi atau data pengiriman');
+            }
+        }
+
         $library = MediaAsset::query()->where('active', true)->with('folder')->orderBy('id')->limit(self::MAX_LIBRARY_ITEMS)->get();
         $shop = ShopTools::for($tenant);
         $products = new ProductContext($conversation->lead);
         $system = $this->system($tenant->name, $tenant->industry()->term('business'), $tenant->ai_instructions, $text, $library, $shop,
-            $tenant->industry()->key === 'retail' ? $conversation->lead : null, $products);
+            $tenant->industry()->key === 'retail' ? $conversation->lead : null, $products, $package);
         $history = $this->history($conversation);
         $calls = [];
 
@@ -136,6 +148,10 @@ class GenerateAiReply
 
         if ($answer === '' || str_starts_with(strtoupper($answer), self::HANDOFF)) {
             return $this->handoffTo($inbound, 'Di luar pengetahuan AI, atau jawabannya tidak bisa dipercaya (terpotong atau ditolak)', true);
+        }
+
+        if ($package !== null && PackageStatus::invents($answer, $package)) {
+            return $this->handoffTo($inbound, 'AI hampir menyebut perkiraan sampai yang tidak ada di data kurir', true);
         }
 
         // A shop's AI only quotes shipping costs and totals its tools returned; anything else goes to a person.
@@ -422,7 +438,7 @@ class GenerateAiReply
     }
 
     /** @param  Collection<int, MediaAsset>  $library */
-    private function system(string $agency, string $business, ?string $instructions, string $question, Collection $library, ?ShopTools $shop = null, ?Lead $lead = null, ?ProductContext $products = null): string
+    private function system(string $agency, string $business, ?string $instructions, string $question, Collection $library, ?ShopTools $shop = null, ?Lead $lead = null, ?ProductContext $products = null, ?string $package = null): string
     {
         // Only the knowledge for every product plus the one this chat is about, so products never mix.
         $context = $this->knowledge->context($question, $products?->product()?->getKey());
@@ -436,6 +452,7 @@ class GenerateAiReply
             $instructions ? "Arahan dari agensi:\n".mb_substr($instructions, 0, 2000) : null,
             $shop?->instructions(),
             $products?->instructions(),
+            $package,
             $lead && self::paymentNotAsked($lead) ? self::PAYMENT_NOT_ASKED : null,
             "PENGETAHUAN:\n".($context !== '' ? $context : '(kosong)'),
             $files !== '' ? "LAMPIRAN yang boleh dikirim (id | judul | folder | kapan dipakai):\n{$files}\nJika klien jelas membutuhkan salah satunya (misalnya menanyakan harga lalu price list ada), tambahkan di baris terakhir jawabanmu, setelah teks balasan: LAMPIRAN: <id>. Maksimal dua id dipisah koma. Jangan menulis id selain yang ada di daftar. Jika tidak perlu, jangan tulis baris itu." : null,

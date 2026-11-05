@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Webhooks\IpaymuNotifyController;
 use App\Http\Controllers\Webhooks\LeadCaptureController;
+use App\Http\Controllers\Webhooks\ShippingCallbackController;
 use App\Http\Controllers\Webhooks\WhatsAppWebhookController;
 use Illuminate\Support\Facades\Route;
 
@@ -22,3 +23,8 @@ Route::middleware('throttle:capture')->prefix('capture')->group(function () {
 
 // iPaymu payment notification: no session or CSRF token, authenticated by its signature and a second check with iPaymu.
 Route::post('billing/ipaymu/notify', IpaymuNotifyController::class)->middleware('throttle:ipaymu-notify')->name('billing.ipaymu.notify');
+
+// Courier aggregators (Everpro): tracking number issued and parcel status changes. The token is the agency's
+// own (Pengaturan > Pengiriman); the provider's key header is checked against that agency's callback key.
+Route::middleware('throttle:webhooks')->post('webhooks/shipping/{provider}/{token}', ShippingCallbackController::class)
+    ->where(['provider' => '[a-z]+', 'token' => '[A-Za-z0-9]{20,64}'])->name('webhooks.shipping');

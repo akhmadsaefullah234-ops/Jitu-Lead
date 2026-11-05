@@ -7,8 +7,11 @@ use App\Catalog\ProductMatcher;
 use App\Enums\Interest;
 use App\Enums\Need;
 use App\Enums\PaymentMethod;
+use App\Filament\Support\ShipmentActions;
+use App\Filament\Support\ShipmentTimeline;
 use App\LeadForms\FormFields;
 use App\Models\Lead;
+use App\Models\Shipment;
 use App\Support\CurrentTenant;
 use App\Support\Industry;
 use Filament\Forms\Components\DateTimePicker;
@@ -131,6 +134,10 @@ class LeadForm
                                 ->map(fn (string $label, string $part) => filled($record?->shipping_address_parts[$part] ?? null) ? $label.': '.$record->shipping_address_parts[$part] : null)
                                 ->filter()->implode(' · ')),
                     ])),
+                Section::make('Perjalanan paket')
+                    ->columnSpanFull()->collapsible()
+                    ->visible(fn (?Lead $record) => $record !== null && ShipmentActions::available() && Shipment::query()->where('lead_id', $record->getKey())->exists())
+                    ->schema([Placeholder::make('shipment_timeline')->hiddenLabel()->content(fn (?Lead $record) => ShipmentTimeline::html($record ? Shipment::latestFor($record) ?? Shipment::query()->where('lead_id', $record->getKey())->latest('id')->first() : null))]),
                 Section::make('Iklan asal')
                     ->description('Iklan Click-to-WhatsApp yang membawa lead ini ke chat.')
                     ->columnSpanFull()->collapsible()->columns(2)

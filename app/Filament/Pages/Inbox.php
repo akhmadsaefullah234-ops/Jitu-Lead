@@ -12,15 +12,18 @@ use App\Catalog\ProductMatcher;
 use App\Enums\MessageStatus;
 use App\Filament\Resources\Leads\LeadResource;
 use App\Filament\Resources\MediaAssets\MediaAssetResource;
+use App\Filament\Support\ShipmentActions;
 use App\Media\Library;
 use App\Models\AiDraft;
 use App\Models\Lead;
 use App\Models\MediaAsset;
 use App\Models\MediaFolder;
 use App\Models\Property;
+use App\Models\Shipment;
 use App\Models\WaConversation;
 use App\Models\WaTemplate;
 use App\Regions\RegionDirectory;
+use App\Shipping\Carriers\ShipmentStatus;
 use App\Shipping\Regions;
 use App\Shipping\Shipping;
 use App\Shipping\ShippingQuote;
@@ -117,9 +120,16 @@ class Inbox extends Page
 
         $decision = $conversation ? app(RouteSelector::class)->decide($conversation) : null;
 
+        $conversations = static::visibleConversations()->with(['lead:id,name,phone,owner_id,property_id', 'lead.owner:id,name', 'lead.property:id,name', 'latestMessage'])->orderByDesc('last_message_at')->limit(100)->get();
+
         return [
             'seesAll' => app(CurrentTenant::class)->roleOf(auth()->user())?->seesAllLeads() ?? false,
-            'conversations' => static::visibleConversations()->with(['lead:id,name,phone,owner_id,property_id', 'lead.owner:id,name', 'lead.property:id,name', 'latestMessage'])->orderByDesc('last_message_at')->limit(100)->get(),
+            'conversations' => $conversations,
+            // A parcel the courier could not deliver: a red "Perlu tindakan" on the chat.
+            'needsAction' => ShipmentActions::available()
+                ? Shipment::query()->whereIn('lead_id', $conversations->pluck('lead_id')->push($conversation?->lead_id)->filter())
+                    ->where('status', ShipmentStatus::DELIVERY_FAILED)->whereNull('final_at')->pluck('lead_id')->flip()->all()
+                : [],
             'conversation' => $conversation?->load(['lead.stage', 'lead.owner', 'lead.property', 'messages.channel']),
             'decision' => $decision,
             'aiMode' => $conversation?->lastInboundChannel?->ai_mode,
@@ -405,6 +415,26 @@ class Inbox extends Page
                 $result = app(StageAutomation::class)->shipped($this->current()->lead, $data['courier'], $data['tracking_number'], auth()->user());
                 Notification::make()->title($result)->{str_contains($result, 'belum') || str_contains($result, 'gagal') ? 'warning' : 'success'}()->send();
             });
+    }
+
+    public function createShipmentAction(): Action
+    {
+        return ShipmentActions::create(fn () => $this->current()?->lead)->size('sm');
+    }
+
+    public function trackShipmentAction(): Action
+    {
+        return ShipmentActions::track(fn () => $this->current()?->lead)->size('sm');
+    }
+
+    public function shipmentLabelAction(): Action
+    {
+        return ShipmentActions::label(fn () => $this->current()?->lead)->size('sm');
+    }
+
+    public function cancelShipmentAction(): Action
+    {
+        return ShipmentActions::cancel(fn () => $this->current()?->lead)->size('sm');
     }
 
     /** Only reachable when the free windows are closed and no gateway is connected. */
