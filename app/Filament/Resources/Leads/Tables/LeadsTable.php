@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Leads\Tables;
 use App\Actions\ReassignLead;
 use App\Enums\Interest;
 use App\Filament\Resources\Leads\Schemas\LeadForm;
+use App\Filament\Support\ShipmentActions;
 use App\Models\Lead;
 use App\Models\Property;
 use App\Models\Stage;
@@ -177,6 +178,8 @@ class LeadsTable
                         ->requiresConfirmation()
                         ->deselectRecordsAfterCompletion()
                         ->action(fn (Collection $records) => self::move($records, null)),
+                    ShipmentActions::bulkCreate(),
+                    ShipmentActions::bulkLabels(),
                     DeleteBulkAction::make(),
                     ForceDeleteBulkAction::make(),
                     RestoreBulkAction::make(),

@@ -139,14 +139,19 @@ class SendWhatsAppMessage
     {
         $conversation->forceFill(['last_message_at' => $message->sent_at, 'unread_count' => 0])->save();
 
-        $what = $this->origin === 'welcome' ? 'Pesan sambutan WhatsApp' : 'Chat WhatsApp';
+        $what = match ($this->origin) {
+            'welcome' => 'Pesan sambutan WhatsApp',
+            'shipping' => 'Pesan status kiriman',
+            default => 'Chat WhatsApp',
+        };
+        $automatic = in_array($this->origin, ['welcome', 'shipping'], true);
 
         $conversation->lead->activities()->create([
             // An automatic welcome is not the owner answering, so it never counts as the lead being attended to.
-            'user_id' => $this->origin === 'welcome' ? null : $actor->getKey(),
+            'user_id' => $automatic ? null : $actor->getKey(),
             'type' => 'whatsapp_out',
             'body' => $message->status === MessageStatus::Failed
-                ? $what.' gagal terkirim'.($this->origin === 'welcome' && filled($message->error) ? ': '.$message->error : '')
+                ? $what.' gagal terkirim'.($automatic && filled($message->error) ? ': '.$message->error : '')
                 : $what.' terkirim lewat '.($message->channel?->isOfficial() ? 'nomor resmi' : 'gateway'),
             'meta' => ['message_id' => $message->getKey(), 'paid' => $message->is_paid],
         ]);
@@ -187,8 +192,8 @@ class SendWhatsAppMessage
             $provider = $this->providers->for($channel);
 
             // A number that has never written to this client first introduces the agency; a form welcome is itself
-            // the introduction, so it goes alone (two messages, the first maybe about another product, put buyers off).
-            $needsIntro = $decision->kind === RouteKind::FollowUpGateway && $this->origin !== 'welcome'
+            // the introduction, and a parcel status is about an order the buyer placed, so both go alone (two messages, the first maybe about another product, put buyers off).
+            $needsIntro = $decision->kind === RouteKind::FollowUpGateway && ! in_array($this->origin, ['welcome', 'shipping'], true)
                 && ! $conversation->messages()->where('channel_id', $channel->getKey())->exists();
 
             if ($needsIntro) {

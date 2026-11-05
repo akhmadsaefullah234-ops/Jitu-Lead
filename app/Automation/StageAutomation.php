@@ -217,6 +217,21 @@ class StageAutomation
         return str_replace('{resi}', rawurlencode($trackingNumber), $url);
     }
 
+    /**
+     * The courier says the parcel was received (App\Shipping\Shipments): straight to Selesai, with the usual
+     * effects of that stage (conversion events, labels, review follow-ups). Under the "delivered" rule.
+     */
+    public function parcelDelivered(Lead $lead): ?string
+    {
+        if (! $this->on('delivered')) {
+            return null;
+        }
+
+        $this->stages = null;
+
+        return $this->moveTo($lead, RetailStages::DONE, 'paket diterima pembeli (status kurir)', $this->doneDetails($lead)) ? $this->stages()->stage(RetailStages::DONE)?->name : null;
+    }
+
     // ---- Rules 5 and 6: the scheduled run ------------------------------------------------------------------
 
     /** @return array{done: int, no_reply: int, no_payment: int} */
