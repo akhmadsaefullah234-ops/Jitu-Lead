@@ -186,8 +186,9 @@ class SendWhatsAppMessage
         foreach ($candidates as $channel) {
             $provider = $this->providers->for($channel);
 
-            // A number that has never written to this client first introduces the agency.
-            $needsIntro = $decision->kind === RouteKind::FollowUpGateway
+            // A number that has never written to this client first introduces the agency; a form welcome is itself
+            // the introduction, so it goes alone (two messages, the first maybe about another product, put buyers off).
+            $needsIntro = $decision->kind === RouteKind::FollowUpGateway && $this->origin !== 'welcome'
                 && ! $conversation->messages()->where('channel_id', $channel->getKey())->exists();
 
             if ($needsIntro) {

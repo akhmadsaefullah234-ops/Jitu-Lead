@@ -22,7 +22,7 @@ final class WelcomeSettings
 
     public const PAGE_MODES = ['form' => 'Ikuti pengaturan formulir', 'custom' => 'Pakai teks khusus halaman ini', 'off' => 'Matikan di halaman ini'];
 
-    public const VARIABLES = '{nama}, {produk}, {agensi}, {agen}, {ringkasan}, {total}';
+    public const VARIABLES = '{nama}, {produk}, {agensi}, {agen}, {ringkasan}, {total}, {whatsapp}, {alamat}, {varian}, {warna}, {jumlah}, {ongkir}, {kurir}, {jawaban:kunci}';
 
     public const RETAIL_TEXT = 'Halo kak {nama} 😊 Terima kasih sudah mengisi pesanan {produk} di {agensi}. Ini ringkasannya ya kak: {ringkasan}. Mohon dicek, kalau sudah sesuai balas *OK* ya kak, pesanan langsung kami proses 🙏';
 
