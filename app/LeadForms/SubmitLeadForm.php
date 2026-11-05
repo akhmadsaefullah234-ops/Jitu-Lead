@@ -104,7 +104,7 @@ class SubmitLeadForm
 
         // The WhatsApp welcome, after the form's delay, even when the buyer never opens the chat.
         try {
-            app(WelcomeSender::class)->schedule($form, $page, $lead, $created, $result['vars']['ringkasan'] ?? null);
+            app(WelcomeSender::class)->schedule($form, $page, $lead, $created, $result['vars']['ringkasan'] ?? null, collect($result['answers'])->pluck('value', 'key')->all());
         } catch (Throwable $e) {
             report($e);
         }

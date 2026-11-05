@@ -149,7 +149,7 @@ class WelcomeMessageTest extends TestCase
         ]), $body)->assertOk();
     }
 
-    public function test_an_active_form_sends_the_welcome_after_its_delay_on_the_gateway_with_the_intro_first(): void
+    public function test_an_active_form_sends_the_welcome_after_its_delay_on_the_gateway_without_a_number_intro(): void
     {
         $this->form();
         $lead = $this->submit();
@@ -161,20 +161,22 @@ class WelcomeMessageTest extends TestCase
         $this->at('2026-10-12 10:16:00');
         $messages = $this->messages($lead);
 
-        $this->assertCount(2, $messages);
-        $this->assertTrue($messages[0]->is_intro, 'a gateway number that never wrote to the buyer introduces the agency first');
-        $this->assertSame('welcome', $messages[1]->origin);
-        $this->assertSame(MessageStatus::Sent, $messages[1]->status);
-        $this->assertSame($this->gw->getKey(), $messages[1]->channel_id);
+        // The welcome is the introduction: a new number sends exactly one message, never the number intro first.
+        $this->assertCount(1, $messages);
+        $this->assertCount(1, $this->outbox);
+        $this->assertFalse($messages[0]->is_intro);
+        $this->assertSame('welcome', $messages[0]->origin);
+        $this->assertSame(MessageStatus::Sent, $messages[0]->status);
+        $this->assertSame($this->gw->getKey(), $messages[0]->channel_id);
         $this->assertSame(
             'Halo kak Rina 😊 Terima kasih sudah mengisi pesanan Tas Badminton di Quicker Sport. Ini ringkasannya ya kak: Tas Badminton (Hitam) x2. Mohon dicek, kalau sudah sesuai balas *OK* ya kak, pesanan langsung kami proses 🙏',
-            $messages[1]->body,
+            $messages[0]->body,
         );
         $this->assertSame(WelcomeMessage::SENT, $this->welcome($lead)->status);
         $this->assertContains('Pesan sambutan WhatsApp terkirim lewat gateway', $this->activities($lead));
 
         $this->at('2026-10-12 10:30:00');
-        $this->assertCount(2, $this->messages($lead), 'never twice');
+        $this->assertCount(1, $this->messages($lead), 'never twice');
     }
 
     public function test_the_welcome_is_skipped_when_the_buyer_chats_within_the_delay(): void
@@ -275,7 +277,7 @@ class WelcomeMessageTest extends TestCase
 
         $this->at('2026-10-12 10:16:00');
 
-        $this->assertSame([$second->getKey(), $second->getKey()], array_map(fn (WaMessage $m) => $m->channel_id, $this->messages($lead)));
+        $this->assertSame([$second->getKey()], array_map(fn (WaMessage $m) => $m->channel_id, $this->messages($lead)));
         $this->assertStringStartsWith('https://gw2.example.com', end($this->outbox)['url']);
     }
 
@@ -297,7 +299,7 @@ class WelcomeMessageTest extends TestCase
 
         $this->assertSame(WelcomeMessage::FAILED, $this->welcome($rina)->status);
         $this->assertSame(1, $this->welcome($rina)->attempts);
-        $this->assertCount(1, $this->messages($rina), 'the intro was refused once and nothing was tried again');
+        $this->assertCount(1, $this->messages($rina), 'the welcome was refused once and nothing was tried again');
         $this->assertSame([], $this->outbox);
     }
 
@@ -393,5 +395,52 @@ class WelcomeMessageTest extends TestCase
         $this->artisan('welcome:send');
         $this->assertSame('welcome', collect($this->messages($lead))->last()->origin);
         Livewire::test(Inbox::class, ['leadId' => $lead->getKey()])->assertSee('Sambutan otomatis');
+    }
+
+    public function test_welcome_text_takes_the_buyers_answers_and_never_sends_a_variable_raw(): void
+    {
+        $text = "Halo kak {nama}, pesanan {produk} sudah kami terima.\nWhatsApp : {whatsapp}\nAlamat : {alamat}\nVarian : {varian}\nWarna: {warna}\nJumlah : {jumlah}\n"
+            ."Catatan : {jawaban:catatan}\nUkuran : {jawaban:ukuran}\nKode promo: {promo}\nTerima kasih {sapaan} kak!";
+        $this->in(fn () => LeadForm::create([
+            'name' => 'Order Tas', 'slug' => 'order', 'status' => 'active', 'design' => ['title' => 'Order', 'color' => '#dc2626'], 'property_id' => $this->bag->getKey(),
+            'fields' => FormFields::normalize([
+                ['key' => 'nama', 'type' => 'text', 'label' => 'Nama', 'required' => true, 'maps_to' => 'name'],
+                ['key' => 'wa', 'type' => 'phone', 'label' => 'WhatsApp', 'required' => true, 'maps_to' => 'phone'],
+                ['key' => 'warna', 'type' => 'select', 'label' => 'Warna', 'options' => ['Hitam', 'Biru'], 'maps_to' => 'variant'],
+                ['key' => 'jumlah', 'type' => 'number', 'label' => 'Jumlah', 'maps_to' => 'quantity'],
+                ['key' => 'alamat', 'type' => 'textarea', 'label' => 'Alamat', 'maps_to' => 'shipping_address'],
+                ['key' => 'catatan', 'type' => 'text', 'label' => 'Catatan'],
+                ['key' => 'ukuran', 'type' => 'text', 'label' => 'Ukuran'],
+            ]),
+            'submit' => ['label' => 'Pesan'], 'after_submit' => ['type' => 'message', 'message' => 'Terima kasih.'],
+            'welcome' => ['active' => true, 'delay' => 2, 'text' => $text],
+        ]));
+
+        $this->postJson('/f/quicker-sport/order', ['f' => ['nama' => 'Rina Kartika', 'wa' => '081234567890', 'warna' => 'Hitam', 'jumlah' => 2,
+            'alamat' => 'Jl. Mawar 5, Coblong, Bandung', 'catatan' => 'Kirim sore']])->assertOk();
+        $lead = $this->in(fn () => Lead::query()->where('phone', '+6281234567890')->firstOrFail());
+        $this->at('2026-10-12 10:16:00');
+
+        $this->assertSame(
+            "Halo kak Rina, pesanan Tas Badminton sudah kami terima.\nWhatsApp : 081234567890\nAlamat : Jl. Mawar 5, Coblong, Bandung\nVarian : Hitam\nWarna: Hitam\nJumlah : 2\n"
+            ."Catatan : Kirim sore\nTerima kasih - kak!",
+            $this->messages($lead)[0]->body,
+            'Empty answers and unknown variables drop their "Label : {x}" line, or become "-" inside a sentence.',
+        );
+        $this->assertDoesNotMatchRegularExpression('/\{[^}]*\}/', $this->outbox[0]['text']);
+    }
+
+    public function test_the_editor_offers_the_variables_and_warns_about_unknown_ones(): void
+    {
+        $form = $this->form();
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+
+        Livewire::test(EditLeadForm::class, ['record' => $form->getKey()])
+            ->fillForm(['welcome.active' => true, 'welcome.text' => "Halo {nama}\nAlamat: {alamat}\nWarna: {jawaban:warna}"])
+            ->assertSeeHtml('data-v="{whatsapp}"')->assertSeeHtml('data-v="{jawaban:jumlah}"')
+            ->assertDontSee('Variabel tidak dikenal')
+            ->assertSee('Alamat: Jl. Mawar No. 5', false)
+            ->fillForm(['welcome.text' => 'Halo {nama}, kode {kupon} dan {jawaban:tidak_ada}'])
+            ->assertSee('Variabel tidak dikenal: {kupon}, {jawaban:tidak_ada}');
     }
 }

@@ -8,6 +8,7 @@ use App\Filament\Resources\Properties\Pages\ManageProperties;
 use App\Models\Property;
 use App\Support\CurrentTenant;
 use App\Support\Industry;
+use App\Welcome\WelcomeFields;
 use App\Welcome\WelcomeSettings;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -19,6 +20,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
@@ -112,9 +114,11 @@ class PropertyResource extends Resource
                     TextInput::make('promo_text')->label('Teks promo')->maxLength(300)->columnSpanFull()
                         ->placeholder($property ? 'Free biaya KPR dan AJB sampai akhir bulan' : 'Diskon 30% minggu ini, gratis ongkir Pulau Jawa')
                         ->helperText('Opsional. AI menyebutnya saat membahas harga '.Industry::t('catalog_item').' ini.'),
-                    Textarea::make('welcome_text')->label('Teks sambutan WhatsApp formulir')->rows(4)->maxLength(1000)->columnSpanFull()
+                    WelcomeFields::helpers(Textarea::make('welcome_text')->label('Teks sambutan WhatsApp formulir')->rows(4)->maxLength(1000)->columnSpanFull()->live(debounce: 500)
                         ->placeholder(fn () => WelcomeSettings::builtIn(app(CurrentTenant::class)->get()))
-                        ->helperText('Opsional. Dipakai pesan sambutan formulir yang tidak punya teks sendiri, untuk pembeli '.Industry::t('catalog_item').' ini. Variabel: '.WelcomeSettings::VARIABLES.'.'),
+                        ->helperText('Opsional. Dipakai pesan sambutan formulir yang tidak punya teks sendiri, untuk pembeli '.Industry::t('catalog_item').' ini. Klik variabel di bawah untuk menyisipkannya; {jawaban:kunci} mengambil jawaban field formulir.'), 'welcome_text', fn () => null),
+                    Text::make(fn (Get $get) => 'Contoh yang diterima pembeli (data contoh): '."\n".WelcomeFields::example(filled($get('welcome_text')) ? (string) $get('welcome_text') : WelcomeSettings::builtIn(app(CurrentTenant::class)->get())))
+                        ->extraAttributes(['style' => 'white-space:pre-line;padding:.6rem .8rem;border-radius:.5rem;background:rgba(37,211,102,.08);border:1px solid rgba(37,211,102,.25)'])->columnSpanFull(),
                     TagsInput::make('ad_keywords')->label('Pengenal iklan')->columnSpanFull()->placeholder('Ketik lalu Enter')
                         ->splitKeys([','])->nestedRecursiveRules(['string', 'max:120'])
                         ->helperText('Kata kunci, potongan teks sapaan iklan, atau ID iklan Meta (angka). Chat dari iklan atau pesan pertama yang memuatnya otomatis ditandai menanyakan '.Industry::t('catalog_item').' ini, mis. "badminton", "capra", "selempang", atau 120210000000001.'),

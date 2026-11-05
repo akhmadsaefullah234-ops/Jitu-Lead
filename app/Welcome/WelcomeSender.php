@@ -32,8 +32,8 @@ use Illuminate\Support\Carbon;
  * skipped if the buyer has written to the shop since (the chat or the AI already has them), or, for a lead
  * that was already known, if the shop wrote to the number in the last 24 hours. Outside service hours
  * (21:00 to 05:00 in the agency's time zone) it waits for 05:00. It goes out on the route and number any
- * other message to this lead would use (App\WhatsApp\RouteSelector: the lead owner's gateway number, with the
- * agency introduction first on a number the buyer has not heard from), at most RATE_PER_MINUTE per number.
+ * other message to this lead would use (App\WhatsApp\RouteSelector: the lead owner's gateway number), at most
+ * RATE_PER_MINUTE per number. The welcome is itself the introduction, so no number introduction goes before it.
  * A bad number or a refused message is marked failed once and never retried; a gateway that is down is
  * tried again a few times.
  */
@@ -59,7 +59,8 @@ class WelcomeSender
     ) {}
 
     /** Books the welcome for a form just sent. Runs inside the tenant. */
-    public function schedule(LeadForm $form, ?LandingPage $page, Lead $lead, bool $created, ?string $answers = null): ?WelcomeMessage
+    /** @param  array<string, string>  $fieldAnswers  the answers by field key, for {jawaban:key} and {warna} */
+    public function schedule(LeadForm $form, ?LandingPage $page, Lead $lead, bool $created, ?string $answers = null, array $fieldAnswers = []): ?WelcomeMessage
     {
         $settings = WelcomeSettings::for($form, $page);
 
@@ -80,7 +81,10 @@ class WelcomeSender
                 'returning' => ! $created,
                 'status' => WelcomeMessage::PENDING,
                 'due_at' => now()->addMinutes($settings->delayMinutes),
-                'context' => array_filter(['answers' => $answers !== null ? mb_substr($answers, 0, 2000) : null]),
+                'context' => array_filter([
+                    'answers' => $answers !== null ? mb_substr($answers, 0, 2000) : null,
+                    'fields' => array_map(fn ($v) => mb_substr((string) $v, 0, 500), array_slice($fieldAnswers, 0, 40, true)) ?: null,
+                ]),
             ]);
         } catch (UniqueConstraintViolationException) {
             return null; // the same form sent twice at once
@@ -189,7 +193,7 @@ class WelcomeSender
             return $this->finish($welcome, WelcomeMessage::FAILED, 'gagal: belum ada admin aktif untuk mengirim', $lead);
         }
 
-        $body = $this->text->render($settings->textFor($lead), $lead, $actor, $tenant, $welcome->context['answers'] ?? null);
+        $body = $this->text->render($settings->textFor($lead), $lead, $actor, $tenant, $welcome->context['answers'] ?? null, (array) ($welcome->context['fields'] ?? []));
 
         try {
             $message = ($this->send->from('welcome'))($conversation, $actor, $body);
