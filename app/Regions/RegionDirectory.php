@@ -234,6 +234,34 @@ class RegionDirectory
         });
     }
 
+    /**
+     * The provinces (as shipping names them) that have a city or regency named so, or else a district named so:
+     * more than one means the name alone does not say where ("Bandung" does, "Sukamaju" may not).
+     *
+     * @return list<string>
+     */
+    public static function cityProvinces(?string $text): array
+    {
+        $key = self::searchKey($text);
+        $key = self::CITY_ALIASES[$key] ?? $key;
+
+        if ($key === '' || ! self::available()) {
+            return [];
+        }
+
+        return Cache::remember('regions.city-provinces.'.self::version().'.'.sha1($key), 3600, function () use ($key) {
+            $parents = Region::query()->where('level', Region::CITY)->where('search', $key)->pluck('parent_code');
+
+            if ($parents->isEmpty()) {
+                $cities = Region::query()->where('level', Region::DISTRICT)->where('search', $key)->pluck('parent_code')->unique();
+                $parents = Region::query()->whereIn('code', $cities)->pluck('parent_code');
+            }
+
+            return Region::query()->whereIn('code', $parents->unique())->pluck('name')
+                ->map(fn ($name) => self::shippingProvince((string) $name))->unique()->sort()->values()->all();
+        });
+    }
+
     /** @return list<string> every city and regency by its official name, for type-ahead suggestions */
     public static function cityNames(): array
     {

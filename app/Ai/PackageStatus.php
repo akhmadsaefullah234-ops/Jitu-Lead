@@ -60,7 +60,7 @@ class PackageStatus
             'Tautan lacak: '.StageAutomation::trackingUrl($courier, $awb),
             $shipment?->status ? 'Status terakhir: '.ShipmentStatus::label($shipment->status).($shipment->status_reason ? ' ('.$shipment->status_reason.')' : '') : 'Status terakhir: belum ada kabar dari kurir.',
             $last ? 'Kabar terakhir kurir ('.Carbon::parse($last['at'])->timezone($tz)->format('d M H:i').'): '.$last['description'] : null,
-            'Bila pembeli menanyakan posisi paket, kapan sampai, atau resinya: jawab hanya dari data di atas (status, nomor resi, tautan lacak). Jangan menyebut perkiraan hari tiba atau estimasi apa pun. Bila pertanyaannya tidak terjawab dari data ini, balas hanya dengan kata HANDOFF.',
+            'Bila pembeli menanyakan posisi paket, kapan sampai, atau resinya: jawab hanya dari data di atas (status, nomor resi, tautan lacak). Jangan menyebut perkiraan hari tiba atau estimasi apa pun. Bila pertanyaannya tidak terjawab dari data ini, panggil tool '.ReplySignals::HANDOFF_TOOL.'.',
         ]));
     }
 
