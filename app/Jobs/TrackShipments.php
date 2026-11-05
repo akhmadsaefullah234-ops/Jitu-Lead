@@ -14,7 +14,8 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Tracks an agency's parcels that are still on their way, in one batch call, and applies what changed: the same
- * status messages and stage moves as a callback, so a missed callback costs nothing but time.
+ * status messages and stage moves as a callback, so a missed callback costs nothing but time. Numbers linked from
+ * outside JITU LEAD (source manual) are tracked one by one and stop after three answers that do not know them.
  */
 class TrackShipments implements ShouldQueue
 {
@@ -36,7 +37,18 @@ class TrackShipments implements ShouldQueue
 
         $current->run($tenant, function () use ($tenant) {
             $shipments = app(Shipments::class);
-            $open = Shipments::unfinished()->get()->keyBy(fn (Shipment $s) => $s->awb);
+            $all = Shipments::unfinished()->get();
+
+            // Numbers linked from outside JITU LEAD are tracked one by one: a provider that does not know one says so.
+            foreach ($all->filter(fn (Shipment $s) => $s->manual()) as $linked) {
+                try {
+                    $shipments->trackLinked($linked);
+                } catch (CarrierException $e) {
+                    Log::warning('Linked shipment tracking failed', ['tenant' => $tenant->getKey(), 'shipment' => $linked->getKey(), 'reason' => $e->getMessage()]);
+                }
+            }
+
+            $open = $all->reject(fn (Shipment $s) => $s->manual())->keyBy(fn (Shipment $s) => $s->awb);
 
             if ($open->isEmpty()) {
                 return;

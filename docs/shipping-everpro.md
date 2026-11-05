@@ -47,7 +47,7 @@ tidak), juga untuk resi yang tidak dikenal. URL satu agensi tidak bisa menyentuh
 
 ## Buat resi
 
-- Menu ⋯ di Inbox dan tombol **Pengiriman** di halaman lead: **Buat resi**, **Lacak paket**, **Cetak label**,
+- Menu ⋯ di Inbox dan tombol **Pengiriman** di halaman lead: **Buat resi**, **Hubungkan resi**, **Lacak paket**, **Cetak label**,
   **Batalkan kiriman** (hanya sebelum paket diambil kurir).
 - Daftar lead: aksi massal **Buat resi** (hanya lead di tahap Dikemas & dikirim tanpa kiriman aktif; lead yang datanya
   belum lengkap dilewati dan disebutkan) dan **Cetak label**: label tiap lead terpilih diunduh di server (maks. 100
@@ -94,6 +94,26 @@ Aturan kirim: sekali per status per resi; jam 21.00 sampai 05.00 (zona waktu age
 tampil di Inbox sebagai "· Status kiriman", tanpa pesan perkenalan nomor.
 
 Cadangan: `shipping:track` tiap 2 jam melacak massal resi yang belum selesai dan memicu pesan yang sama bila callback terlewat.
+
+## Resi yang dibuat di luar JITU LEAD
+
+Resi yang dibuat manual (mis. di aplikasi atau dashboard Everpro) bisa dihubungkan ke lead:
+
+- **Hubungkan resi** (menu ⋯ Inbox dan tombol **Pengiriman** di halaman lead): nomor resi dan kurir (bawaan JNE). Dibuat
+  kiriman dengan sumber `manual` tanpa order Everpro (tidak bisa dibatalkan dari JITU LEAD), nomor resi dan kurir diisi ke
+  lead, lalu resi langsung dilacak sekali.
+- **Impor resi** (daftar Lead): unggah ekspor CSV/XLSX. Kolom ditebak dari judulnya dan bisa diganti. Baris dicocokkan
+  lewat nomor HP penerima (dinormalisasi). Bila ada beberapa lead dengan nomor itu, yang di tahap Dikemas & dikirim tanpa
+  resi diutamakan. Baris yang ragu atau tidak cocok dipilih manual atau dilewati, dan hanya baris yang dipilih yang disimpan.
+- **Pesan ke pembeli**: opsi "Kirim nomor resi ke pembeli sekarang" bawaannya mati. Status yang sudah lewat saat resi
+  dihubungkan hanya dicatat sebagai riwayat; pembeli hanya mendapat pesan untuk perubahan status sesudahnya. Bila paket
+  sudah diterima saat dihubungkan, lead dipindah ke Selesai tanpa pesan (opsi, bawaan aktif, lewat aturan "paket
+  diterima" di Otomatisasi tahap). Tanggal masuk tahapnya disamakan dengan tanggal diterima, sehingga follow-up ulasan
+  yang waktunya sudah lewat tidak terkirim.
+- **Pelacakan**: `shipping:track` melacak resi manual satu per satu. Bila Everpro tidak mengenali resinya (404/400, atau
+  tanpa status maupun riwayat), percobaan dihitung. Setelah 3 kali, resi ditandai "tidak bisa dilacak" di lead dan
+  pelacakan otomatis berhenti.
+- **Validasi**: satu resi hanya untuk satu lead per agensi, dan formatnya 8–30 huruf/angka dengan minimal 4 angka.
 
 ## AI
 

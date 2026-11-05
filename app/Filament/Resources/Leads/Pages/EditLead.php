@@ -38,6 +38,7 @@ class EditLead extends EditRecord
                 ->url(fn () => Inbox::getUrl(['lead' => $this->record->getKey()])),
             ActionGroup::make([
                 ShipmentActions::create(fn () => $this->record),
+                ShipmentActions::link(fn () => $this->record),
                 ShipmentActions::track(fn () => $this->record),
                 ShipmentActions::label(fn () => $this->record),
                 ShipmentActions::cancel(fn () => $this->record),

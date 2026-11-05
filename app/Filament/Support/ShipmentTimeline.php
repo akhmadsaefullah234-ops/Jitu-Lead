@@ -32,6 +32,14 @@ class ShipmentTimeline
             $head .= '<div style="color:#9f1239;font-size:.85rem">'.e($shipment->status_reason).'</div>';
         }
 
+        if ($shipment->manual()) {
+            $head .= '<div style="color:var(--gray-500);font-size:.8rem">Resi dihubungkan manual (dibuat di luar JITU LEAD).</div>';
+        }
+
+        if ($shipment->untrackable()) {
+            $head .= '<div style="color:#9f1239;font-size:.85rem;font-weight:600">Tidak bisa dilacak: resi tidak dikenali penyedia setelah '.Shipment::MAX_TRACK_FAILURES.' kali dicoba. Cek status kiriman manual.</div>';
+        }
+
         if ($shipment->state === Shipment::FAILED && $shipment->error) {
             $head .= '<div style="color:#9f1239;font-size:.85rem">'.e($shipment->error).'</div>';
         }

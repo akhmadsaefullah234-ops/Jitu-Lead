@@ -14,7 +14,7 @@ class TrackShipmentsCommand extends Command
 {
     public function handle(): int
     {
-        $tenants = Shipment::query()->withoutGlobalScopes()->where('state', Shipment::SHIPPED)->whereNull('final_at')->whereNotNull('awb')
+        $tenants = Shipment::query()->withoutGlobalScopes()->where('state', Shipment::SHIPPED)->whereNull('final_at')->whereNotNull('awb')->whereNull('untrackable_at')
             ->distinct()->pluck('tenant_id');
 
         foreach ($tenants as $tenantId) {

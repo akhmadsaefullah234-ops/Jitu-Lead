@@ -3,6 +3,7 @@
 namespace App\Shipping\Shipments;
 
 use App\Automation\StageAutomation;
+use App\Enums\StageType;
 use App\Jobs\CreateShipment;
 use App\Models\CarrierAccount;
 use App\Models\Lead;
@@ -497,6 +498,174 @@ class Shipments
         $this->notices->statusChanged($shipment, $result->status, $eventAt);
     }
 
+    // ---- Tracking numbers made elsewhere --------------------------------------------------------------------
+
+    /** "jne 0012 3456" => "JNE00123456". */
+    public static function normalizeAwb(?string $awb): string
+    {
+        return strtoupper(preg_replace('/[\s.]+/', '', (string) $awb));
+    }
+
+    /** Why a typed tracking number cannot be one: 8 to 30 letters, digits or dashes, with at least four digits. */
+    public static function awbProblem(string $awb): ?string
+    {
+        return preg_match('/^[A-Z0-9-]{8,30}$/', $awb) && preg_match_all('/\d/', $awb) >= 4 ? null : 'Format nomor resi tidak wajar (8-30 huruf/angka).';
+    }
+
+    /** The lead (other than $lead) this agency already gave the number to. */
+    public static function awbOwner(string $awb, ?Lead $lead = null): ?Lead
+    {
+        $shipment = Shipment::query()->where('awb', $awb)->where('state', '!=', Shipment::CANCELLED)
+            ->when($lead, fn ($q) => $q->where('lead_id', '!=', $lead->getKey()))->with('lead')->first();
+
+        return $shipment?->lead ?? Lead::query()->where('tracking_number', $awb)->when($lead, fn ($q) => $q->whereKeyNot($lead->getKey()))->first();
+    }
+
+    /**
+     * Links a tracking number made outside JITU LEAD (e.g. in the provider's own app) to the lead: a parcel with
+     * source "manual" and no order, the number on the lead, then one tracking call. What the parcel went through
+     * before it was linked is history only: no message for it. Only later changes reach the buyer as usual.
+     * A parcel already delivered closes the lead (Selesai) without any message, dated to the delivery so a
+     * review follow-up whose time has passed is not sent.
+     *
+     * @return array{0: Shipment, 1: string} the parcel, and what tracking said, for the agent
+     */
+    public function link(Lead $lead, string $awb, ?string $courier, ?User $actor = null, bool $notify = false, bool $closeDelivered = true): array
+    {
+        $awb = self::normalizeAwb($awb);
+        $courier = filled($courier) ? trim($courier) : 'JNE';
+
+        if ($problem = self::awbProblem($awb)) {
+            throw new CarrierException($problem);
+        }
+
+        $account = $this->account() ?? throw new CarrierException('Pengiriman otomatis belum diatur di Pengaturan > Pengiriman.', CarrierException::AUTH);
+
+        $shipment = DB::transaction(function () use ($lead, $awb, $courier, $account, $actor) {
+            Lead::query()->whereKey($lead->getKey())->lockForUpdate()->first();
+
+            if ($other = self::awbOwner($awb, $lead)) {
+                throw new CarrierException('Resi '.$awb.' sudah dipakai lead lain ('.$other->name.').');
+            }
+
+            $open = Shipment::query()->where('lead_id', $lead->getKey())->whereIn('state', [Shipment::PENDING, Shipment::ORDERED, Shipment::SHIPPED])->latest('id')->first();
+
+            if ($open !== null && $open->awb === $awb) {
+                return null;
+            }
+
+            if ($open !== null) {
+                throw new CarrierException('Lead ini sudah punya kiriman aktif'.($open->awb ? ' (resi '.$open->awb.')' : '').'. Batalkan dulu bila resinya berbeda.');
+            }
+
+            $sequence = (int) Shipment::query()->where('lead_id', $lead->getKey())->max('sequence') + 1;
+
+            return Shipment::query()->create([
+                'lead_id' => $lead->getKey(), 'provider' => $account->provider, 'source' => Shipment::MANUAL, 'sequence' => $sequence,
+                'client_order_no' => 'MAN-'.$this->current->id().'-'.$lead->getKey().'-'.$sequence, 'awb' => $awb, 'courier' => $courier,
+                'state' => Shipment::SHIPPED, 'status' => ShipmentStatus::AWB_CREATED, 'awb_notified_at' => now(), 'linked_at' => now(),
+                'request' => array_filter(['by' => $actor?->getKey()]),
+            ]);
+        });
+
+        if ($shipment === null) {
+            $existing = Shipment::latestFor($lead);
+
+            return [$existing, 'Resi '.$awb.' sudah terhubung ke lead ini.'];
+        }
+
+        if ($notify) {
+            // The usual tracking message (once) and the move to Dikemas & dikirim.
+            $note = app(StageAutomation::class)->shipped($lead, $courier, $awb, $actor);
+        } else {
+            $lead->forceFill(['tracking_number' => $awb, 'courier' => $courier, 'shipped_at' => $lead->shipped_at ?? now()])->save();
+            $note = 'Nomor resi disimpan tanpa pesan ke pembeli.';
+        }
+
+        $lead->activities()->create(['user_id' => $actor?->getKey(), 'type' => 'note', 'body' => 'Resi '.$awb.' ('.$courier.') dihubungkan'.($actor ? ' oleh '.$actor->name : '').'. '.$note]);
+
+        try {
+            $result = $this->trackOnce($shipment);
+        } catch (CarrierException $e) {
+            return [$shipment->refresh(), 'Resi terhubung, tapi belum bisa dilacak sekarang: '.$e->getMessage()];
+        }
+
+        if ($result === null) {
+            return [$shipment->refresh(), 'Resi terhubung, tapi resi belum dikenali '.Carriers::label($account->provider).'. Dicoba lagi saat pelacakan berikutnya.'];
+        }
+
+        $this->baseline($shipment, $result, $closeDelivered);
+
+        return [$shipment->refresh(), 'Status sekarang: '.ShipmentStatus::label($shipment->status ?? ShipmentStatus::AWB_CREATED).'.'
+            .($shipment->status === ShipmentStatus::DELIVERED && $lead->fresh()->stage?->type === StageType::Won ? ' Lead dipindah ke Selesai tanpa pesan.' : '')];
+    }
+
+    /** The scheduled tracking of a linked number: one call; three calls that do not know it stop the tracking. */
+    public function trackLinked(Shipment $shipment): void
+    {
+        $result = $this->trackOnce($shipment);
+
+        if ($result !== null) {
+            $this->apply($shipment, $result);
+        }
+    }
+
+    /**
+     * One tracking call for a linked number. Null when the provider does not know it (counted; the third time the
+     * parcel is marked untrackable and noted on the lead). Other failures are thrown and not counted.
+     */
+    private function trackOnce(Shipment $shipment): ?TrackResult
+    {
+        try {
+            $result = $this->provider()->track((string) $shipment->awb);
+        } catch (CarrierException $e) {
+            if ($e->retryable() || $e->kind === CarrierException::AUTH || ! in_array($e->httpStatus, [400, 404, 422], true)) {
+                throw $e;
+            }
+
+            $result = null;
+        }
+
+        if ($result !== null && ($result->status !== null || $result->events !== [])) {
+            $shipment->forceFill(['track_failures' => 0])->save();
+
+            return $result;
+        }
+
+        $failures = $shipment->track_failures + 1;
+        $shipment->forceFill(['track_failures' => $failures, 'tracked_at' => now()] + ($failures >= Shipment::MAX_TRACK_FAILURES ? ['untrackable_at' => now()] : []))->save();
+
+        if ($failures === Shipment::MAX_TRACK_FAILURES) {
+            $shipment->lead->activities()->create(['type' => 'note', 'body' => 'Resi '.$shipment->awb.' tidak bisa dilacak: tidak dikenali '.Carriers::label($shipment->provider)
+                .' setelah '.$failures.' kali dicoba (mungkin dibuat di luar akun ini). Pelacakan otomatis dihentikan; status kiriman perlu dicek manual.']);
+        }
+
+        return null;
+    }
+
+    /** The status a parcel already had when it was linked: stored as history, never told to the buyer. */
+    private function baseline(Shipment $shipment, TrackResult $result, bool $closeDelivered): void
+    {
+        $this->addEvents($shipment, $result->events);
+        $status = $result->status !== null && ShipmentStatus::rank($result->status) > ShipmentStatus::rank(ShipmentStatus::AWB_CREATED) ? $result->status : ShipmentStatus::AWB_CREATED;
+
+        $shipment->forceFill([
+            'status' => $status, 'raw_status' => Str::limit((string) $result->code, 60, ''), 'status_reason' => $result->reason, 'tracked_at' => now(),
+            'final_at' => in_array($status, ShipmentStatus::FINAL, true) ? now() : null,
+            'state' => $status === ShipmentStatus::CANCELLED ? Shipment::CANCELLED : $shipment->state,
+        ])->save();
+
+        if ($status === ShipmentStatus::DELIVERED && $closeDelivered) {
+            $lead = $shipment->lead;
+
+            if (app(StageAutomation::class)->parcelDelivered($lead) !== null) {
+                // Dated to the delivery: follow-ups counted from Selesai whose time has passed are not sent.
+                $deliveredAt = $result->at !== null ? Carbon::parse($result->at) : now();
+                $lead->forceFill(['stage_entered_at' => $deliveredAt->min(now())->setTimezone(config('app.timezone'))])->save();
+            }
+        }
+    }
+
     /** @param  list<TrackEvent>  $events */
     private function addEvents(Shipment $shipment, array $events): void
     {
@@ -529,6 +698,6 @@ class Shipments
     /** The parcels still on their way, for the scheduled tracking. */
     public static function unfinished()
     {
-        return Shipment::query()->where('state', Shipment::SHIPPED)->whereNull('final_at')->whereNotNull('awb');
+        return Shipment::query()->where('state', Shipment::SHIPPED)->whereNull('final_at')->whereNotNull('awb')->whereNull('untrackable_at');
     }
 }
