@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\EmailVerificationHelpController;
 use App\Http\Controllers\LeadPhotoController;
+use App\Http\Controllers\ShipmentLabelsController;
 use App\Http\Controllers\TrialEmailUnsubscribeController;
 use App\Http\Controllers\WhatsAppMediaController;
 use App\Legal\LegalDocs;
@@ -46,3 +47,7 @@ Route::get('wa-media/{message}', [WhatsAppMediaController::class, 'show'])
 // Photos visitors upload in a built form. Private files, opened only by people who may see the lead.
 Route::get('lead-foto/{lead}/{index}', [LeadPhotoController::class, 'show'])
     ->whereNumber(['lead', 'index'])->name('lead.photo');
+
+// The merged label PDF of a bulk "Cetak label": a signed link for one hour, opened only by members of that agency.
+Route::get('label-kiriman/{tenant}/{file}', [ShipmentLabelsController::class, 'show'])
+    ->whereNumber('tenant')->where('file', '[A-Za-z0-9]{40}\\.pdf')->middleware('signed')->name('shipping.labels');

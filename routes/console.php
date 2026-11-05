@@ -13,6 +13,8 @@ Schedule::command('followups:run')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('welcome:send')->everyMinute()->withoutOverlapping();
 Schedule::command('shipping:notices')->everyMinute()->withoutOverlapping();
 Schedule::command('shipping:track')->everyTwoHours()->withoutOverlapping();
+// Merged label PDFs of the bulk "Cetak label" are kept for 24 hours.
+Schedule::command('shipping:labels-prune')->hourly()->withoutOverlapping();
 // Daily/weekly/monthly reports to owners and admins at the time each agency (or person) picked, in its time zone.
 Schedule::command('reports:daily')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('leads:reassign')->everyFiveMinutes()->withoutOverlapping();

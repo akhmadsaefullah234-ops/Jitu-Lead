@@ -9,6 +9,7 @@ use App\Shipping\Carriers\CarrierException;
 use App\Shipping\Carriers\CarrierLocation;
 use App\Shipping\Carriers\CarrierRate;
 use App\Shipping\Carriers\Carriers;
+use App\Shipping\Shipments\LabelSheet;
 use App\Shipping\Shipments\ShipmentDraft;
 use App\Shipping\Shipments\Shipments;
 use App\Support\CurrentTenant;
@@ -199,34 +200,29 @@ class ShipmentActions
             })->deselectRecordsAfterCompletion();
     }
 
-    /** Bulk "Cetak label": one link per tracking number. */
+    /** Bulk "Cetak label": the labels of the selected leads merged into one PDF (App\Shipping\Shipments\LabelSheet), opened in a new tab. */
     public static function bulkLabels(): BulkAction
     {
         return BulkAction::make('bulkShipmentLabels')->label('Cetak label')->icon(Heroicon::OutlinedPrinter)
             ->visible(fn () => self::available())
-            ->action(function (Collection $records) {
-                $links = [];
-                $missing = 0;
+            ->action(function (Collection $records, $livewire) {
+                $sheet = app(LabelSheet::class)->make($records);
+                $merged = count($sheet['merged']);
+                $skipped = count($sheet['skipped']);
+                $lines = array_map(fn ($s) => '• '.e($s['name']).': '.e($s['reason']), array_slice($sheet['skipped'], 0, 20));
 
-                foreach ($records as $lead) {
-                    $shipment = Shipment::latestFor($lead);
-
-                    if (blank($shipment?->awb)) {
-                        $missing++;
-
-                        continue;
-                    }
-
-                    try {
-                        $links[] = '<a href="'.e(app(Shipments::class)->label($shipment)).'" target="_blank" style="text-decoration:underline">'.e($lead->name.' · '.$shipment->awb).'</a>';
-                    } catch (CarrierException $e) {
-                        $missing++;
-                    }
+                if ($skipped > 20) {
+                    $lines[] = '… dan '.($skipped - 20).' lainnya';
                 }
 
-                Notification::make()->title(count($links).' label siap dicetak')
-                    ->body(new HtmlString(implode('<br>', $links).($missing ? '<br>'.$missing.' lead belum punya resi.' : '')))
-                    ->{$links === [] ? 'warning' : 'success'}()->persistent()->send();
+                if ($sheet['url'] !== null) {
+                    array_unshift($lines, '<a href="'.e($sheet['url']).'" target="_blank" style="text-decoration:underline">Buka PDF label</a> (berlaku 1 jam)');
+                    $livewire->js('window.open('.json_encode($sheet['url']).', "_blank")');
+                }
+
+                Notification::make()->title("{$merged} label digabung · {$skipped} dilewati")
+                    ->body($lines === [] ? null : new HtmlString(implode('<br>', $lines)))
+                    ->{$merged === 0 ? 'warning' : ($skipped === 0 ? 'success' : 'warning')}()->persistent()->send();
             });
     }
 }
