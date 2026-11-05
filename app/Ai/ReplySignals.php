@@ -20,10 +20,14 @@ class ReplySignals
     /** Words a short acknowledgement is made of (after lowercasing; punctuation and emoji removed). */
     private const ACK_WORDS = [
         'ok', 'oke', 'okey', 'okay', 'okee', 'oce', 'okeh', 'okok', 'k', 'sip', 'siap', 'ya', 'iya', 'y', 'yup', 'yap', 'baik', 'baiklah', 'noted',
-        'sebentar', 'bentar', 'tunggu', 'nanti', 'dulu', 'deal', 'mantap', 'mantab', 'setuju', 'boleh', 'lanjut', 'gas',
+        'sebentar', 'bentar', 'tunggu', 'nanti', 'dulu', 'deal', 'mantap', 'mantab', 'setuju', 'boleh', 'lanjut', 'gas', 'sesuai', 'betul', 'benar', 'bener', 'cocok', 'yes', 'fix', 'jadi', 'udah', 'sudah',
         'terima', 'kasih', 'makasih', 'trims', 'thanks', 'thank', 'you', 'thx', 'tq', 'ty', 'tengkyu', 'suwun', 'nuwun', 'matur',
         'kak', 'ka', 'kakak', 'min', 'gan', 'sis', 'mbak', 'mba', 'mas', 'bang', 'pak', 'bu', 'ibu', 'yah', 'deh', 'dong', 'aja', 'saja', 'nya',
     ];
+
+    /** Of those, the words that agree to something (not only thanks or "wait"). */
+    private const AGREE_WORDS = ['ok', 'oke', 'okey', 'okay', 'oce', 'okeh', 'okok', 'k', 'sip', 'siap', 'ya', 'iya', 'y', 'yup', 'yap', 'baik', 'baiklah',
+        'deal', 'mantap', 'mantab', 'setuju', 'boleh', 'lanjut', 'gas', 'sesuai', 'betul', 'benar', 'bener', 'cocok', 'yes', 'fix', 'jadi'];
 
     /** Signs that an answer talks about its own instructions instead of to the buyer. */
     private const INTERNAL = [
@@ -126,5 +130,27 @@ class ReplySignals
         $known = array_map(fn ($w) => preg_replace('/(\p{L})\1+$/u', '$1', $w), self::ACK_WORDS);
 
         return count($words) <= 5 && array_diff($words, $known) === [];
+    }
+
+    /**
+     * A short yes to what was just said: "ok", "Sesuai kak", "ok deal", "betul", 👍. Thanks and "sebentar" alone are
+     * acknowledgements but not a yes.
+     */
+    public static function confirmation(string $text): bool
+    {
+        if (! self::acknowledgement($text)) {
+            return false;
+        }
+
+        $words = array_map(fn ($w) => preg_replace('/(\p{L})\1+$/u', '$1', $w), preg_split('/[^\p{L}]+/u', mb_strtolower($text), -1, PREG_SPLIT_NO_EMPTY));
+
+        if ($words === []) {
+            // 👍 👌 ✅ 🆗 (🙏 alone is a thank-you)
+            return preg_match('/[\x{1F44D}\x{1F44C}\x{2705}\x{1F197}]/u', $text) === 1;
+        }
+
+        $agree = array_map(fn ($w) => preg_replace('/(\p{L})\1+$/u', '$1', $w), self::AGREE_WORDS);
+
+        return array_intersect($words, $agree) !== [] && array_intersect($words, ['sebentar', 'bentar', 'tunggu', 'nanti']) === [];
     }
 }
