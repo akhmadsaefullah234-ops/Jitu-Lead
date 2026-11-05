@@ -10,6 +10,7 @@ use App\Enums\WaChannelStatus;
 use App\FollowUps\AskProduct;
 use App\Jobs\FetchWhatsAppMedia;
 use App\Jobs\GenerateAiReplyJob;
+use App\Leads\ChatShippingDetails;
 use App\Models\Lead;
 use App\Models\LeadSource;
 use App\Models\Stage;
@@ -115,6 +116,7 @@ class HandleInboundWhatsApp
             });
 
             $this->keepMedia($message, $fileBytes);
+            $this->orderDetails($lead, $message);
             $isNewLead ?: $this->automate($lead, $message);
             $this->queueAiReply($channel, $message);
             $this->alert($lead, $message, $isNewLead, $incoming);
@@ -243,6 +245,16 @@ class HandleInboundWhatsApp
         $side = $incoming->fromMe ? 'out' : 'in';
         $reactions = array_filter([...(array) $target->reactions, $side => $reaction['emoji']], fn ($v) => is_string($v) && $v !== '');
         $target->forceFill(['reactions' => $reactions === [] ? null : $reactions])->save();
+    }
+
+    /** A shop's order details written in the chat (format order, address pieces) go on the lead, AI or not. */
+    private function orderDetails(Lead $lead, WaMessage $message): void
+    {
+        try {
+            app(ChatShippingDetails::class)->fromMessage($lead, $message);
+        } catch (Throwable $e) {
+            report($e);
+        }
     }
 
     /** A shop's automatic stage moves (payment proof, a cancelled buyer writing again). Never costs the message. */

@@ -2,7 +2,7 @@
 
 namespace App\Shipping\Carriers;
 
-/** One courier service and what it costs. */
+/** One courier service and what it costs. $meta: what the provider wants back when booking this rate (Everpro: signed_key, rateID, cashback, durations). */
 final class CarrierRate
 {
     public function __construct(
@@ -14,6 +14,7 @@ final class CarrierRate
         public readonly int $insuranceFee = 0,
         public readonly ?int $etaMin = null,
         public readonly ?int $etaMax = null,
+        public readonly array $meta = [],
     ) {}
 
     /** "JNE REG", the way couriers are named everywhere else in the app. */

@@ -294,4 +294,93 @@ class RegionDirectory
             ->mapWithKeys(fn (Region $c) => [$c->name => $c->name.', '.self::shippingProvince((string) ($provinces[$c->parent_code] ?? ''))])
             ->all();
     }
+
+    /**
+     * The rest of an address from the parts a buyer wrote: kelurahan, kecamatan, kota, provinsi and postal code,
+     * as far as they point to one place. A postal code or kelurahan finds the villages; kecamatan and kota narrow
+     * them. One village fills everything; villages in one kecamatan fill the kecamatan and above. A kecamatan
+     * written with the city after it ("cibinong bogor") is split. Names are the official ones; the province is the
+     * shipping name. Empty when nothing is imported or nothing fits.
+     *
+     * @param  array<string, mixed>  $parts
+     * @return array{kelurahan?: string, kecamatan?: string, kota?: string, provinsi?: string, kode_pos?: string}
+     */
+    public static function locate(array $parts): array
+    {
+        if (! self::available()) {
+            return [];
+        }
+
+        $get = fn (string $k) => is_string($parts[$k] ?? null) ? trim($parts[$k]) : '';
+        $postal = preg_match('/^\d{5}$/', $get('kode_pos')) ? $get('kode_pos') : null;
+        $village = self::searchKey($get('kelurahan'));
+        $district = self::searchKey($get('kecamatan'));
+        $city = self::searchKey($get('kota'));
+        $city = self::CITY_ALIASES[$city] ?? $city;
+
+        return Cache::remember('regions.locate.'.self::version().'.'.md5(json_encode([$postal, $village, $district, $city])), 3600, function () use ($postal, $village, $district, $city) {
+            $districtRows = fn (string $key) => Region::query()->where('level', Region::DISTRICT)->where('search', $key)->get(['code', 'parent_code', 'name']);
+
+            // "cibinong bogor": the longest start that is a kecamatan; the rest may be the city.
+            if ($district !== '' && $districtRows($district)->isEmpty()) {
+                $words = explode(' ', $district);
+
+                for ($n = count($words) - 1; $n >= 1; $n--) {
+                    $head = implode(' ', array_slice($words, 0, $n));
+
+                    if ($districtRows($head)->isNotEmpty()) {
+                        $city = $city !== '' ? $city : (self::CITY_ALIASES[$tail = implode(' ', array_slice($words, $n))] ?? $tail);
+                        $district = $head;
+                        break;
+                    }
+                }
+            }
+
+            $villages = match (true) {
+                $postal !== null => Region::query()->where('level', Region::VILLAGE)->where('postal_code', $postal)->limit(200)->get(['code', 'parent_code', 'name', 'postal_code', 'search'])->toBase(),
+                $village !== '' => Region::query()->where('level', Region::VILLAGE)->where('search', $village)->limit(200)->get(['code', 'parent_code', 'name', 'postal_code', 'search'])->toBase(),
+                default => collect(),
+            };
+
+            $districts = $villages->isNotEmpty()
+                ? Region::query()->whereIn('code', $villages->pluck('parent_code')->unique())->get(['code', 'parent_code', 'name', 'search'])->toBase()->keyBy('code')
+                : ($district !== '' ? $districtRows($district)->toBase()->keyBy('code') : collect());
+            $cities = Region::query()->whereIn('code', $districts->pluck('parent_code')->unique())->get(['code', 'parent_code', 'name', 'search'])->toBase()->keyBy('code');
+
+            $keep = fn ($rows, string $key) => $key === '' ? $rows : (($narrow = $rows->filter(fn (Region $r) => $r->search === $key || str_starts_with($r->search, $key)))->isNotEmpty() ? $narrow : $rows);
+
+            if ($villages->isNotEmpty()) {
+                $villages = $keep($villages, $village);
+                $districts = $keep($districts->only($villages->pluck('parent_code')->unique()->all()), $district);
+                $villages = $villages->whereIn('parent_code', $districts->keys()->all());
+            } else {
+                $districts = $keep($districts, $district);
+            }
+
+            $cities = $keep($cities->only($districts->pluck('parent_code')->unique()->all()), $city);
+            $districts = $districts->whereIn('parent_code', $cities->keys()->all());
+            $villages = $villages->whereIn('parent_code', $districts->keys()->all());
+
+            if ($cities->count() !== 1) {
+                return [];
+            }
+
+            $province = (string) Region::query()->whereKey($cities->first()->parent_code)->value('name');
+            $out = ['kota' => $cities->first()->name, 'provinsi' => self::shippingProvince($province)];
+
+            if ($districts->count() === 1) {
+                $out['kecamatan'] = $districts->first()->name;
+            }
+
+            if ($villages->count() === 1) {
+                $out['kelurahan'] = $villages->first()->name;
+            }
+
+            if (($codes = $villages->pluck('postal_code')->filter()->unique())->count() === 1) {
+                $out['kode_pos'] = (string) $codes->first();
+            }
+
+            return $out;
+        });
+    }
 }

@@ -248,7 +248,7 @@ class ShippingSettingsPage extends Page
                 'sender_address' => trim((string) ($state['sender_address'] ?? '')), 'origin_id' => $state['origin_id'] ?? null,
                 'service' => trim((string) ($state['service'] ?? '')) ?: 'JNE REG', 'shipment_type' => ($state['shipment_type'] ?? 'PICKUP') === 'DROP' ? 'DROP' : 'PICKUP',
                 'insurance' => (bool) ($state['insurance'] ?? false),
-            ], $place ? ['origin_label' => CarrierLocation::fromArray($place)->label(), 'origin_postal' => $place['postalCode'] ?? null] : []),
+            ], $place ? ['origin_label' => CarrierLocation::fromArray($place)->label(), 'origin_postal' => $place['postalCode'] ?? null, 'origin_sub_district' => $place['subDistrict'] ?? null] : []),
         ]);
 
         if ($account->isDirty('sandbox') || $account->isDirty('credentials')) {

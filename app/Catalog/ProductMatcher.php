@@ -21,6 +21,7 @@ class ProductMatcher
         'ad_text' => 'judul/teks iklan',
         'keyword' => 'kata kunci di pesan pertama',
         'agent' => 'dipilih agen',
+        'chat' => 'format order di chat',
         'ai' => 'percakapan dengan AI',
         'ask_reply' => 'balasan pesan tanya produk',
         'form' => 'formulir',

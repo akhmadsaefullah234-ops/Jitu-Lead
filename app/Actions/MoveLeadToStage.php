@@ -4,6 +4,7 @@ namespace App\Actions;
 
 use App\Billing\PlanLimits;
 use App\Enums\StageRequirement;
+use App\Leads\ChatShippingDetails;
 use App\Models\Lead;
 use App\Models\LostReason;
 use App\Models\Stage;
@@ -11,6 +12,7 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 /**
  * Moves a lead to another pipeline stage, enforcing the stage's required
@@ -38,7 +40,7 @@ class MoveLeadToStage
 
         $changes = $this->requiredDetails($lead, $stage, $details);
 
-        return DB::transaction(function () use ($lead, $stage, $actor, $changes, $auto) {
+        $moved = DB::transaction(function () use ($lead, $stage, $actor, $changes, $auto) {
             $from = $lead->stage;
 
             $lead->fill($changes);
@@ -64,6 +66,15 @@ class MoveLeadToStage
 
             return $lead;
         });
+
+        // A shop order going out to be packed: its address is read from the chat when the lead lacks it.
+        try {
+            app(ChatShippingDetails::class)->enteringShipping($moved);
+        } catch (Throwable $e) {
+            report($e);
+        }
+
+        return $moved;
     }
 
     private function requiredDetails(Lead $lead, Stage $stage, array $details): array

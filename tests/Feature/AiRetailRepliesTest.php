@@ -480,6 +480,18 @@ class AiRetailRepliesTest extends TestCase
         $this->assertSame(0, $this->handoffs());
     }
 
+    public function test_cod_named_only_in_the_summary_is_recorded_as_cod(): void
+    {
+        $lead = $this->buyer($this->manado() + ['courier' => 'JNE REG']);
+        $this->summary($lead, 'Ringkasan pesanan: Kaos Lari Hitam x2, ongkir JNE REG Rp 62.000, total Rp 240.000, bayar di tempat (COD). Sudah sesuai kak?');
+        $this->ai = [$this->text('Siap kak, pesanan kami catat dan segera dikemas.')];
+
+        $this->says('Ok');
+
+        $this->assertSame('cod', $lead->fresh()->payment_type);
+        $this->assertSame('Dikemas & dikirim', $this->stageOf($lead));
+    }
+
     public function test_ok_without_a_way_of_paying_asks_for_it_and_ok_without_a_summary_records_nothing(): void
     {
         $lead = $this->buyer($this->manado() + ['courier' => 'JNE REG']);
