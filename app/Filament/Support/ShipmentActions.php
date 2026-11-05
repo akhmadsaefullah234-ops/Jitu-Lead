@@ -16,6 +16,8 @@ use App\Support\CurrentTenant;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
+use Filament\Forms\Components\Checkbox;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -52,12 +54,29 @@ class ShipmentActions
     ];
 
     /** @param  array<string, mixed>  $address  the address fields of the form, when shown */
-    private static function draft(Lead $lead, ?string $location, ?string $rate, array $address = []): ShipmentDraft
+    private static function draft(Lead $lead, ?string $location, ?string $rate, array $address = [], ?string $payment = null): ShipmentDraft
     {
         $lead = self::withAddress($lead, $address);
-        $key = $lead->getKey().'|'.$location.'|'.$rate.'|'.md5(json_encode([$lead->name, $lead->shipping_address, $lead->shipping_address_parts]));
+        $key = $lead->getKey().'|'.$location.'|'.$rate.'|'.$payment.'|'.md5(json_encode([$lead->name, $lead->shipping_address, $lead->shipping_address_parts]));
 
-        return self::$drafts[$key] ??= app(Shipments::class)->draft($lead, ['location_id' => $location, 'rate_code' => $rate]);
+        return self::$drafts[$key] ??= app(Shipments::class)->draft($lead, ['location_id' => $location, 'rate_code' => $rate, 'payment' => $payment]);
+    }
+
+    /** The lead's way of paying is unknown or only read from the chat: the agent picks before booking. */
+    private static function asksPayment(Lead $lead): bool
+    {
+        return Shipments::payment($lead) === null;
+    }
+
+    /** The way of paying the agent picked, onto the lead (confirmed). */
+    private static function savePayment(Lead $lead, ?string $payment): void
+    {
+        if (! isset(Shipments::PAYMENTS[$payment]) || ($lead->payment_type === $payment && $lead->payment_type_source === null)) {
+            return;
+        }
+
+        $lead->forceFill(['payment_type' => $payment, 'payment_type_source' => null])->save();
+        $lead->activities()->create(['user_id' => auth()->id(), 'type' => 'note', 'body' => 'Cara bayar dipastikan sebelum membuat resi: '.Shipments::PAYMENTS[$payment].'.']);
     }
 
     /** The lead as the form has it (not saved). */
@@ -125,6 +144,7 @@ class ShipmentActions
     /** @param  Closure(): ?Lead  $lead */
     public static function create(Closure $lead, string $name = 'createShipment'): Action
     {
+        $payment = fn (Get $get) => self::asksPayment($lead()) ? $get('payment') : null;
         $address = fn (Get $get) => self::needsAddress($lead()) ? array_map(fn ($f) => $get($f), array_combine(array_keys(self::ADDRESS_FIELDS), array_keys(self::ADDRESS_FIELDS))) : [];
         $field = fn (string $name, string $label) => TextInput::make($name)->label($label)->live(onBlur: true)->maxLength(150)->default(fn () => self::addressState($lead())[$name] ?? null);
 
@@ -133,7 +153,22 @@ class ShipmentActions
             ->modalHeading('Buat resi otomatis')
             ->modalDescription('Periksa dulu sebelum dikirim ke penyedia pengiriman. Resi yang terbit dikirim ke pembeli lewat WhatsApp seperti biasa.')
             ->modalSubmitActionLabel('Buat resi')
+            // Nothing is booked until the agent has said how the buyer pays, and checked an unconfirmed transfer.
+            ->modalSubmitAction(fn (Action $submit, Action $action) => $submit->disabled(function () use ($action, $lead) {
+                $data = $action->getRawData();
+                $chosen = Shipments::payment($lead(), $data['payment'] ?? null);
+
+                return $chosen === null || (Shipments::unpaid($lead(), $chosen) && ! ($data['transfer_checked'] ?? false));
+            }))
             ->schema([
+                Radio::make('payment')->label('Cara bayar')->options(Shipments::PAYMENTS)->inline()->live()->required()->default(null)
+                    ->visible(fn () => self::asksPayment($lead()))
+                    ->helperText(fn () => ($s = app(Shipments::class)->paymentSuggestion($lead())) !== null
+                        ? 'Saran dari chat: '.(Shipments::PAYMENTS[$s] ?? $s).'. Pastikan dulu, lalu pilih.'
+                        : 'Cara bayar lead ini belum diketahui. Pilih sesuai kesepakatan dengan pembeli.'),
+                Checkbox::make('transfer_checked')->label('Saya sudah memastikan transfer pembeli masuk')->accepted()
+                    ->visible(fn (Get $get) => Shipments::unpaid($lead(), Shipments::payment($lead(), $get('payment'))))
+                    ->helperText('⚠ Pembayaran transfer belum dikonfirmasi (belum ada bukti bayar atau tanda lunas di lead). Paket dikirim tanpa COD.')->live(),
                 Section::make('Alamat penerima')->description('Alamat lead belum lengkap. Ambil dari chat atau isi di sini; disimpan ke lead saat resi dibuat.')
                     ->visible(fn () => self::needsAddress($lead()))
                     ->columns(2)
@@ -165,25 +200,27 @@ class ShipmentActions
                         $field('addr_kode_pos', 'Kode pos')->maxLength(5)->rule('nullable')->rule('regex:/^\d{5}$/'),
                     ]),
                 Select::make('location_id')->label('Kelurahan tujuan')->live()
-                    ->options(fn (Get $get) => collect(self::draft($lead(), null, null, $address($get))->candidates)->mapWithKeys(fn (CarrierLocation $l) => [$l->id => $l->label()])->all())
+                    ->options(fn (Get $get) => collect(self::draft($lead(), null, null, $address($get), $payment($get))->candidates)->mapWithKeys(fn (CarrierLocation $l) => [$l->id => $l->label()])->all())
                     ->default(fn () => self::draft($lead(), null, null)->destination?->id)
-                    ->visible(fn (Get $get) => count(($d = self::draft($lead(), null, null, $address($get)))->candidates) > 1 || ($d->destination === null && $d->candidates !== [])),
+                    ->visible(fn (Get $get) => count(($d = self::draft($lead(), null, null, $address($get), $payment($get)))->candidates) > 1 || ($d->destination === null && $d->candidates !== [])),
                 Select::make('rate_code')->label('Kurir dan layanan')->live()
-                    ->options(fn (Get $get) => self::draft($lead(), $get('location_id'), $get('rate_code'), $address($get))->choices())
+                    ->options(fn (Get $get) => self::draft($lead(), $get('location_id'), $get('rate_code'), $address($get), $payment($get))->choices())
                     ->default(fn () => self::draft($lead(), null, null)->rate?->key())
-                    ->visible(fn (Get $get) => self::draft($lead(), $get('location_id'), null, $address($get))->rates !== []),
-                Text::make(fn (Get $get) => self::preview(self::draft($lead(), $get('location_id'), $get('rate_code'), $address($get))))->columnSpanFull(),
+                    ->visible(fn (Get $get) => self::draft($lead(), $get('location_id'), null, $address($get), $payment($get))->rates !== []),
+                Text::make(fn (Get $get) => self::preview(self::draft($lead(), $get('location_id'), $get('rate_code'), $address($get), $payment($get))))->columnSpanFull(),
             ])
             ->action(function (array $data, Action $action) use ($lead) {
                 $record = $lead();
-                $choice = ['location_id' => $data['location_id'] ?? null, 'rate_code' => $data['rate_code'] ?? null];
+                $choice = ['location_id' => $data['location_id'] ?? null, 'rate_code' => $data['rate_code'] ?? null, 'payment' => self::asksPayment($record) ? ($data['payment'] ?? null) : null];
                 $draft = app(Shipments::class)->draft(self::withAddress($record, $data), $choice);
 
-                if (! $draft->ok()) {
-                    Notification::make()->title('Resi belum bisa dibuat')->body(implode(' ', $draft->problems))->danger()->send();
+                if (! $draft->ok() || ($draft->unpaid && ! ($data['transfer_checked'] ?? false))) {
+                    Notification::make()->title('Resi belum bisa dibuat')
+                        ->body($draft->ok() ? 'Pembayaran transfer belum dikonfirmasi: pastikan transfer masuk dulu.' : implode(' ', $draft->problems))->danger()->send();
                     $action->halt();
                 }
 
+                self::savePayment($record, $choice['payment']);
                 self::saveAddress($record, $data);
 
                 try {
@@ -320,7 +357,7 @@ class ShipmentActions
         return BulkAction::make('bulkCreateShipments')->label('Buat resi')->icon(Heroicon::OutlinedTruck)
             ->visible(fn () => self::available())
             ->requiresConfirmation()->modalHeading('Buat resi untuk lead terpilih?')
-            ->modalDescription('Hanya lead di tahap Dikemas & dikirim tanpa kiriman aktif. Kurir: pilihan pembeli, atau kurir bawaan. Lead yang datanya belum lengkap dilewati dan disebutkan.')
+            ->modalDescription('Hanya lead di tahap Dikemas & dikirim tanpa kiriman aktif. Kurir: pilihan pembeli, atau kurir bawaan. Lead yang datanya belum lengkap, cara bayarnya belum dipastikan, atau transfernya belum dikonfirmasi dilewati dan disebutkan.')
             ->action(function (Collection $records) {
                 $stage = (new RetailStages)->stage(RetailStages::SHIPPING);
                 $booked = 0;
@@ -329,6 +366,19 @@ class ShipmentActions
                 foreach ($records as $lead) {
                     if ($stage === null || (int) $lead->stage_id !== (int) $stage->getKey() || Shipment::latestFor($lead) !== null) {
                         $skipped[] = $lead->name.' (bukan tahap Dikemas & dikirim atau sudah ada kiriman)';
+
+                        continue;
+                    }
+
+                    // Never assumed in bulk: an unknown way of paying, or a transfer nobody has seen, is left for the agent.
+                    if (Shipments::payment($lead) === null) {
+                        $skipped[] = $lead->name.': cara bayar belum dipastikan (COD atau transfer)';
+
+                        continue;
+                    }
+
+                    if (Shipments::unpaid($lead, Shipments::payment($lead))) {
+                        $skipped[] = $lead->name.': pembayaran transfer belum dikonfirmasi';
 
                         continue;
                     }

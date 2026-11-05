@@ -32,6 +32,8 @@ final class ShipmentDraft
         public string $description = '',
         public string $shipmentType = 'PICKUP',
         public ?string $promo = null,
+        public ?string $payment = null,
+        public bool $unpaid = false,
     ) {}
 
     /**
@@ -83,7 +85,11 @@ final class ShipmentDraft
         }
 
         $lines[] = 'Isi paket: '.($this->description ?: '-').' · nilai barang '.$rp($this->itemValue).' · berat '.number_format($this->weightGrams / 1000, 0).' kg';
-        $lines[] = $this->cod ? 'Total COD (ditagih kurir ke pembeli): '.$rp($this->codAmount).($this->rate?->codFee ? ' (termasuk biaya COD '.$rp($this->rate->codFee).')' : '') : 'Bukan COD (transfer)';
+        $lines[] = match (true) {
+            $this->cod => 'Total COD (ditagih kurir ke pembeli): '.$rp($this->codAmount).($this->rate?->codFee ? ' (termasuk biaya COD '.$rp($this->rate->codFee).')' : ''),
+            $this->unpaid => 'Bukan COD: pembeli bayar di muka. ⚠ Pembayaran transfer belum dikonfirmasi.',
+            default => 'Bukan COD: pembeli sudah bayar di muka.',
+        };
 
         if ($this->destination) {
             $lines[] = 'Tujuan: '.$this->destination->label();

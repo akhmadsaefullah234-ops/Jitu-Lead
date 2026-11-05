@@ -68,8 +68,11 @@ class RecordOrder
         $stage = DB::transaction(function () use ($lead, $quote, $option, $fullAddress, $total, $actor, $by, $order, $payment) {
             $first = $quote->items[0];
 
+            $lead->paymentFromChat = true;
             $lead->fill(array_filter(['name' => filled($order['nama'] ?? null) ? trim($order['nama']) : null]) + [
                 'payment_type' => $payment,
+                // Chosen in the chat when the buyer confirmed the order, else assumed: confirmed only when said.
+                'payment_type_source' => in_array($order['pembayaran'] ?? null, self::PAYMENTS, true) ? null : ($lead->payment_type === $payment ? $lead->payment_type_source : 'chat'),
                 'shipping_province' => $quote->province,
                 'property_id' => $first->product?->getKey() ?? $lead->property_id,
                 'variant' => implode('; ', array_filter(array_map(fn (ShippingItem $i) => count($quote->items) > 1 ? trim($i->name.' '.$i->variant) : $i->variant, $quote->items))) ?: null,
@@ -125,6 +128,7 @@ class RecordOrder
         $fullAddress = implode(', ', [$address, ...array_filter([$order['kecamatan'] ?? null, $quote->city, $quote->province], fn ($p) => filled($p) && ! str_contains(mb_strtolower($address), mb_strtolower((string) $p)))]);
 
         $stage = DB::transaction(function () use ($lead, $order, $quote, $fullAddress, $actor, $by) {
+            $lead->paymentFromChat = true;
             $lead->fill(array_filter(['name' => filled($order['nama'] ?? null) ? trim($order['nama']) : null]) + [
                 'property_id' => $quote->items[0]->product?->getKey() ?? $lead->property_id,
                 'variant' => implode('; ', array_filter(array_map(fn (ShippingItem $i) => count($quote->items) > 1 ? trim($i->name.' '.$i->variant) : $i->variant, $quote->items))) ?: null,
@@ -132,7 +136,9 @@ class RecordOrder
                 'shipping_address' => $fullAddress,
                 'shipping_province' => $quote->province,
                 'order_items' => array_map(fn (ShippingItem $i) => $i->toArray(), $quote->items),
-            ])->save();
+            ] + (in_array($order['pembayaran'] ?? null, self::PAYMENTS, true) && $order['pembayaran'] !== $lead->payment_type
+                // What the buyer said so far, not yet confirmed: "Buat resi" asks the agent.
+                ? ['payment_type' => $order['pembayaran'], 'payment_type_source' => 'chat'] : []))->save();
 
             $lead->activities()->create([
                 'user_id' => $by === 'AI' ? null : $actor->getKey(),

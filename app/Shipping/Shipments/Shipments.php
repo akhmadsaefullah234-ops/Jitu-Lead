@@ -5,6 +5,7 @@ namespace App\Shipping\Shipments;
 use App\Automation\StageAutomation;
 use App\Enums\StageType;
 use App\Jobs\CreateShipment;
+use App\Leads\ChatShippingDetails;
 use App\Models\CarrierAccount;
 use App\Models\Lead;
 use App\Models\Property;
@@ -61,7 +62,46 @@ class Shipments
 
     // ---- Preview -------------------------------------------------------------------------------------------
 
-    /** @param  array{location_id?: ?string, rate_code?: ?string}  $choice  what the agent picked in the preview */
+    /** The ways of paying "Buat resi" asks the agent to pick from when the lead's is unknown or only read from the chat. */
+    public const PAYMENTS = ['cod' => 'COD (bayar di tempat)', 'transfer' => 'Transfer (sudah lunas)'];
+
+    /**
+     * How the buyer pays, as far as "Buat resi" may trust it: what the agent picked in the preview, else the lead's
+     * own when an agent, the order form or a confirmed order set it. Never assumed: blank or only read from the
+     * chat is null, and the agent has to pick.
+     */
+    public static function payment(Lead $lead, ?string $choice = null): ?string
+    {
+        if (isset(self::PAYMENTS[$choice])) {
+            return $choice;
+        }
+
+        return filled($lead->payment_type) && $lead->payment_type_source === null ? (string) $lead->payment_type : null;
+    }
+
+    /** Paid in advance (transfer, QRIS…) but nobody has seen the money: no paid_at and no proof of payment. */
+    public static function unpaid(Lead $lead, ?string $payment): bool
+    {
+        return $payment !== null && $payment !== 'cod' && $lead->paid_at === null && $lead->payment_proof_at === null;
+    }
+
+    /** What the chat says about paying, for the agent to confirm: the lead's unconfirmed one, else read from the messages. */
+    public function paymentSuggestion(Lead $lead): ?string
+    {
+        if (filled($lead->payment_type) && $lead->payment_type_source !== null) {
+            return (string) $lead->payment_type;
+        }
+
+        if (filled($lead->payment_type)) {
+            return null;
+        }
+
+        $found = app(ChatShippingDetails::class)->fromConversation($lead, save: false);
+
+        return $found['changes']['payment_type'] ?? null;
+    }
+
+    /** @param  array{location_id?: ?string, rate_code?: ?string, payment?: ?string}  $choice  what the agent picked in the preview */
     public function draft(Lead $lead, array $choice = []): ShipmentDraft
     {
         $account = $this->account();
@@ -85,7 +125,13 @@ class Shipments
         $draft->itemValue = array_sum(array_map(fn ($i) => $i['price'] * $i['quantity'], $draft->items));
         $draft->description = Str::limit(implode(', ', array_map(fn ($i) => $i['name'].' x'.$i['quantity'], $draft->items)), 150, '');
         $draft->weightGrams = $this->weight($lead);
-        $draft->cod = $lead->payment_type === 'cod';
+        $draft->payment = self::payment($lead, $choice['payment'] ?? null);
+        $draft->cod = $draft->payment === 'cod';
+        $draft->unpaid = self::unpaid($lead, $draft->payment);
+
+        if ($draft->payment === null) {
+            $draft->problems[] = 'Cara bayar belum dipastikan: pilih COD atau Transfer (sudah lunas).';
+        }
 
         if ($draft->items === []) {
             $draft->problems[] = 'Produk dan jumlah pesanan belum diisi di lead.';

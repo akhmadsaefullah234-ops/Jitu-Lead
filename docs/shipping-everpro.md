@@ -81,6 +81,14 @@ tidak), juga untuk resi yang tidak dikenal. URL satu agensi tidak bisa menyentuh
 - Bila alamat lead belum lengkap, form **Buat resi** menampilkan isian alamat (nama, alamat, RT/RW, patokan,
   kelurahan, kecamatan, kota, kode pos) dan tombol **Ambil dari chat**. Alamat yang diubah disimpan ke lead saat resi
   dibuat.
+- Cara bayar tidak pernah ditebak. Bila `payment_type` kosong, atau hanya terbaca dari chat/AI (`payment_type_source`
+  = `chat`, belum dipastikan agen), modal Buat resi menampilkan pilihan wajib **Cara bayar: COD / Transfer (sudah
+  lunas)** tanpa bawaan, dengan saran dari chat ("COD", "C0D", "cod min", "tf aja", "pakai transfer"). Tombol Buat
+  resi nonaktif sampai dipilih; pilihannya disimpan ke lead sebagai sudah dipastikan. Transfer (atau bayar lainnya)
+  tanpa `paid_at`/`payment_proof_at` menampilkan "Pembayaran transfer belum dikonfirmasi" dan butuh centang "Saya
+  sudah memastikan transfer pembeli masuk". Aksi massal melewati lead yang cara bayarnya belum dipastikan atau
+  transfernya belum dikonfirmasi, dan menyebut namanya. Membaca ulang chat lama tidak mengubah cara bayar yang sudah
+  dipastikan agen; pesan baru yang menyebut cara bayar lain membuatnya ditanyakan lagi.
 - Promo ongkir: `shipment_price` ke Everpro selalu ongkir asli tarif terpilih; `cod_price` = harga x jumlah + ongkir yang
   ditagih ke pembeli setelah promo ongkir produk (ongkir yang tercatat di lead, atau ongkir Everpro dikurangi promo bila
   belum pernah dihitung). Pratinjau menampilkan ongkir asli, potongan/subsidi penjual, cashback Everpro dan total COD.
