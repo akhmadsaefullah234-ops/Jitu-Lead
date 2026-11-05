@@ -86,11 +86,12 @@ class RecordOrder
                 'user_id' => $by === 'AI' ? null : $actor->getKey(),
                 'type' => 'order_recorded',
                 'body' => "Pesanan dicatat oleh {$by}: ".implode(', ', array_map(fn (ShippingItem $i) => trim($i->name.' '.$i->variant).' x'.$i->quantity, $quote->items))
-                    .". Ongkir {$option->courier} ".ShippingQuote::rupiah($option->price).($total !== null ? ', total '.ShippingQuote::rupiah($total) : '')
+                    .". Ongkir {$option->courier} ".ShippingQuote::rupiah($option->price)
+                    .($option->discount() > 0 ? ' (normal '.ShippingQuote::rupiah($option->normalPrice).', '.$option->promo.')' : '').($total !== null ? ', total '.ShippingQuote::rupiah($total) : '')
                     .match ($payment) {
                         'cod' => '. Bayar di tempat (COD)', 'other' => '. Bayar lainnya (QRIS/e-wallet)', default => '. Bayar transfer'
                     },
-                'meta' => ['ongkir' => $option->price, 'total' => $total, 'berat_kg' => $quote->billableKg, 'zona' => $quote->zone, 'pembayaran' => $payment],
+                'meta' => ['ongkir' => $option->price, 'ongkir_normal' => $option->discount() > 0 ? $option->normalPrice : null, 'promo_ongkir' => $option->promo, 'total' => $total, 'berat_kg' => $quote->billableKg, 'zona' => $quote->zone, 'pembayaran' => $payment],
             ]);
 
             return $this->automation->applies() ? $this->automation->orderConfirmed($lead, $payment) : $this->moveToPayment($lead, $actor);
@@ -104,6 +105,8 @@ class RecordOrder
             'kurir' => $option->courier,
             'ongkir' => $option->price,
             'ongkir_teks' => ShippingQuote::rupiah($option->price),
+            'potongan_ongkir_teks' => $option->discount() > 0 ? ShippingQuote::rupiah($option->discount()) : null,
+            'promo_ongkir' => $option->discount() > 0 ? $option->promo : null,
             'subtotal_produk' => $subtotal,
             'total' => $total,
             'total_teks' => $total !== null ? ShippingQuote::rupiah($total) : null,

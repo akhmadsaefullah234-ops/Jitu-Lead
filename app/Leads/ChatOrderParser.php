@@ -36,6 +36,9 @@ class ChatOrderParser
         'product' => ['produk', 'barang', 'pesanan', 'order', 'nama produk', 'nama barang', 'item', 'pesan'],
     ];
 
+    /** Words that say an address is a new one. */
+    private const NEW_ADDRESS = '/\b(?:ganti|ubah|pindah|tukar)\s+alamat|\balamat(?:nya)?\s+(?:saya\s+|kirim(?:nya)?\s+)?(?:ganti|diganti|baru|berubah|beda|lain|pindah|diubah)\b|\b(?:tolong\s+)?(?:di)?kirim(?:kan|in)?\s+ke\s+(?:alamat|sini|jl|jln|jalan|gg|perum|komplek|kp|desa|rumah|kantor|toko)\b/iu';
+
     /** Words of a reply that is not a landmark ("nanti saya kirim", "belum tau"). */
     private const NOT_A_PLACE = '/\b(?:saya|aku|sy|nanti|besok|sebentar|bentar|gimana|bagaimana|berapa|bisa|mau|tidak|gak|ga|nggak|enggak|belum|udah|sudah|makasih|terima|tau|tahu|lupa|kirim|kak|ok|oke)\b/iu';
 
@@ -55,8 +58,14 @@ class ChatOrderParser
         }
 
         $labeled = $this->labeled($text);
+        $out = $labeled !== [] ? $this->fromLabels($labeled) : $this->fromFreeText($text, (string) $asked);
 
-        return $labeled !== [] ? $this->fromLabels($labeled) : $this->fromFreeText($text, (string) $asked);
+        // "Alamat ganti …", "kirim ke …": the buyer says this is a different address, not the same one again.
+        if (isset($out['address']) && preg_match(self::NEW_ADDRESS, $text)) {
+            $out['explicit'] = true;
+        }
+
+        return $out;
     }
 
     /**
@@ -253,7 +262,10 @@ class ChatOrderParser
         );
 
         if ($isAddress) {
-            return ['address' => self::clean($text), 'parts' => $this->addressParts($text)];
+            // "Kak alamatnya ganti ya: Jl. …": only what follows the colon.
+            $address = preg_match('/^[^:\n]{0,50}\balamat\w*\b[^:\n]{0,40}:\s*(.+)$/su', $text, $m) ? $m[1] : $text;
+
+            return ['address' => self::clean($address), 'parts' => $this->addressParts($address)];
         }
 
         if (! $short) {

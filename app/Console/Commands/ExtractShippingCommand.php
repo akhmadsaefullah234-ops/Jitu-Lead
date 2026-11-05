@@ -12,7 +12,7 @@ use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
-#[Signature('leads:extract-shipping {--tenant= : ID atau slug agensi} {--stage=* : tahap (nama atau kunci: order, payment, shipping); bawaan Order masuk, Menunggu pembayaran, Dikemas & dikirim} {--apply : simpan perubahan (tanpa ini hanya pratinjau)} {--all : juga lead yang alamatnya sudah lengkap}')]
+#[Signature('leads:extract-shipping {--tenant= : ID atau slug agensi} {--stage=* : tahap (nama atau kunci: order, payment, shipping); bawaan Order masuk, Menunggu pembayaran, Dikemas & dikirim} {--apply : simpan perubahan (tanpa ini hanya pratinjau)} {--all : juga lead yang alamatnya sudah lengkap} {--lead=* : hanya lead dengan ID ini (boleh berulang)}')]
 #[Description('Isi data pengiriman lead (alamat, bagian alamat, varian, jumlah, cara bayar) dari chat WhatsApp-nya. Pratinjau kecuali --apply.')]
 class ExtractShippingCommand extends Command
 {
@@ -32,14 +32,16 @@ class ExtractShippingCommand extends Command
         return $current->run($tenant, function () use ($apply) {
             $stages = $this->stages();
 
-            if ($stages === []) {
+            if ($stages === [] && $this->option('lead') === []) {
                 $this->error('Tahap tidak ditemukan.');
 
                 return self::FAILURE;
             }
 
-            $leads = Lead::query()->whereIn('stage_id', $stages)->whereNull('tracking_number')->orderBy('id')->get();
-            $leads = $this->option('all') ? $leads : ChatShippingDetails::incomplete($leads);
+            $only = array_values(array_filter(array_map('intval', (array) $this->option('lead'))));
+            $leads = Lead::query()->whereNull('tracking_number')->orderBy('id')
+                ->when($only !== [], fn ($q) => $q->whereIn('id', $only), fn ($q) => $q->whereIn('stage_id', $stages))->get();
+            $leads = $this->option('all') || $only !== [] ? $leads : ChatShippingDetails::incomplete($leads);
             $service = app(ChatShippingDetails::class);
             $rows = [];
             $changed = 0;
@@ -51,12 +53,15 @@ class ExtractShippingCommand extends Command
                 $lead = $apply ? $lead->fresh() : $lead->forceFill($result['changes'] ?? []);
 
                 // Never the address itself: the lead number and the last 4 digits of the phone.
+                [$before, $after] = [$result['parts_before'] ?? 0, $result['parts_after'] ?? 0];
                 $rows[] = [$lead->getKey(), '…'.substr((string) $lead->phone, -4), $labels === [] ? '-' : implode(', ', $labels),
-                    ($result['previous'] ?? []) !== [] ? 'ya' : '', ChatShippingDetails::complete($lead) ? 'lengkap' : 'belum'];
+                    ($result['previous'] ?? []) !== [] ? 'ya' : '', $before.' → '.$after.($after < $before ? ' ⚠ berkurang' : ''),
+                    ChatShippingDetails::complete($lead) ? 'lengkap' : 'belum'];
             }
 
-            $this->table(['Lead', 'HP', 'Diisi dari chat', 'Alamat diganti', 'Alamat'], $rows);
-            $this->info(sprintf('%d lead diperiksa, %d dengan data baru dari chat. %s', count($rows), $changed,
+            $this->table(['Lead', 'HP', 'Diisi dari chat', 'Alamat diganti', 'Bagian alamat', 'Alamat'], $rows);
+            $fewer = count(array_filter($rows, fn ($r) => str_contains($r[4], 'berkurang')));
+            $this->info(sprintf('%d lead diperiksa, %d dengan data baru dari chat%s. %s', count($rows), $changed, $fewer > 0 ? ", {$fewer} dengan bagian alamat berkurang" : '',
                 $apply ? 'Perubahan disimpan.' : 'Pratinjau: belum ada yang disimpan. Jalankan lagi dengan --apply untuk menyimpan.'));
 
             return self::SUCCESS;

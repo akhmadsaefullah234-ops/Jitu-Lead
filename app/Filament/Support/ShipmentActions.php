@@ -8,7 +8,6 @@ use App\Models\Lead;
 use App\Models\Shipment;
 use App\Shipping\Carriers\CarrierException;
 use App\Shipping\Carriers\CarrierLocation;
-use App\Shipping\Carriers\CarrierRate;
 use App\Shipping\Carriers\Carriers;
 use App\Shipping\Shipments\LabelSheet;
 use App\Shipping\Shipments\ShipmentDraft;
@@ -170,9 +169,8 @@ class ShipmentActions
                     ->default(fn () => self::draft($lead(), null, null)->destination?->id)
                     ->visible(fn (Get $get) => count(($d = self::draft($lead(), null, null, $address($get)))->candidates) > 1 || ($d->destination === null && $d->candidates !== [])),
                 Select::make('rate_code')->label('Kurir dan layanan')->live()
-                    ->options(fn (Get $get) => collect(self::draft($lead(), $get('location_id'), null, $address($get))->rates)
-                        ->mapWithKeys(fn (CarrierRate $r) => [$r->code => $r->name().' · Rp'.number_format($r->price, 0, ',', '.').($r->etaMax ? " · {$r->etaMin}-{$r->etaMax} hari" : '')])->all())
-                    ->default(fn () => self::draft($lead(), null, null)->rate?->code)
+                    ->options(fn (Get $get) => self::draft($lead(), $get('location_id'), $get('rate_code'), $address($get))->choices())
+                    ->default(fn () => self::draft($lead(), null, null)->rate?->key())
                     ->visible(fn (Get $get) => self::draft($lead(), $get('location_id'), null, $address($get))->rates !== []),
                 Text::make(fn (Get $get) => self::preview(self::draft($lead(), $get('location_id'), $get('rate_code'), $address($get))))->columnSpanFull(),
             ])

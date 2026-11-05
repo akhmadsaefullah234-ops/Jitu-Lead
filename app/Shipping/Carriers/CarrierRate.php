@@ -2,7 +2,7 @@
 
 namespace App\Shipping\Carriers;
 
-/** One courier service and what it costs. $meta: what the provider wants back when booking this rate (Everpro: signed_key, rateID, cashback, durations). */
+/** One courier service and what it costs. $meta: what the provider wants back when booking this rate (Everpro: category, signed_key, rate_name, cashback, durations). */
 final class CarrierRate
 {
     public function __construct(
@@ -23,11 +23,49 @@ final class CarrierRate
         return trim($this->courier.' '.$this->service);
     }
 
-    /** True for "JNE REG", "jne reg" or a rate code "JNE_REG". */
+    /** The kind of service the provider grouped it under: regular, express, same_day, instant, cargo or vehicle. */
+    public function category(): string
+    {
+        return (string) ($this->meta['category'] ?? 'regular');
+    }
+
+    /** Unique among one answer's rates: a rate code alone is not ("REG" is SiCepat's and others'). */
+    public function key(): string
+    {
+        return $this->courier.'|'.$this->code;
+    }
+
+    public function cashback(): int
+    {
+        return (int) ($this->meta['cashback'] ?? 0);
+    }
+
+    /**
+     * True for "JNE REG", "jne reg", "JNE Regular" or a rate code "JNE_REG". "JNE REG" also matches JNE's
+     * rate named "Regular" whatever its code (REG23), since the code can change.
+     */
     public function matches(?string $wanted): bool
     {
-        $norm = fn (?string $v) => strtoupper(preg_replace('/[\s_\-]+/', ' ', trim((string) $v)));
+        $norm = fn (?string $v) => strtoupper(trim(preg_replace('/[\s_\-]+/', ' ', (string) $v)));
+        $wanted = $norm($wanted);
 
-        return $wanted !== null && ($norm($wanted) === $norm($this->name()) || $norm($wanted) === $norm($this->code));
+        if ($wanted === '') {
+            return false;
+        }
+
+        if (in_array($wanted, [$norm($this->name()), $norm($this->code), $norm($this->key()), $norm($this->courier.' '.($this->meta['rate_name'] ?? ''))], true)) {
+            return true;
+        }
+
+        $courier = $norm($this->courier);
+
+        if ($courier === '' || ! str_starts_with($wanted.' ', $courier.' ')) {
+            return false;
+        }
+
+        $service = trim(substr($wanted, strlen($courier)));
+
+        return in_array($service, ['REG', 'REGULAR'], true) && $this->category() === 'regular'
+            && in_array($norm($this->service), ['REG', 'REGULAR'], true);
     }
 }

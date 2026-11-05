@@ -6,6 +6,8 @@ use App\Enums\PropertyKind;
 use App\Filament\Resources\Properties\Pages\EditProperty;
 use App\Filament\Resources\Properties\Pages\ManageProperties;
 use App\Models\Property;
+use App\Shipping\Regions;
+use App\Shipping\ShippingPromos;
 use App\Support\CurrentTenant;
 use App\Support\Industry;
 use App\Welcome\WelcomeFields;
@@ -13,6 +15,7 @@ use App\Welcome\WelcomeSettings;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\KeyValue;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
@@ -119,6 +122,21 @@ class PropertyResource extends Resource
                         ->helperText('Opsional. Dipakai pesan sambutan formulir yang tidak punya teks sendiri, untuk pembeli '.Industry::t('catalog_item').' ini. Klik variabel di bawah untuk menyisipkannya; {jawaban:kunci} mengambil jawaban field formulir.'), 'welcome_text', fn () => null),
                     Text::make(fn (Get $get) => 'Contoh yang diterima pembeli (data contoh): '."\n".WelcomeFields::example(filled($get('welcome_text')) ? (string) $get('welcome_text') : WelcomeSettings::builtIn(app(CurrentTenant::class)->get())))
                         ->extraAttributes(['style' => 'white-space:pre-line;padding:.6rem .8rem;border-radius:.5rem;background:rgba(37,211,102,.08);border:1px solid rgba(37,211,102,.25)'])->columnSpanFull(),
+                    // Taken off every shipping quote that holds this product: the AI, the recorded order and "Buat resi"
+                    Repeater::make('shipping_promos')->label('Promo ongkir')->columnSpanFull()->visible(! $property)->defaultItems(0)
+                        ->addActionLabel('Tambah promo ongkir')->columns(2)->collapsible()
+                        ->itemLabel(fn (array $state) => ($rule = ShippingPromos::rules([$state])[0] ?? null) ? ShippingPromos::describe($rule, 'produk ini') : null)
+                        ->helperText('Opsional. Dipotong otomatis dari ongkir saat AI cek ongkir, saat pesanan dicatat, dan di Buat resi. Bila ada beberapa promo, dipakai satu yang paling hemat.')
+                        ->schema([
+                            Select::make('type')->label('Jenis promo')->options(ShippingPromos::TYPES)->default('discount')->required()->live(),
+                            TextInput::make('amount')->label(fn (Get $get) => $get('type') === 'cap' ? 'Ongkir maksimal' : 'Potongan')->numeric()->integer()->minValue(1)->prefix('Rp')
+                                ->required(fn (Get $get) => $get('type') !== 'free')->visible(fn (Get $get) => $get('type') !== 'free'),
+                            Select::make('area')->label('Tujuan')->options(ShippingPromos::AREAS)->default('all')->required()->live(),
+                            Select::make('provinces')->label('Provinsi')->multiple()->options(array_combine(array_keys(Regions::PROVINCES), array_keys(Regions::PROVINCES)))
+                                ->required(fn (Get $get) => $get('area') === 'provinces')->visible(fn (Get $get) => $get('area') === 'provinces'),
+                            TextInput::make('min_quantity')->label('Minimal jumlah')->numeric()->integer()->minValue(1)->default(1)->suffix('pcs'),
+                            TextInput::make('label')->label('Nama promo (opsional)')->maxLength(120)->placeholder('Promo Tas Badminton luar Jawa'),
+                        ]),
                     TagsInput::make('ad_keywords')->label('Pengenal iklan')->columnSpanFull()->placeholder('Ketik lalu Enter')
                         ->splitKeys([','])->nestedRecursiveRules(['string', 'max:120'])
                         ->helperText('Kata kunci, potongan teks sapaan iklan, atau ID iklan Meta (angka). Chat dari iklan atau pesan pertama yang memuatnya otomatis ditandai menanyakan '.Industry::t('catalog_item').' ini, mis. "badminton", "capra", "selempang", atau 120210000000001.'),

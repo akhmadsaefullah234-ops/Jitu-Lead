@@ -159,7 +159,7 @@ class EverproShippingTest extends TestCase
                 ? $ok([['district_id' => 'D-KDW', 'district_name' => 'Kedungwaringin']])
                 : Http::response(['message' => 'not found', 'data' => []], 404),
             $path === '/shipment/v2/rates' => $ok(self::ratesFixture(($r->data()['is_cod'] ?? false) === true)),
-            $path === '/shipment/v1/pickup-times' => $ok(['available_pickup_time' => [['rate_code' => 'JNE_REG', 'pickup_time_list' => [['date' => '2026-11-05', 'pickup_times' => [['start_at' => '2026-11-05T07:00:00Z', 'end_at' => '2026-11-05T09:00:00Z']]]]]]]),
+            $path === '/shipment/v1/pickup-times' => $ok(['available_pickup_time' => [['rate_code' => 'REG23', 'pickup_time_list' => [['date' => '2026-11-05', 'pickup_times' => [['start_at' => '2026-11-05T07:00:00Z', 'end_at' => '2026-11-05T09:00:00Z']]]]]]]),
             $path === '/shipment/v2/orders' && $this->orderError !== null => Http::response(['message' => $this->orderError], 422),
             $path === '/shipment/v2/orders' => $ok(['client_order_no' => $r->data()['client_order_no'], 'order_reference_id' => 'ER-'.count($this->callsTo('/shipment/v2/orders')), 'actual_price' => 18000]),
             str_ends_with($path, '/generate') => $ok(['awb_number' => $this->noAwb ? null : 'JNE0001234']),
@@ -218,14 +218,32 @@ class EverproShippingTest extends TestCase
         };
     }
 
-    /** A /shipment/v2/rates answer in the shape of the fields the prepaid docs name for a rate. */
+    /**
+     * A /shipment/v2/rates answer (inside "data") in the shape production gives: grouped by kind of service,
+     * logistic_code always empty, numbers sometimes strings, no COD fee. With is_cod some services drop out.
+     */
     private static function ratesFixture(bool $cod): array
     {
+        $rate = fn (string $logistic, string $code, string $name, int|string $price, int|string $after, int $cashback, int $min, int $max, string $key, array $extra = []) => $extra + [
+            'signed_key' => $key, 'name' => 'Everpro', 'logistic_name' => $logistic, 'logistic_logo_url' => 'https://cdn.example.com/'.strtolower($logistic).'.png',
+            'rate_code' => $code, 'rate_name' => $name, 'min_duration' => $min, 'max_duration' => $max, 'duration_type' => 'DAY',
+            'price' => $price, 'shipment_price_after_discount' => $after, 'surcharge' => 0, 'surcharge_details' => ['commodity_surcharge' => 0, 'woodpacking_surcharge' => 0],
+            'insurance_price' => 1500, 'weight' => 2, 'volume_weight' => 0, 'is_available_pickup_today' => true, 'cashback' => $cashback,
+            'is_flat_rate' => false, 'is_use_wood_packing' => false, 'logistic_code' => '',
+        ];
+
         return [
-            ['rate_code' => 'JNE_REG', 'rate_name' => 'REG', 'logistic_name' => 'JNE', 'logistic_code' => 'JNE', 'shipment_price' => 18000, 'cod_fee' => $cod ? 3000 : 0,
-                'insurance_price' => 1500, 'min_duration' => 2, 'max_duration' => 3, 'cashback' => 500, 'is_flat_rate' => false, 'signed_key' => 'sig-jne-reg', 'rateID' => 101],
-            ['rate_code' => 'SICEPAT_REG', 'rate_name' => 'REG', 'logistic_name' => 'SiCepat', 'logistic_code' => 'SICEPAT', 'shipment_price' => 16000, 'cod_fee' => 0,
-                'insurance_price' => 0, 'min_duration' => 1, 'max_duration' => 2, 'cashback' => 0, 'is_flat_rate' => true, 'signed_key' => 'sig-sicepat-reg', 'rateID' => 102],
+            'regular' => array_values(array_filter([
+                $rate('SiCepat', 'REG', 'Regular', 16000, '16000', 0, 1, 2, 'sig-sicepat-reg', ['is_flat_rate' => true, 'insurance_price' => 0]),
+                $rate('JNE', 'REG23', 'Regular', '18000', 18000, 500, 2, 3, 'sig-jne-reg'),
+                $rate('J&T Express', 'EZ', 'Regular', 19000, 19000, 900, 2, 3, 'sig-jnt-ez'),
+                $cod ? null : $rate('Lion Parcel', 'BOSSPACK', 'BOSSPACK', 15000, 14000, 0, 2, 4, 'sig-lion-boss'),
+            ])),
+            'express' => [$rate('JNE', 'YES23', 'Yakin Esok Sampai', 32000, 32000, 0, 1, 1, 'sig-jne-yes')],
+            'same_day' => [],
+            'instant' => [],
+            'cargo' => [$rate('JNE', 'JTR23', 'Trucking', 45000, 40000, 0, 3, 7, 'sig-jne-jtr', ['surcharge' => '2500'])],
+            'vehicle' => [],
         ];
     }
 
@@ -475,8 +493,10 @@ class EverproShippingTest extends TestCase
         $this->assertSame(2000, $draft->weightGrams, '1000 g per bag, two bags.');
         $this->assertSame(300000, $draft->itemValue);
         $this->assertSame(10000, $draft->charged, 'The promo shipping the buyer was charged.');
-        $this->assertSame(300000 + 10000 + 3000, $draft->codAmount, 'Items + shipping charged + Everpro COD fee.');
-        $this->assertStringContainsString('Ongkir Everpro: Rp18.000 · ditagih ke pembeli: Rp10.000', $draft->summary());
+        $this->assertSame(300000 + 10000, $draft->codAmount, 'Items + the shipping charged; the rates answer has no COD fee.');
+        $this->assertStringContainsString('Ongkir asli Everpro: Rp18.000 · cashback Everpro Rp500', $draft->summary());
+        $this->assertStringContainsString('Ongkir ditagih ke pembeli: Rp10.000 (potongan/subsidi penjual Rp8.000)', $draft->summary());
+        $this->assertStringContainsString('Total COD (ditagih kurir ke pembeli): Rp310.000', $draft->summary());
         $rates = $this->callsTo('/shipment/v2/rates')[0]['body'];
         $this->assertTrue($rates['is_cod']);
         $this->assertSame('17540', $rates['origin_postal_code']);
@@ -537,10 +557,11 @@ class EverproShippingTest extends TestCase
         }
         $this->assertSame(2, $order['weight']);
         $this->assertSame(300000, $order['package_price']);
-        $this->assertSame('JNE_REG', $order['rate_code']);
+        $this->assertSame('REG23', $order['rate_code']);
         $this->assertSame(18000, $order['shipment_price']);
         $this->assertSame([2, 3], [$order['min_duration'], $order['max_duration']]);
-        $this->assertSame(['sig-jne-reg', 101, 500, false], [$order['signed_key'], $order['rateID'], $order['cashback'], $order['is_flat_rate']], 'What the chosen rate gave back.');
+        $this->assertSame(['sig-jne-reg', 500, false], [$order['signed_key'], $order['cashback'], $order['is_flat_rate']], 'What the chosen rate gave back.');
+        $this->assertArrayNotHasKey('rateID', $order, 'Not in the answer, so not sent.');
         $this->assertSame('17540', $order['shipper_postal_code']);
         $this->assertSame('Kedungwaringin', $order['shipper_sub_district_name']);
         $this->assertSame('Sekeloa', $order['receiver_sub_district_name']);
@@ -548,7 +569,8 @@ class EverproShippingTest extends TestCase
         $this->assertSame('2026-11-05T07:00:00+00:00', $order['pickup_time']);
 
         // Only the field names of the answer are logged, once.
-        Log::shouldHaveReceived('info')->withArgs(fn ($m, $c) => $m === 'Everpro rates answer keys' && in_array('signed_key', $c['rate'], true) && ! str_contains(json_encode($c), 'sig-jne-reg'))->once();
+        Log::shouldHaveReceived('warning')->withArgs(fn ($m, $c) => $m === 'Everpro rates answer keys' && in_array('signed_key', $c['rate'], true)
+            && $c['groups']['regular'] === 3 && ! str_contains(json_encode($c), 'sig-'))->once();
 
         $this->assertSame(1, EverproCarrier::kg(1000));
         $this->assertSame(1.5, EverproCarrier::kg(1500));
@@ -609,7 +631,7 @@ class EverproShippingTest extends TestCase
         $order = $this->callsTo('/shipment/v2/orders')[0]['body'];
         $this->assertSame('JL-'.$this->shop->id.'-'.$lead->id.'-1', $order['client_order_no']);
         $this->assertTrue($order['is_cod']);
-        $this->assertSame(313000, $order['cod_price']);
+        $this->assertSame(310000, $order['cod_price']);
         $this->assertSame('081234567890', $order['receiver_phone'], 'Local number on the label.');
         $this->assertSame('Sekeloa', $order['receiver_sub_district_name']);
         $this->assertSame('40134', $order['receiver_postal_code']);
@@ -709,7 +731,7 @@ class EverproShippingTest extends TestCase
         $messages = array_slice($this->sent(), $before);
         $this->assertCount(3, $messages, implode("\n---\n", $messages));
         $this->assertSame('Halo kak Rina 😊 Paket Tas Badminton Hitam kakak sudah diambil kurir JNE REG dan dalam perjalanan. Resi: JNE0001234. Lacak: https://www.jne.co.id/tracking-package?awb=JNE0001234', $messages[0]);
-        $this->assertStringContainsString('Mohon siapkan uang *Rp313.000*', $messages[1]);
+        $this->assertStringContainsString('Mohon siapkan uang *Rp310.000*', $messages[1]);
         $this->assertSame('Paket sudah diterima ya kak Rina 😊 Terima kasih sudah belanja di Quicker Sport.', $messages[2]);
         $this->assertSame(ShipmentStatus::DELIVERED, $this->shipment()->status);
         $this->assertSame('Selesai', $this->inShop(fn () => $lead->fresh('stage')->stage->name));
@@ -1209,5 +1231,65 @@ class EverproShippingTest extends TestCase
         $before = count($this->sent());
         $this->courierSays('DELIVERED');
         $this->assertSame(['Terima kasih Rina -'], array_slice($this->sent(), $before));
+    }
+
+    public function test_the_grouped_rates_answer_is_read_by_courier_name_and_kind_of_service(): void
+    {
+        $this->configure();
+        $lead = $this->order('transfer');
+
+        $draft = $this->inShop(fn () => app(Shipments::class)->draft($lead));
+        $this->assertTrue($draft->ok(), implode(' ', $draft->problems));
+
+        // Every group is read; logistic_code is empty, so the courier is its logistic_name and "Regular" reads "REG".
+        $this->assertSame(['Lion Parcel BOSSPACK', 'SiCepat REG', 'JNE REG', 'J&T Express REG', 'JNE Yakin Esok Sampai', 'JNE Trucking'],
+            array_map(fn ($r) => $r->name(), $draft->rates), 'regular, express, then cargo; cheapest first in a group');
+        $this->assertSame(['regular', 'regular', 'regular', 'regular', 'express', 'cargo'], array_map(fn ($r) => $r->category(), $draft->rates));
+
+        // "JNE REG" (the lead's and the settings' courier) is JNE's Regular, whatever its code
+        $this->assertSame(['REG23', 18000, 500], [$draft->rate->code, $draft->rate->price, $draft->rate->cashback()]);
+        $this->assertTrue(collect($draft->rates)->firstWhere('code', 'REG')->matches('SiCepat REG'));
+        $this->assertFalse(collect($draft->rates)->firstWhere('code', 'REG')->matches('JNE REG'));
+
+        // After discount, plus the surcharge; numbers as strings are read
+        $trucking = collect($draft->rates)->firstWhere('code', 'JTR23');
+        $this->assertSame([42500, 40000, 45000], [$trucking->price, $trucking->meta['shipment_price'], $trucking->meta['price']]);
+        $lion = collect($draft->rates)->firstWhere('code', 'BOSSPACK');
+        $this->assertSame(14000, $lion->price, 'shipment_price_after_discount, not price');
+
+        // The courier list: regular and express, cheapest first, cargo only over 5 kg
+        $choices = $draft->choices();
+        $this->assertSame(['Lion Parcel|BOSSPACK', 'SiCepat|REG', 'JNE|REG23', 'J&T Express|EZ', 'JNE|YES23'], array_keys($choices));
+        $this->assertSame('JNE REG · Rp18.000 · cashback Rp500 · 2–3 hari', $choices['JNE|REG23']);
+        $draft->weightGrams = 6000;
+        $this->assertArrayHasKey('JNE|JTR23', $draft->choices());
+
+        // Picking SiCepat by its key books SiCepat's own rate, not another courier's "REG"
+        $picked = $this->inShop(fn () => app(Shipments::class)->draft($lead, ['rate_code' => 'SiCepat|REG']));
+        $this->assertSame('SiCepat REG', $picked->rate->name());
+        $this->inShop(fn () => app(Shipments::class)->book($lead, $picked));
+        $order = $this->callsTo('/shipment/v2/orders')[0]['body'];
+        $this->assertSame(['REG', 'sig-sicepat-reg', 16000, true, 1, 2], [$order['rate_code'], $order['signed_key'], $order['shipment_price'], $order['is_flat_rate'], $order['min_duration'], $order['max_duration']]);
+    }
+
+    public function test_cod_drops_some_services_and_the_cod_total_takes_the_shipping_promo(): void
+    {
+        $this->configure();
+        // Never priced in the chat: Buat resi takes the product's shipping promo off Everpro's price.
+        $this->inShop(fn () => $this->bag->update(['shipping_promos' => [['type' => 'discount', 'amount' => 5000, 'area' => 'java_bali']]]));
+        $lead = $this->order('cod', extra: ['shipping_cost' => null]);
+
+        $draft = $this->inShop(fn () => app(Shipments::class)->draft($lead));
+        $this->assertTrue($draft->ok(), implode(' ', $draft->problems));
+        $this->assertNull(collect($draft->rates)->firstWhere('code', 'BOSSPACK'), 'Lion BOSSPACK is not offered with COD');
+        $this->assertSame('REG23', $draft->rate->code, 'JNE REG stays');
+
+        $this->assertSame([18000, 13000, 313000], [$draft->rate->price, $draft->charged, $draft->codAmount]);
+        $this->assertStringContainsString('potongan/subsidi penjual Rp5.000, Potongan ongkir Rp 5.000 (Tas Badminton, Jawa & Bali)', $draft->summary());
+
+        // Everpro is paid its own price; the buyer pays the total after the promo.
+        $this->inShop(fn () => app(Shipments::class)->book($lead, $draft));
+        $order = $this->callsTo('/shipment/v2/orders')[0]['body'];
+        $this->assertSame([18000, 313000], [$order['shipment_price'], $order['cod_price']]);
     }
 }

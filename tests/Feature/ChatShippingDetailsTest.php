@@ -170,6 +170,54 @@ class ChatShippingDetailsTest extends TestCase
         $this->assertSame('Jl. Kenanga 9, Kel. Karadenan, Kec. Cibinong, Kab. Bogor', $activity->meta['previous_address']);
     }
 
+    private const FORM_ADDRESS = 'Jl. Beliang XI B, RT/RW 001/022, (Depan Jl. Bondang), Kel. Palangka, Kec. Jekan Raya, Kota Palangka Raya, Kalimantan Tengah 74874';
+
+    private function formLead(string $address = self::FORM_ADDRESS, array $parts = []): void
+    {
+        $this->inbound('Halo kak');
+        $this->update(['shipping_address' => $address, 'shipping_address_parts' => $parts + [
+            'street' => 'Jl. Beliang XI B', 'rt_rw' => '001/022', 'landmark' => 'Depan Jl. Bondang', 'kelurahan' => 'Palangka', 'kecamatan' => 'Jekan Raya',
+            'kota' => 'Kota Palangka Raya', 'provinsi' => 'Kalimantan Tengah', 'kode_pos' => '74874',
+        ]]);
+    }
+
+    public function test_the_forms_own_opening_message_never_shortens_the_form_address(): void
+    {
+        $this->formLead();
+        $before = $this->lead()->shipping_address_parts;
+
+        $this->inbound("Halo admin, saya David mau order Tas Badminton:\nVarian: Putih Merah\nJumlah: 1\nPembayaran: COD\nAlamat : Jl. Beliang XI B, RT/RW 001/022, (Depan jl. Bondang), Kalimantan Tengah 74874\nCatatan: -\nMohon info total dan ongkirnya.");
+
+        $this->assertSame(self::FORM_ADDRESS, $this->lead()->shipping_address);
+        $this->assertSame($before, $this->lead()->shipping_address_parts);
+        $this->assertSame([], array_filter($this->activities(), fn ($b) => str_contains($b, 'dari chat')));
+
+        // Read again with the whole chat (the backfill, moving to Dikemas): still nothing lost.
+        $result = $this->inShop(fn () => app(ChatShippingDetails::class)->fromConversation($this->lead(), save: false));
+        $this->assertArrayNotHasKey('shipping_address', $result['changes']);
+        $this->assertGreaterThanOrEqual($result['parts_before'], $result['parts_after']);
+    }
+
+    public function test_a_shorter_repeat_only_fills_what_is_empty_and_a_stated_new_address_replaces(): void
+    {
+        $this->formLead('Jl. Beliang XI B, Kel. Palangka, Kec. Jekan Raya, Kota Palangka Raya, Kalimantan Tengah 74874', ['rt_rw' => '', 'landmark' => '']);
+
+        // Shorter, not said to be new: only the RT/RW it adds is kept.
+        $this->inbound('Alamat: Jl. Beliang XI B RT 1 RW 22, Palangka Raya');
+        $this->assertSame('Jl. Beliang XI B, RT/RW 001/022, Kel. Palangka, Kec. Jekan Raya, Kota Palangka Raya, Kalimantan Tengah 74874', $this->lead()->shipping_address);
+        $this->assertSame('Palangka', $this->lead()->shipping_address_parts['kelurahan']);
+
+        $this->inbound('Rt1 rw 2');
+        $this->assertSame('001/002', $this->lead()->shipping_address_parts['rt_rw'], 'A piece sent later completes it.');
+
+        // Said to be new: replaced even though shorter, the old one kept.
+        $this->inbound('Kak alamatnya ganti ya: Jl. Tjilik Riwut Km 5 No 12, Kota Palangka Raya');
+        $lead = $this->lead();
+        $this->assertSame('Jl. Tjilik Riwut Km 5 No 12, Kota Palangka Raya', $lead->shipping_address);
+        $this->assertArrayNotHasKey('kelurahan', $lead->shipping_address_parts, 'Parts of the old address do not stay with the new one.');
+        $this->assertStringContainsString('Alamat sebelumnya: Jl. Beliang XI B, RT/RW 001/002', collect($this->activities())->last());
+    }
+
     public function test_moving_to_dikemas_reads_the_whole_chat_once(): void
     {
         $this->inbound('Halo kak');
@@ -227,6 +275,14 @@ class ChatShippingDetailsTest extends TestCase
             ->expectsOutputToContain('Perubahan disimpan.')->assertSuccessful();
         $this->assertSame('Jl. Melati 3 RT 2/5, Kel. Karadenan, Kec. Cibinong, Kab. Bogor', $this->lead()->shipping_address);
         $this->assertSame('Budi', $this->lead()->name);
+
+        // One lead only, by id; the table shows how many address parts there are before and after.
+        $this->update(['shipping_address' => null, 'shipping_address_parts' => null]);
+        $this->artisan('leads:extract-shipping', ['--tenant' => 'quicker-sport', '--lead' => [(string) $this->lead()->id], '--apply' => true])
+            ->expectsOutputToContain('0 → ')->expectsOutputToContain('1 lead diperiksa, 1 dengan data baru dari chat. Perubahan disimpan.')->assertSuccessful();
+        $this->assertNotNull($this->lead()->shipping_address);
+        $this->artisan('leads:extract-shipping', ['--tenant' => 'quicker-sport', '--lead' => ['999999']])
+            ->expectsOutputToContain('0 lead diperiksa')->assertSuccessful();
     }
 
     public function test_the_parser_reads_bare_answers_only_in_context(): void

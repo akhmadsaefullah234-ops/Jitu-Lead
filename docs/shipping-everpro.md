@@ -66,13 +66,34 @@ tidak), juga untuk resi yang tidak dikenal. URL satu agensi tidak bisa menyentuh
   Pengaturan > Pengiriman) dan kode pos kelurahan tujuan. Berat dari katalog (dibulatkan ke atas per kg).
 - Body `/shipment/v2/rates` dan `/shipment/v2/orders` datar sesuai dokumentasi prepaid: kode pos asal/tujuan (bukan
   id lokasi), `package_type_id` 1, `weight` dalam kg (1000 g = 1, 1500 g = 1,5), `item_price`/`package_price` = nilai
-  barang, nama kelurahan pengirim/penerima. Tarif yang dipilih menyimpan `signed_key`, `rateID`, `cashback`,
-  `is_flat_rate`, `insurance_price`, durasi; semuanya dikirim lagi saat order. Nama field jawaban ongkir (tanpa nilai)
-  dicatat di log `Everpro rates answer keys` sekali sehari per agensi, untuk dicocokkan dengan dokumentasi.
+  barang, nama kelurahan pengirim/penerima.
+- Jawaban `/shipment/v2/rates` (di dalam `data`) dikelompokkan per jenis layanan: `regular`, `express`, `same_day`,
+  `instant`, `cargo`, `vehicle`; semua grup dibaca dan nama grup disimpan sebagai kategori. `logistic_code` selalu
+  kosong, jadi kurir dikenali dari `logistic_name` + `rate_name` (rate_name "Regular" ditampilkan "REG"). Layanan
+  pengaturan "JNE REG" = logistic "JNE" dengan rate_name "Regular" di grup regular, apa pun kodenya (REG23);
+  "SiCepat REG" = "SiCepat" + "Regular". Ongkir = `shipment_price_after_discount` (atau `price`) + `surcharge`; angka
+  berupa teks dibaca sebagai angka. Rates tidak punya biaya COD.
+- Pilihan kurir di Buat resi: grup regular dan express, urut termurah, dengan ongkir, cashback dan estimasi; grup cargo
+  hanya untuk paket di atas 5 kg (atau bila sudah terpilih). Bawaan: kurir lead, lalu layanan di pengaturan.
+- Tarif yang dipilih menyimpan `rate_code`, `signed_key`, `shipment_price` (= after discount), `cashback`,
+  `is_flat_rate`, `insurance_price`, durasi; semuanya dikirim lagi saat order. Nama grup dan field jawaban (tanpa
+  nilai) dicatat sebagai warning `Everpro rates answer keys` sekali per 30 hari per agensi.
 - Bila alamat lead belum lengkap, form **Buat resi** menampilkan isian alamat (nama, alamat, RT/RW, patokan,
   kelurahan, kecamatan, kota, kode pos) dan tombol **Ambil dari chat**. Alamat yang diubah disimpan ke lead saat resi
   dibuat.
-- COD: `cod_price` = harga x jumlah + ongkir yang ditagih ke pembeli (setelah promo) + biaya COD Everpro bila ada.
+- Promo ongkir: `shipment_price` ke Everpro selalu ongkir asli tarif terpilih; `cod_price` = harga x jumlah + ongkir yang
+  ditagih ke pembeli setelah promo ongkir produk (ongkir yang tercatat di lead, atau ongkir Everpro dikurangi promo bila
+  belum pernah dihitung). Pratinjau menampilkan ongkir asli, potongan/subsidi penjual, cashback Everpro dan total COD.
+
+## Promo ongkir per produk
+
+- Produk > tab **Iklan & promo** > **Promo ongkir** (toko saja): jenis (potongan Rp, gratis ongkir, ongkir maksimal Rp),
+  tujuan (semua, Pulau Jawa & Bali, luar Jawa & Bali, provinsi tertentu), minimal jumlah, nama promo opsional.
+- Dipotong di satu tempat (`Shipping::quote` lewat `ShippingPromos`), jadi jawaban AI (`cek_ongkir`), pesanan yang
+  dicatat (`shipping_cost`, total) dan Buat resi memakai angka yang sama. Satu promo per pesanan: yang paling hemat,
+  tidak pernah di bawah nol. Hasil tool memuat `ongkir_normal`, `potongan_ongkir` dan `promo_ongkir`; catatan pesanan
+  menyebut ongkir normal dan promonya.
+- Pesanan yang sudah tercatat sebelum promo diisi tidak berubah sendiri: catat ulang ongkirnya.
 - Nomor pesanan `JL-{agensi}-{lead}-{n}` tetap per pesanan: klik dobel atau coba ulang tidak membuat pesanan dua kali.
 - Order lalu generate AWB berjalan lewat antrean (coba ulang terbatas bila Everpro sibuk; saldo kurang atau alamat
   ditolak langsung diberitahukan ke agen). Resi yang terbit (dari order atau callback AWB) menjalankan alur resi yang

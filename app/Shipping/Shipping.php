@@ -34,7 +34,8 @@ class Shipping
             return new ShippingQuote(ShippingQuote::NOT_AVAILABLE, 'Pengiriman belum diatur untuk agensi ini. Ongkir perlu dikonfirmasi admin.');
         }
 
-        return self::provider($tenant)->quote(new ShippingRequest($city, $province, self::items($items), $district));
+        // The product's shipping promo (Produk > Iklan & promo) is taken off here, for every caller.
+        return ShippingPromos::apply(self::provider($tenant)->quote(new ShippingRequest($city, $province, self::items($items), $district)));
     }
 
     /** Input items with a product that exists in this agency's catalogue (by id, else by name). Must run inside the tenant. */

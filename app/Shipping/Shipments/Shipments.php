@@ -22,6 +22,7 @@ use App\Shipping\Carriers\ShipmentStatus;
 use App\Shipping\Carriers\TrackEvent;
 use App\Shipping\Carriers\TrackResult;
 use App\Shipping\ShippingItem;
+use App\Shipping\ShippingPromos;
 use App\Shipping\ShippingSettings;
 use App\Shipping\ZoneShippingRates;
 use App\Support\CurrentTenant;
@@ -127,7 +128,8 @@ class Shipments
         }
 
         $wanted = $choice['rate_code'] ?? null;
-        $draft->rate = collect($draft->rates)->first(fn (CarrierRate $r) => $wanted !== null && $r->code === $wanted)
+        $draft->rate = collect($draft->rates)->first(fn (CarrierRate $r) => $wanted !== null && $r->key() === $wanted)
+            ?? collect($draft->rates)->first(fn (CarrierRate $r) => $wanted !== null && $r->code === $wanted)
             ?? collect($draft->rates)->first(fn (CarrierRate $r) => $r->matches($lead->courier))
             ?? collect($draft->rates)->first(fn (CarrierRate $r) => $r->matches((string) $account->setting('service', 'JNE REG')));
 
@@ -137,8 +139,15 @@ class Shipments
             return $draft;
         }
 
-        // What the buyer was charged (a shipping promo shows here), else the courier's price.
-        $draft->charged = $lead->shipping_cost !== null ? (int) $lead->shipping_cost : $draft->rate->price;
+        // What the buyer was charged (already after the product's shipping promo), else the courier's price less
+        // that promo. Everpro is still paid its own price; the difference is the shop's subsidy.
+        if ($lead->shipping_cost !== null) {
+            $draft->charged = (int) $lead->shipping_cost;
+        } else {
+            [$off, $draft->promo] = ShippingPromos::best($this->shippingItems($lead), $draft->destination->province ?: $lead->shipping_province, $draft->rate->price);
+            $draft->charged = $draft->rate->price - $off;
+        }
+
         $draft->codAmount = $draft->cod ? $draft->itemValue + $draft->charged + $draft->rate->codFee : 0;
 
         if ($draft->shipmentType === 'PICKUP') {
@@ -216,11 +225,15 @@ class Shipments
     /** The billable weight in grams: the catalogue weight of every item (or the default), rounded up per whole kg. */
     public function weight(Lead $lead): int
     {
-        $settings = ShippingSettings::of($this->current->get());
-        $products = Property::query()->whereIn('id', array_filter(array_column($this->items($lead), 'product_id')))->get()->keyBy('id');
-        $items = array_map(fn ($i) => new ShippingItem($products[$i['product_id']] ?? null, $i['name'], null, $i['quantity']), $this->items($lead));
+        return (new ZoneShippingRates(ShippingSettings::of($this->current->get())))->weight($this->shippingItems($lead))[2] * 1000;
+    }
 
-        return (new ZoneShippingRates($settings))->weight($items)[2] * 1000;
+    /** @return list<ShippingItem> the order's items with their catalogue products */
+    private function shippingItems(Lead $lead): array
+    {
+        $products = Property::query()->whereIn('id', array_filter(array_column($this->items($lead), 'product_id')))->get()->keyBy('id');
+
+        return array_map(fn ($i) => new ShippingItem($products[$i['product_id']] ?? null, $i['name'], null, $i['quantity']), $this->items($lead));
     }
 
     private function dimensions(Lead $lead): ?array
