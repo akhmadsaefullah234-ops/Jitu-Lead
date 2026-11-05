@@ -6,6 +6,7 @@ use App\Ai\AnthropicClient;
 use App\Ai\HandoffRules;
 use App\Ai\KnowledgeBase;
 use App\Ai\LeadQuote;
+use App\Ai\OrderConfirmation;
 use App\Ai\PackageStatus;
 use App\Ai\ProductContext;
 use App\Ai\ReplySignals;
@@ -152,6 +153,41 @@ class GenerateAiReply
         $history = $this->history($conversation, $handedOff);
         $notes = [];
         $quote = null;
+        // A "yes" to the order summary just sent: the order is recorded here, and the reply never goes unsent.
+        $confirmed = null;
+        $fallback = null;
+
+        if ($retail && $shop !== null && $lead !== null && ReplySignals::confirmation($text) && ($pending = OrderConfirmation::pending($tenant, $lead, $inbound))) {
+            $missing = $pending->missing;
+            $result = null;
+
+            if ($missing === []) {
+                $result = $shop->run(ShopTools::RECORD, $pending->input);
+                $shop->forget();
+
+                if (ShopTools::needsAdmin([['result' => $result]])) {
+                    return $this->handoffTo($inbound, 'Ongkir ke tujuan ini perlu dikonfirmasi admin');
+                }
+
+                if (($result['status'] ?? null) !== 'tercatat') {
+                    $missing = OrderConfirmation::problem($result) ?? [];
+                    $result = null;
+
+                    if ($missing === []) {
+                        return $this->handoffTo($inbound, 'Pembeli menyetujui pesanan, tetapi pesanan tidak bisa dicatat otomatis');
+                    }
+                }
+            }
+
+            if ($result !== null) {
+                $confirmed = ['name' => ShopTools::RECORD, 'input' => $pending->input, 'result' => $result];
+                $notes[] = OrderConfirmation::recordedNote($result, (string) $pending->input['pembayaran']);
+            } else {
+                $notes[] = OrderConfirmation::missingNote($missing);
+            }
+
+            $fallback = OrderConfirmation::fallback($result, (string) ($pending->input['pembayaran'] ?? ''), $missing, $tenant);
+        }
 
         // What the server can already price: the address the buyer filled in, or a city named on its own.
         if ($retail && $shop !== null && $lead !== null && ! $ack) {
@@ -203,24 +239,28 @@ class GenerateAiReply
                 $calls = [$quote->call(), ...$calls];
             }
 
+            if ($confirmed !== null) {
+                $calls = [$confirmed, ...$calls];
+            }
+
             if (ReplySignals::silent($calls) && $ack) {
-                return null;
+                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed, '');
             }
 
             if (($why = ReplySignals::handoff($calls)) !== null || ReplySignals::silent($calls)) {
-                return $this->handoffUnlessAck($inbound, $ack, self::OUT_OF_KNOWLEDGE.($why ? ': '.$why : ''));
+                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed, self::OUT_OF_KNOWLEDGE.($why ? ': '.$why : ''));
             }
 
             if (ShopTools::needsAdmin($calls)) {
-                return $this->handoffUnlessAck($inbound, $ack, 'Ongkir ke tujuan ini perlu dikonfirmasi admin');
+                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed, 'Ongkir ke tujuan ini perlu dikonfirmasi admin');
             }
 
             if ($answer === '' || ReplySignals::saysHandoff($answer)) {
-                return $this->handoffUnlessAck($inbound, $ack, self::OUT_OF_KNOWLEDGE.', atau jawabannya tidak bisa dipercaya (terpotong atau ditolak)');
+                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed, self::OUT_OF_KNOWLEDGE.', atau jawabannya tidak bisa dipercaya (terpotong atau ditolak)');
             }
 
             if ($package !== null && PackageStatus::invents($answer, $package)) {
-                return $this->handoffUnlessAck($inbound, $ack, 'AI hampir menyebut perkiraan sampai yang tidak ada di data kurir');
+                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed, 'AI hampir menyebut perkiraan sampai yang tidak ada di data kurir');
             }
 
             // A shop's AI only quotes shipping costs and totals a check returned: the check runs and the answer is
@@ -240,15 +280,16 @@ class GenerateAiReply
                     }
                 }
 
-                return $this->handoffUnlessAck($inbound, $ack, 'AI menyebut ongkir atau total yang tidak berasal dari cek ongkir');
+                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed, 'AI menyebut ongkir atau total yang tidak berasal dari cek ongkir');
             }
 
             // Only a person who checked the account may tell a buyer the payment arrived (Otomatisasi tahap, rule 3).
             if ($retail && ShopTools::claimsPaymentReceived($answer)) {
-                return $this->handoffUnlessAck($inbound, $ack, 'AI hampir menyatakan pembayaran diterima; pembayaran harus dicek agen');
+                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed, 'AI hampir menyatakan pembayaran diterima; pembayaran harus dicek agen');
             }
 
-            $actions = array_map(fn (array $order) => ['type' => 'order', 'input' => $order['input'], 'result' => $order['result']], $shop?->orders() ?? []);
+            // The order a "yes" confirmed is the only one this answer records.
+            $actions = $confirmed !== null ? [self::orderAction($confirmed)] : array_map(self::orderAction(...), $shop?->orders() ?? []);
 
             // "PRODUK: 3": the buyer named or switched product; the lead follows once the answer is really sent.
             [$answer, $productIds] = $products->split($answer);
@@ -258,9 +299,10 @@ class GenerateAiReply
             }
 
             [$answer, $assetIds] = $this->splitAttachments($answer, $library);
+            $assetIds = $this->photosFor($assetIds, $library, $text, $answer, $lead, $confirmed !== null || collect($calls)->contains('name', ShopTools::RECORD), $shop?->orders() ?? []);
 
             if ($answer === '') {
-                return $this->handoffUnlessAck($inbound, $ack, self::OUT_OF_KNOWLEDGE.', atau jawabannya tidak bisa dipercaya (terpotong atau ditolak)');
+                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed, self::OUT_OF_KNOWLEDGE.', atau jawabannya tidak bisa dipercaya (terpotong atau ditolak)');
             }
 
             // Reasoning about rules, knowledge or tools is never sent to a buyer.
@@ -271,7 +313,7 @@ class GenerateAiReply
                     continue;
                 }
 
-                return $this->handoffUnlessAck($inbound, $ack, 'AI hampir mengirim teks internal (aturan atau penalaran) ke pembeli');
+                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed, 'AI hampir mengirim teks internal (aturan atau penalaran) ke pembeli');
             }
 
             break;
@@ -284,6 +326,68 @@ class GenerateAiReply
         }
 
         return $this->sendAutomatically($inbound, $answer, $assetIds, $actions);
+    }
+
+    /**
+     * The model gave nothing that can be sent. A "yes" to an order still gets the plain confirmation (and its order);
+     * any other short acknowledgement gets nothing; the rest goes to a person.
+     */
+    private function giveUp(WaMessage $inbound, AiMode $mode, bool $ack, ?string $fallback, ?array $confirmed, string $reason): ?AiDraft
+    {
+        if ($fallback === null) {
+            return $reason === '' ? null : $this->handoffUnlessAck($inbound, $ack, $reason);
+        }
+
+        $actions = $confirmed !== null ? [self::orderAction($confirmed)] : [];
+
+        return $mode === AiMode::Draft
+            ? $this->draft($inbound, $fallback, AiDraft::PENDING, null, true, [], $actions)
+            : $this->sendAutomatically($inbound, $fallback, [], $actions);
+    }
+
+    /** @param  array{name: string, input: array, result: array}  $call */
+    private static function orderAction(array $call): array
+    {
+        return ['type' => 'order', 'input' => $call['input'], 'result' => $call['result']];
+    }
+
+    /**
+     * Photos go with an answer only when they fit it: none with an order summary or confirmation unless the buyer
+     * asked for one, and of several, only those of the variant ordered ("Putih Merah", not also "Putih Army").
+     *
+     * @param  list<int>  $assetIds
+     * @param  Collection<int, MediaAsset>  $library
+     * @param  list<array{name: string, input: array, result: array}>  $orders
+     * @return list<int>
+     */
+    private function photosFor(array $assetIds, Collection $library, string $question, string $answer, ?Lead $lead, bool $orderTurn, array $orders): array
+    {
+        if ($assetIds === []) {
+            return [];
+        }
+
+        $asked = preg_match('/\b(?:foto|fotonya|gambar|gambarnya|pic|picture|liat|lihat|contoh)\b/iu', $question) === 1;
+
+        if (! $asked && ($orderTurn || OrderConfirmation::summarises($answer) && preg_match('/\b(?:ringkasan|rincian|konfirmasi|sesuai)\b/iu', $answer))) {
+            return [];
+        }
+
+        $variants = collect($orders)->flatMap(fn (array $o) => array_column((array) ($o['input']['items'] ?? []), 'varian'))
+            ->whenEmpty(fn ($c) => $c->merge(explode(';', (string) $lead?->variant)))
+            ->map(fn ($v) => mb_strtolower(trim((string) $v)))->filter(fn ($v) => mb_strlen($v) >= 2)->unique();
+
+        if ($variants->isEmpty()) {
+            return $assetIds;
+        }
+
+        $matching = array_values(array_filter($assetIds, function (int $id) use ($library, $variants) {
+            $asset = $library->firstWhere('id', $id);
+            $about = mb_strtolower($asset?->title.' '.$asset?->description);
+
+            return $variants->contains(fn ($v) => preg_match('/(?<![\p{L}])'.preg_quote($v, '/').'(?![\p{L}])/u', $about) === 1);
+        }));
+
+        return $matching !== [] ? $matching : $assetIds;
     }
 
     /** A short acknowledgement never goes to a person: when the AI has nothing good to say, it says nothing. */
@@ -579,7 +683,7 @@ class GenerateAiReply
             $package,
             $lead && self::paymentNotAsked($lead) ? self::PAYMENT_NOT_ASKED : null,
             "PENGETAHUAN:\n".($context !== '' ? $context : '(kosong)'),
-            $files !== '' ? "LAMPIRAN yang boleh dikirim (id | judul | folder | kapan dipakai):\n{$files}\nJika klien jelas membutuhkan salah satunya (misalnya menanyakan harga lalu price list ada), tambahkan di baris terakhir jawabanmu, setelah teks balasan: LAMPIRAN: <id>. Maksimal dua id dipisah koma. Jangan menulis id selain yang ada di daftar. Jika tidak perlu, jangan tulis baris itu." : null,
+            $files !== '' ? "LAMPIRAN yang boleh dikirim (id | judul | folder | kapan dipakai):\n{$files}\nJika klien jelas membutuhkan salah satunya (misalnya menanyakan harga lalu price list ada), tambahkan di baris terakhir jawabanmu, setelah teks balasan: LAMPIRAN: <id>. Maksimal dua id dipisah koma. Jangan menulis id selain yang ada di daftar. Jika tidak perlu, jangan tulis baris itu. Lampirkan foto hanya untuk varian yang dipesan atau ditanyakan pembeli, dan jangan melampirkan foto saat merangkum atau mengonfirmasi pesanan kecuali pembeli memintanya." : null,
         ]));
     }
 }

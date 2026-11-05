@@ -13,6 +13,8 @@ use App\Enums\WaChannelType;
 use App\Models\AiDraft;
 use App\Models\Lead;
 use App\Models\LeadActivity;
+use App\Models\MediaAsset;
+use App\Models\MediaFolder;
 use App\Models\Property;
 use App\Models\Tenant;
 use App\Models\User;
@@ -389,5 +391,129 @@ class AiRetailRepliesTest extends TestCase
         $this->assertStringContainsString(GenerateAiReply::HANDED_OFF_NOTE, $request['system'], 'A new handoff after the agent reply is marked again.');
         $marks = collect($request['messages'])->where('content', GenerateAiReply::HANDED_OFF_TURN)->count();
         $this->assertSame(1, $marks, 'Only the question after the agent reply is marked; the one the agent answered is not.');
+    }
+
+    // ---- 6. Photos of the variant ordered only ---------------------------------------------------------------------
+
+    /** @return array{0: int, 1: int} Putih Army, Putih Merah */
+    private function bagPhotos(): array
+    {
+        return $this->inShop(fn () => [
+            MediaAsset::create(['folder_id' => MediaFolder::query()->value('id') ?? MediaFolder::create(['name' => 'Foto produk'])->id, 'title' => 'Tas Badminton Putih Army', 'kind' => 'link', 'url' => 'https://example.com/army.jpg', 'active' => true])->id,
+            MediaAsset::create(['folder_id' => MediaFolder::query()->value('id'), 'title' => 'Tas Badminton Putih Merah', 'kind' => 'link', 'url' => 'https://example.com/merah.jpg', 'active' => true])->id,
+        ]);
+    }
+
+    public function test_only_the_photo_of_the_ordered_variant_is_sent_and_none_with_a_summary(): void
+    {
+        // #444: the buyer ordered Putih Merah.
+        [$army, $merah] = $this->bagPhotos();
+        $this->buyer(['variant' => 'Putih Merah']);
+        $this->channel->forceFill(['ai_mode' => AiMode::Draft])->save();
+        $this->ai = [
+            $this->text("Ini fotonya kak, warna Putih Merah.\nLAMPIRAN: {$army}, {$merah}"),
+            $this->text("Ringkasan pesanan: Tas Badminton Putih Merah x2, total Rp 240.000. Mohon dikonfirmasi ya kak.\nLAMPIRAN: {$merah}"),
+        ];
+
+        $photo = $this->says('Boleh lihat fotonya kak?');
+        $summary = $this->says('Mau kirim ke Manado ya');
+
+        $this->assertSame([$merah], $this->draftFor($photo)->media_asset_ids);
+        $this->assertNull($this->draftFor($summary)->media_asset_ids, 'No photo with an order summary the buyer did not ask a photo for.');
+        $this->assertStringContainsString('jangan melampirkan foto saat merangkum atau mengonfirmasi pesanan', $this->asked()[0]['system']);
+    }
+
+    // ---- 7. "Ok" to a full summary records the order -------------------------------------------------------------
+
+    /** The summary the chat sent last (by the AI or an agent). */
+    private function summary(Lead $lead, string $body): void
+    {
+        $this->inShop(fn () => $lead->conversation()->first()->messages()->create([
+            'channel_id' => $this->channel->id, 'direction' => 'out', 'type' => 'text', 'body' => $body, 'status' => MessageStatus::Sent, 'sent_at' => now(),
+        ]));
+    }
+
+    private function stageOf(Lead $lead): ?string
+    {
+        return $this->inShop(fn () => $lead->fresh()->stage?->name);
+    }
+
+    private function recorded(Lead $lead): int
+    {
+        return $this->inShop(fn () => LeadActivity::query()->where('lead_id', $lead->id)->where('type', 'order_recorded')->count());
+    }
+
+    public function test_ok_to_a_full_cod_summary_records_the_order_and_moves_it_to_packing(): void
+    {
+        $lead = $this->buyer($this->manado() + ['payment_type' => 'cod', 'courier' => 'JNE REG']);
+        $this->summary($lead, 'Ringkasan pesanan: Kaos Lari Hitam x2, kirim ke Jl. Sam Ratulangi No. 12, Kota Manado. Ongkir JNE REG Rp 62.000, total Rp 240.000, bayar di tempat (COD). Sudah sesuai kak?');
+        $this->ai = [$this->text('Siap kak, pesanannya kami catat. Total Rp 240.000 dibayar saat paket diterima, segera kami kemas ya.')];
+
+        $ok = $this->says('Ok');
+
+        $this->assertSame(AiDraft::SENT, $this->draftFor($ok)->status);
+        $this->assertSame(1, $this->recorded($lead));
+        $this->assertSame('Dikemas & dikirim', $this->stageOf($lead));
+        $this->assertSame('cod', $lead->fresh()->payment_type);
+        $this->assertStringContainsString('PESANAN SUDAH DICATAT', $this->asked()[0]['system']);
+        $this->assertSame(0, $this->handoffs());
+
+        // A second "ok" records nothing more.
+        $this->says('oke');
+        $this->assertSame(1, $this->recorded($lead));
+    }
+
+    public function test_sesuai_to_a_transfer_summary_waits_for_payment_even_when_the_model_hands_over(): void
+    {
+        $lead = $this->buyer($this->manado());
+        // The way of paying and the courier come from the summary itself.
+        $this->summary($lead, 'Rincian pesanan kak: Kaos Lari Hitam x2 Rp 178.000 + ongkir SiCepat REG Rp 80.000 = total Rp 258.000. Pembayaran via transfer ya. Mohon konfirmasinya.');
+        $this->ai = [$this->tool(ReplySignals::HANDOFF_TOOL, ['alasan' => 'tidak yakin'])];
+
+        $this->says('Sesuai kak');
+
+        $this->assertSame(1, $this->recorded($lead));
+        $this->assertSame('Menunggu pembayaran', $this->stageOf($lead));
+        $this->assertSame('transfer', $lead->fresh()->payment_type);
+        $this->assertSame('SiCepat REG', $lead->fresh()->courier);
+        $this->assertStringContainsString('Totalnya Rp 258.000', collect($this->sent())->last());
+        $this->assertSame(0, $this->handoffs());
+    }
+
+    public function test_ok_without_a_way_of_paying_asks_for_it_and_ok_without_a_summary_records_nothing(): void
+    {
+        $lead = $this->buyer($this->manado() + ['courier' => 'JNE REG']);
+        $this->summary($lead, 'Ringkasan pesanan: Kaos Lari Hitam x2, ongkir JNE REG Rp 62.000, total Rp 240.000. Sudah sesuai kak?');
+        $this->ai = [$this->text('HANDOFF')];
+
+        $this->says('👍');
+
+        $this->assertSame(0, $this->recorded($lead));
+        $this->assertStringContainsString('cara bayar belum diketahui', $this->asked()[0]['system']);
+        $this->assertSame('Siap kak. Bayarnya mau transfer atau COD (bayar di tempat)?', collect($this->sent())->last());
+        $this->assertSame(0, $this->handoffs());
+
+        // A plain "Ok" with no summary before it: nothing recorded, nothing handed over.
+        $this->inShop(fn () => Lead::query()->first()->conversation()->first()->messages()->create([
+            'channel_id' => $this->channel->id, 'direction' => 'out', 'type' => 'text', 'body' => 'Halo kak, ada yang bisa dibantu?', 'status' => MessageStatus::Sent, 'sent_at' => now(),
+        ]));
+        $this->ai = [$this->tool(ReplySignals::SILENT_TOOL)];
+        $plain = $this->says('Ok');
+
+        $this->assertNull($this->draftFor($plain));
+        $this->assertSame(0, $this->recorded($lead));
+        $this->assertSame(0, $this->handoffs());
+        $this->assertStringNotContainsString('PESANAN SUDAH DICATAT', $this->asked()[1]['system']);
+    }
+
+    public function test_the_yes_words(): void
+    {
+        foreach (['ok', 'Oke kak', 'sesuai', 'Siap lanjut', 'ok deal', 'betul kak', '👍', 'iya benar'] as $yes) {
+            $this->assertTrue(ReplySignals::confirmation($yes), $yes);
+        }
+
+        foreach (['terima kasih', '🙏', 'sebentar ya', 'ok sebentar', 'ok berapa?'] as $no) {
+            $this->assertFalse(ReplySignals::confirmation($no), $no);
+        }
     }
 }
