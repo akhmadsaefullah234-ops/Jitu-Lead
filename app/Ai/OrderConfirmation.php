@@ -147,7 +147,7 @@ class OrderConfirmation
         $cod = preg_match('/\bCOD\b|bayar\s+di\s+tempat/iu', $summary) === 1;
         $transfer = preg_match('/\btransfer\b|\bTF\b/iu', $summary) === 1;
 
-        return $cod xor $transfer ? ($cod ? 'cod' : 'transfer') : null;
+        return ($cod xor $transfer) ? ($cod ? 'cod' : 'transfer') : null;
     }
 
     private static function courier(Tenant $tenant, Lead $lead, string $summary): ?string

@@ -27,6 +27,7 @@ use App\Models\WaChannel;
 use App\Models\WaMessage;
 use App\Shipping\Carriers\CarrierException;
 use App\Shipping\Carriers\Carriers;
+use App\Shipping\Carriers\EverproCarrier;
 use App\Shipping\Carriers\ShipmentStatus;
 use App\Shipping\Shipments\LabelSheet;
 use App\Shipping\Shipments\ResiImport;
@@ -37,6 +38,7 @@ use App\Support\SpreadsheetReader;
 use App\WhatsApp\GatewayUrlGuard;
 use App\WhatsApp\InboundMessage;
 use Carbon\CarbonImmutable;
+use Filament\Actions\Testing\TestAction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Carbon;
@@ -156,10 +158,7 @@ class EverproShippingTest extends TestCase
             $path === '/location/v1/districts' => strtolower($r->data()['district_name'] ?? '') === 'kedungwaringin'
                 ? $ok([['district_id' => 'D-KDW', 'district_name' => 'Kedungwaringin']])
                 : Http::response(['message' => 'not found', 'data' => []], 404),
-            $path === '/shipment/v2/rates' => $ok([
-                ['rate_code' => 'JNE_REG', 'logistic_name' => 'JNE', 'rate_name' => 'REG', 'shipment_price' => 18000, 'cod_fee' => ($r->data()['payment_type'] ?? null) === 'COD' ? 3000 : 0, 'min_duration' => 2, 'max_duration' => 3],
-                ['rate_code' => 'SICEPAT_REG', 'logistic_name' => 'SiCepat', 'rate_name' => 'REG', 'shipment_price' => 16000, 'cod_fee' => 0],
-            ]),
+            $path === '/shipment/v2/rates' => $ok(self::ratesFixture(($r->data()['is_cod'] ?? false) === true)),
             $path === '/shipment/v1/pickup-times' => $ok(['available_pickup_time' => [['rate_code' => 'JNE_REG', 'pickup_time_list' => [['date' => '2026-11-05', 'pickup_times' => [['start_at' => '2026-11-05T07:00:00Z', 'end_at' => '2026-11-05T09:00:00Z']]]]]]]),
             $path === '/shipment/v2/orders' && $this->orderError !== null => Http::response(['message' => $this->orderError], 422),
             $path === '/shipment/v2/orders' => $ok(['client_order_no' => $r->data()['client_order_no'], 'order_reference_id' => 'ER-'.count($this->callsTo('/shipment/v2/orders')), 'actual_price' => 18000]),
@@ -217,6 +216,17 @@ class EverproShippingTest extends TestCase
             '17540' => Http::response(['data' => [$place('SD-KDW', 'Kedungwaringin', 'Kedungwaringin', 'Kab. Bekasi', 'Jawa Barat'), $place('SD-KDJ', 'Karangsambung', 'Kedungwaringin', 'Kab. Bekasi', 'Jawa Barat')]]),
             default => Http::response(['message' => 'not found', 'data' => []], 404),
         };
+    }
+
+    /** A /shipment/v2/rates answer in the shape of the fields the prepaid docs name for a rate. */
+    private static function ratesFixture(bool $cod): array
+    {
+        return [
+            ['rate_code' => 'JNE_REG', 'rate_name' => 'REG', 'logistic_name' => 'JNE', 'logistic_code' => 'JNE', 'shipment_price' => 18000, 'cod_fee' => $cod ? 3000 : 0,
+                'insurance_price' => 1500, 'min_duration' => 2, 'max_duration' => 3, 'cashback' => 500, 'is_flat_rate' => false, 'signed_key' => 'sig-jne-reg', 'rateID' => 101],
+            ['rate_code' => 'SICEPAT_REG', 'rate_name' => 'REG', 'logistic_name' => 'SiCepat', 'logistic_code' => 'SICEPAT', 'shipment_price' => 16000, 'cod_fee' => 0,
+                'insurance_price' => 0, 'min_duration' => 1, 'max_duration' => 2, 'cashback' => 0, 'is_flat_rate' => true, 'signed_key' => 'sig-sicepat-reg', 'rateID' => 102],
+        ];
     }
 
     private function callsTo(string $path): array
@@ -468,8 +478,9 @@ class EverproShippingTest extends TestCase
         $this->assertSame(300000 + 10000 + 3000, $draft->codAmount, 'Items + shipping charged + Everpro COD fee.');
         $this->assertStringContainsString('Ongkir Everpro: Rp18.000 · ditagih ke pembeli: Rp10.000', $draft->summary());
         $rates = $this->callsTo('/shipment/v2/rates')[0]['body'];
-        $this->assertSame('COD', $rates['payment_type']);
-        $this->assertSame(['id' => 'SD-ORIGIN'], $rates['origin']);
+        $this->assertTrue($rates['is_cod']);
+        $this->assertSame('17540', $rates['origin_postal_code']);
+        $this->assertSame('40134', $rates['destination_postal_code']);
 
         // Transfer: nothing to collect.
         $this->inShop(fn () => $lead->forceFill(['payment_type' => 'transfer'])->save());
@@ -489,6 +500,101 @@ class EverproShippingTest extends TestCase
         $this->assertContains('Alamat kirim lengkap belum diisi.', $this->inShop(fn () => app(Shipments::class)->draft($lead->fresh()))->problems);
     }
 
+    public function test_rates_and_orders_send_the_flat_body_everpro_documents(): void
+    {
+        $this->configure(settings: ['origin_label' => 'Kedungwaringin, Kedungwaringin, Kab. Bekasi, Jawa Barat (17540)']);
+        $lead = $this->order('cod');
+        Log::spy();
+
+        $this->book($lead);
+
+        $rates = $this->callsTo('/shipment/v2/rates')[0]['body'];
+        foreach (['origin_postal_code', 'destination_postal_code', 'package_type_id', 'weight', 'shipment_type', 'item_price'] as $key) {
+            $this->assertArrayHasKey($key, $rates, "rates needs {$key}");
+        }
+        $this->assertSame([], array_filter($rates, 'is_array'), 'Flat: nothing nested.');
+        $this->assertArrayNotHasKey('origin', $rates);
+        $this->assertArrayNotHasKey('package', $rates);
+        $this->assertSame('17540', $rates['origin_postal_code']);
+        $this->assertSame('40134', $rates['destination_postal_code']);
+        $this->assertSame('Kedungwaringin', $rates['origin_sub_district_name']);
+        $this->assertSame('Sekeloa', $rates['destination_sub_district_name']);
+        $this->assertSame(1, $rates['package_type_id']);
+        $this->assertSame(2, $rates['weight'], '2000 g is 2 kg.');
+        $this->assertSame(300000, $rates['item_price']);
+        $this->assertTrue($rates['is_cod']);
+        $this->assertSame(310000, $rates['cod_price'], 'Items + the shipping charged.');
+        $this->assertSame('PICKUP', $rates['shipment_type']);
+
+        $order = $this->callsTo('/shipment/v2/orders')[0]['body'];
+        foreach (['max_duration', 'min_duration', 'package_desc', 'package_price', 'package_type_id', 'rate_code', 'receiver_address', 'receiver_name', 'receiver_phone',
+            'receiver_postal_code', 'shipment_price', 'shipment_type', 'shipper_address', 'shipper_name', 'shipper_phone', 'shipper_postal_code', 'weight'] as $key) {
+            $this->assertArrayHasKey($key, $order, "orders needs {$key}");
+        }
+        $this->assertSame([], array_filter($order, 'is_array'), 'Flat: nothing nested.');
+        foreach (['shipper_sub_district_id', 'receiver_sub_district_id', 'package_count'] as $gone) {
+            $this->assertArrayNotHasKey($gone, $order);
+        }
+        $this->assertSame(2, $order['weight']);
+        $this->assertSame(300000, $order['package_price']);
+        $this->assertSame('JNE_REG', $order['rate_code']);
+        $this->assertSame(18000, $order['shipment_price']);
+        $this->assertSame([2, 3], [$order['min_duration'], $order['max_duration']]);
+        $this->assertSame(['sig-jne-reg', 101, 500, false], [$order['signed_key'], $order['rateID'], $order['cashback'], $order['is_flat_rate']], 'What the chosen rate gave back.');
+        $this->assertSame('17540', $order['shipper_postal_code']);
+        $this->assertSame('Kedungwaringin', $order['shipper_sub_district_name']);
+        $this->assertSame('Sekeloa', $order['receiver_sub_district_name']);
+        $this->assertMatchesRegularExpression('/^08\d{8,13}$/', $order['receiver_phone']);
+        $this->assertSame('2026-11-05T07:00:00+00:00', $order['pickup_time']);
+
+        // Only the field names of the answer are logged, once.
+        Log::shouldHaveReceived('info')->withArgs(fn ($m, $c) => $m === 'Everpro rates answer keys' && in_array('signed_key', $c['rate'], true) && ! str_contains(json_encode($c), 'sig-jne-reg'))->once();
+
+        $this->assertSame(1, EverproCarrier::kg(1000));
+        $this->assertSame(1.5, EverproCarrier::kg(1500));
+        $this->assertSame(0.25, EverproCarrier::kg(250));
+    }
+
+    public function test_ambil_dari_chat_fills_the_buat_resi_form_from_the_conversation(): void
+    {
+        $this->configure();
+        $lead = $this->order('cod', extra: ['shipping_address' => null, 'shipping_address_parts' => null]);
+        // Written in the chat before details were read from it.
+        $this->inShop(fn () => $lead->conversation()->first()->messages()->create([
+            'channel_id' => $this->channel()->id, 'direction' => 'in', 'type' => 'text', 'status' => 'delivered', 'sent_at' => now(),
+            'body' => "Nama: Rina Kartika\nAlamat: Jl. Mawar No. 5 RT 1/2, Kel. Sekeloa, Kec. Coblong, Kota Bandung 40134",
+        ]));
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+
+        $page = Livewire::test(EditLead::class, ['record' => $lead->getRouteKey()])->mountAction('createShipment');
+        $page->callAction(TestAction::make('fromChat')->schemaComponent('addressActions', 'mountedActionSchema0'))
+            ->assertSchemaStateSet(['addr_text' => 'Jl. Mawar No. 5 RT 1/2, Kel. Sekeloa, Kec. Coblong, Kota Bandung 40134', 'addr_kelurahan' => 'Sekeloa', 'addr_kode_pos' => '40134'], 'mountedActionSchema0')
+            ->assertNotified();
+        $this->assertNull($this->inShop(fn () => $lead->fresh()->shipping_address), 'Nothing saved until the resi is made.');
+
+        // The agent corrects the landmark, then books.
+        $page->setActionData(['addr_landmark' => 'Pagar hijau'])->callMountedAction()->assertHasNoActionErrors();
+
+        $lead = $this->inShop(fn () => $lead->fresh());
+        $this->assertSame('Jl. Mawar No. 5 RT 1/2, Kel. Sekeloa, Kec. Coblong, Kota Bandung 40134', $lead->shipping_address);
+        $this->assertSame('Pagar hijau', $lead->shipping_address_parts['landmark']);
+        $order = $this->callsTo('/shipment/v2/orders')[0]['body'];
+        $this->assertSame('40134', $order['receiver_postal_code']);
+        $this->assertSame('Pagar hijau', $order['receiver_address_note']);
+    }
+
+    public function test_a_product_without_a_price_is_named_before_anything_is_sent(): void
+    {
+        $this->configure();
+        $lead = $this->order('cod', extra: ['order_items' => [['product_id' => $this->bag->id, 'name' => 'Tas Badminton', 'quantity' => 1, 'price' => 0]]]);
+        $this->inShop(fn () => $this->bag->forceFill(['price_from' => null])->save());
+
+        $draft = $this->inShop(fn () => app(Shipments::class)->draft($lead));
+
+        $this->assertContains('Nilai barang belum diketahui: isi harga produk di katalog atau di pesanan lead.', $draft->problems);
+        $this->assertSame([], $this->callsTo('/shipment/v2/rates'));
+    }
+
     public function test_buat_resi_books_once_and_hands_the_tracking_number_to_the_existing_flow(): void
     {
         $this->configure();
@@ -505,7 +611,9 @@ class EverproShippingTest extends TestCase
         $this->assertTrue($order['is_cod']);
         $this->assertSame(313000, $order['cod_price']);
         $this->assertSame('081234567890', $order['receiver_phone'], 'Local number on the label.');
-        $this->assertSame('SD-SEKELOA', $order['receiver_sub_district_id']);
+        $this->assertSame('Sekeloa', $order['receiver_sub_district_name']);
+        $this->assertSame('40134', $order['receiver_postal_code']);
+        $this->assertArrayNotHasKey('receiver_sub_district_id', $order);
 
         $shipment = $this->shipment();
         $this->assertSame(Shipment::SHIPPED, $shipment->state);
@@ -1096,7 +1204,7 @@ class EverproShippingTest extends TestCase
         $this->assertSame('Terima kasih {nama} {kupon}', $messages['delivered']['text']);
 
         // An unknown variable never goes out raw.
-        $this->inShop(fn () => CarrierAccount::query()->firstOrFail()->forceFill(['settings' => ['sender_name' => 'Q', 'sender_phone' => '081300001111', 'sender_address' => 'Jl. Raya Kedungwaringin 1', 'origin_id' => 'SD-ORIGIN']])->save());
+        $this->inShop(fn () => CarrierAccount::query()->firstOrFail()->forceFill(['settings' => ['sender_name' => 'Q', 'sender_phone' => '081300001111', 'sender_address' => 'Jl. Raya Kedungwaringin 1', 'origin_id' => 'SD-ORIGIN', 'origin_label' => 'Kedungwaringin, Kedungwaringin, Kab. Bekasi, Jawa Barat (17540)']])->save());
         $this->book($this->order());
         $before = count($this->sent());
         $this->courierSays('DELIVERED');

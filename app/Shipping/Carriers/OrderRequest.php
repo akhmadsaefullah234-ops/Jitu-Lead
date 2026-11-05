@@ -6,8 +6,9 @@ namespace App\Shipping\Carriers;
 final class OrderRequest
 {
     /**
-     * @param  array{name: string, phone: string, address: string, location_id: string, postal_code: ?string, email?: ?string}  $shipper
-     * @param  array{name: string, phone: string, address: string, location_id: string, postal_code: ?string, note?: ?string}  $receiver
+     * @param  array{name: string, phone: string, address: string, location_id: string, postal_code: ?string, sub_district?: ?string, email?: ?string}  $shipper
+     * @param  array{name: string, phone: string, address: string, location_id: string, postal_code: ?string, sub_district?: ?string, note?: ?string}  $receiver
+     * @param  array<string, mixed>  $rate  what the provider gave back with the chosen rate (CarrierRate::$meta)
      */
     public function __construct(
         public readonly string $clientOrderNo,
@@ -24,5 +25,6 @@ final class OrderRequest
         public readonly string $shipmentType,
         public readonly ?string $pickupTime,
         public readonly ?array $dimensions = null,
+        public readonly array $rate = [],
     ) {}
 }

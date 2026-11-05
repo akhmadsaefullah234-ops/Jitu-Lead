@@ -62,7 +62,16 @@ tidak), juga untuk resi yang tidak dikenal. URL satu agensi tidak bisa menyentuh
   posnya (dari data wilayah yang diimpor, atau daftar `/location/v1/sub-districts` dan `/location/v1/districts` Everpro),
   lalu kode pos itu dicari di `/postalcode` dan hanya kelurahan yang namanya cocok yang dipakai. Hanya jawaban yang
   berhasil yang di-cache (30 hari). Bila tidak pasti, agen memilih kelurahan dari daftar.
-- Divalidasi: nama, HP, alamat lengkap, produk dan jumlah. Berat dari katalog (dibulatkan ke atas per kg).
+- Divalidasi: nama, HP, alamat lengkap, produk dan jumlah, nilai barang > 0, kode pos asal (dari lokasi asal di
+  Pengaturan > Pengiriman) dan kode pos kelurahan tujuan. Berat dari katalog (dibulatkan ke atas per kg).
+- Body `/shipment/v2/rates` dan `/shipment/v2/orders` datar sesuai dokumentasi prepaid: kode pos asal/tujuan (bukan
+  id lokasi), `package_type_id` 1, `weight` dalam kg (1000 g = 1, 1500 g = 1,5), `item_price`/`package_price` = nilai
+  barang, nama kelurahan pengirim/penerima. Tarif yang dipilih menyimpan `signed_key`, `rateID`, `cashback`,
+  `is_flat_rate`, `insurance_price`, durasi; semuanya dikirim lagi saat order. Nama field jawaban ongkir (tanpa nilai)
+  dicatat di log `Everpro rates answer keys` sekali sehari per agensi, untuk dicocokkan dengan dokumentasi.
+- Bila alamat lead belum lengkap, form **Buat resi** menampilkan isian alamat (nama, alamat, RT/RW, patokan,
+  kelurahan, kecamatan, kota, kode pos) dan tombol **Ambil dari chat**. Alamat yang diubah disimpan ke lead saat resi
+  dibuat.
 - COD: `cod_price` = harga x jumlah + ongkir yang ditagih ke pembeli (setelah promo) + biaya COD Everpro bila ada.
 - Nomor pesanan `JL-{agensi}-{lead}-{n}` tetap per pesanan: klik dobel atau coba ulang tidak membuat pesanan dua kali.
 - Order lalu generate AWB berjalan lewat antrean (coba ulang terbatas bila Everpro sibuk; saldo kurang atau alamat
@@ -114,6 +123,25 @@ Resi yang dibuat manual (mis. di aplikasi atau dashboard Everpro) bisa dihubungk
   tanpa status maupun riwayat), percobaan dihitung. Setelah 3 kali, resi ditandai "tidak bisa dilacak" di lead dan
   pelacakan otomatis berhenti.
 - **Validasi**: satu resi hanya untuk satu lead per agensi, dan formatnya 8–30 huruf/angka dengan minimal 4 angka.
+
+## Alamat dari chat
+
+Data pesanan yang ditulis pembeli di chat masuk ke lead, baik saat AI aktif maupun saat chat ditangani CS
+(`App\Leads\ChatShippingDetails`, tanpa AI):
+
+- Format order (`Nama:`, `Alamat:`, `Warna:`, `Jumlah:`, `Pembayaran:`, `Produk:` …), alamat yang diketik utuh, dan
+  tambahan sesudahnya (RT/RW, patokan setelah ditanya patokan, nomor rumah, kelurahan, kecamatan, kota, kode pos)
+  memperbarui nama, alamat, `shipping_address_parts`, provinsi, varian, jumlah, cara bayar, dan produk (bila belum ada).
+- Tambahan melengkapi alamat yang sudah ada; alamat lengkap yang berbeda menggantikan yang lama, dan yang lama dicatat
+  di aktivitas lead ("Alamat diperbarui dari chat … Alamat sebelumnya: …"). Isi alamat tidak ditulis ke log server.
+- Bagian alamat dicocokkan ke data wilayah yang diimpor (`regions:import`) untuk melengkapi kecamatan, kota, provinsi
+  dan kode pos. Alamat yang dicatat AI (`catat_pesanan`) juga dipecah ke bagian-bagiannya.
+- Lead yang masuk Dikemas & dikirim dengan alamat belum lengkap: seluruh chat-nya dibaca sekali.
+- Setelah resi terbit, chat tidak lagi mengubah data lead.
+- Data lama: `php artisan leads:extract-shipping --tenant=quicker-sport` (pratinjau: tidak menyimpan apa pun; hanya
+  menampilkan nomor lead, 4 digit akhir HP, dan bagian yang terisi). Tambahkan `--apply` untuk menyimpan. Bawaan
+  tahap Order masuk, Menunggu pembayaran dan Dikemas & dikirim; `--stage=shipping` (atau nama tahap) untuk memilih,
+  `--all` juga lead yang alamatnya sudah lengkap.
 
 ## AI
 

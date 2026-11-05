@@ -73,8 +73,8 @@ class Shipments
             return $draft;
         }
 
-        foreach (['sender_name' => 'nama toko pengirim', 'sender_phone' => 'nomor HP pengirim', 'sender_address' => 'alamat pengirim', 'origin_id' => 'lokasi asal Everpro'] as $key => $label) {
-            if (blank($account->setting($key))) {
+        foreach (['sender_name' => 'nama toko pengirim', 'sender_phone' => 'nomor HP pengirim', 'sender_address' => 'alamat pengirim', 'origin_id' => 'lokasi asal Everpro', 'origin_postal' => 'kode pos asal (pilih ulang lokasi asal)'] as $key => $label) {
+            if (blank($key === 'origin_postal' ? $this->originPostal($account) : $account->setting($key))) {
                 $draft->problems[] = 'Lengkapi '.$label.' di Pengaturan > Pengiriman.';
             }
         }
@@ -88,6 +88,8 @@ class Shipments
 
         if ($draft->items === []) {
             $draft->problems[] = 'Produk dan jumlah pesanan belum diisi di lead.';
+        } elseif ($draft->itemValue <= 0) {
+            $draft->problems[] = 'Nilai barang belum diketahui: isi harga produk di katalog atau di pesanan lead.';
         }
 
         if ($draft->problems !== []) {
@@ -106,9 +108,17 @@ class Shipments
                 return $draft;
             }
 
+            if (blank($draft->destination->postalCode)) {
+                $draft->problems[] = 'Kode pos kelurahan tujuan tidak diketahui. Isi kode pos di alamat lead.';
+
+                return $draft;
+            }
+
             $draft->rates = $provider->rates(new RateRequest(
                 (string) $account->setting('origin_id'), $draft->destination->id, $draft->weightGrams, $draft->itemValue, $draft->cod,
                 (bool) $account->setting('insurance', false), $draft->shipmentType, $this->dimensions($lead),
+                (string) $this->originPostal($account), $draft->destination->postalCode, $this->originSubDistrict($account), $draft->destination->subDistrict ?: null,
+                $draft->cod ? $draft->itemValue + (int) ($lead->shipping_cost ?? 0) : null,
             ));
         } catch (CarrierException $e) {
             $draft->problems[] = $e->getMessage();
@@ -140,6 +150,22 @@ class Shipments
         }
 
         return $draft;
+    }
+
+    /** The sender's postal code: kept with the origin, else the one at the end of its label ("... (17540)"). */
+    private function originPostal(CarrierAccount $account): ?string
+    {
+        $code = (string) $account->setting('origin_postal');
+
+        return preg_match('/^\d{5}$/', $code) ? $code : (preg_match('/\((\d{5})\)\s*$/', (string) $account->setting('origin_label'), $m) ? $m[1] : null);
+    }
+
+    /** The sender's kelurahan: kept with the origin, else the first part of its label ("Sekeloa, Coblong, ..."). */
+    private function originSubDistrict(CarrierAccount $account): ?string
+    {
+        $name = $account->setting('origin_sub_district') ?: preg_replace('/\s*\(\d{5}\)\s*$/', '', explode(',', (string) $account->setting('origin_label'))[0]);
+
+        return filled($name) ? trim((string) $name) : null;
     }
 
     /** @return list<string> */
@@ -271,7 +297,7 @@ class Shipments
                 'weight_grams' => $draft->weightGrams,
                 'request' => [
                     'destination' => $draft->destination->toArray(), 'item_value' => $draft->itemValue, 'description' => $draft->description,
-                    'pickup_time' => $draft->pickupTimes[0] ?? null, 'shipment_type' => $draft->shipmentType, 'by' => $actor?->getKey(),
+                    'pickup_time' => $draft->pickupTimes[0] ?? null, 'shipment_type' => $draft->shipmentType, 'by' => $actor?->getKey(), 'rate' => $draft->rate->meta,
                 ],
             ];
 
@@ -316,16 +342,17 @@ class Shipments
                 $shipment->client_order_no, (string) $shipment->rate_code,
                 [
                     'name' => (string) $account->setting('sender_name'), 'phone' => LocalPhone::number((string) $account->setting('sender_phone')),
-                    'address' => (string) $account->setting('sender_address'), 'location_id' => (string) $account->setting('origin_id'), 'postal_code' => $account->setting('origin_postal'),
+                    'address' => (string) $account->setting('sender_address'), 'location_id' => (string) $account->setting('origin_id'), 'postal_code' => $this->originPostal($account),
+                    'sub_district' => $this->originSubDistrict($account),
                 ],
                 [
                     'name' => trim($lead->name), 'phone' => LocalPhone::number($lead->phone), 'address' => trim((string) $lead->shipping_address),
-                    'location_id' => (string) data_get($request, 'destination.id'), 'postal_code' => $parts['kode_pos'] ?? data_get($request, 'destination.postalCode'),
-                    'note' => $parts['landmark'] ?? null,
+                    'location_id' => (string) data_get($request, 'destination.id'), 'postal_code' => data_get($request, 'destination.postalCode') ?: ($parts['kode_pos'] ?? null),
+                    'sub_district' => data_get($request, 'destination.subDistrict') ?: null, 'note' => $parts['landmark'] ?? null,
                 ],
                 (int) $shipment->weight_grams, (string) ($request['description'] ?? ''), (int) ($request['item_value'] ?? 0),
                 $shipment->is_cod, (int) $shipment->cod_amount, (int) $shipment->price, (bool) $account->setting('insurance', false),
-                (string) ($request['shipment_type'] ?? 'PICKUP'), $request['pickup_time'] ?? null,
+                (string) ($request['shipment_type'] ?? 'PICKUP'), $request['pickup_time'] ?? null, null, (array) ($request['rate'] ?? []),
             ));
 
             $shipment->forceFill(array_filter([

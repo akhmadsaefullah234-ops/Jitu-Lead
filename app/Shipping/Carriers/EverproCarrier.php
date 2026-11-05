@@ -206,51 +206,109 @@ class EverproCarrier implements CarrierProvider
 
     // ---- Prices and pickup -------------------------------------------------------------------------------
 
+    /**
+     * POST /shipment/v2/rates takes a flat body: postal codes (no location ids), package_type_id 1 (regular),
+     * weight in kg, shipment_type and item_price (> 0). The rates come back as a list, or grouped per courier;
+     * each keeps what /v2/orders wants back from it (signed_key, rateID, cashback, is_flat_rate, durations).
+     */
     public function rates(RateRequest $request): array
     {
-        $data = $this->call('post', '/shipment/v2/rates', array_filter([
-            'origin' => ['id' => $request->originId],
-            'destination' => ['id' => $request->destinationId],
-            'package' => [
-                'weight' => max(1, $request->weightGrams),
-                'price' => max(0, $request->itemValue),
-                'type' => 'REGULAR',
-                'dimension' => [
-                    'length' => (int) ($request->dimensions['length'] ?? 1), 'width' => (int) ($request->dimensions['width'] ?? 1), 'height' => (int) ($request->dimensions['height'] ?? 1),
-                ],
-            ],
-            'shipment_type' => $request->shipmentType,
-            'payment_type' => $request->cod ? 'COD' : null,
-            'is_use_insurance' => $request->insurance,
-        ], fn ($v) => $v !== null));
+        $dimensions = array_filter([
+            'length' => (int) ($request->dimensions['length'] ?? 0), 'width' => (int) ($request->dimensions['width'] ?? 0), 'height' => (int) ($request->dimensions['height'] ?? 0),
+        ], fn ($v) => $v >= 1);
 
-        $rows = Arr::isList((array) $data) ? (array) $data : (array) (data_get($data, 'rates') ?? data_get($data, 'logistics') ?? []);
+        $data = $this->call('post', '/shipment/v2/rates', array_filter([
+            'origin_postal_code' => (string) $request->originPostal,
+            'destination_postal_code' => (string) $request->destinationPostal,
+            'origin_sub_district_name' => $request->originSubDistrict,
+            'destination_sub_district_name' => $request->destinationSubDistrict,
+            'package_type_id' => 1,
+            'weight' => self::kg($request->weightGrams),
+            'shipment_type' => $request->shipmentType,
+            'item_price' => max(1, $request->itemValue),
+            'is_cod' => $request->cod,
+            'cod_price' => $request->cod ? max(1, $request->codAmount ?? $request->itemValue) : null,
+            'is_use_insurance' => $request->insurance,
+        ], fn ($v) => $v !== null && $v !== '') + (count($dimensions) === 3 ? $dimensions : []));
+
+        $rows = Arr::isList((array) $data) ? (array) $data : (array) (data_get($data, 'rates') ?? data_get($data, 'logistics') ?? data_get($data, 'data') ?? []);
+        $this->logRateKeys($data, $rows);
         $out = [];
 
         foreach ($rows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+
             // Grouped per courier ({logistic, rates: [...]}) or flat.
-            foreach (isset($row['rates']) && is_array($row['rates']) ? array_map(fn ($r) => $r + ['logistic_name' => $row['logistic_name'] ?? $row['name'] ?? null, 'logistic_code' => $row['logistic_code'] ?? $row['code'] ?? null], $row['rates']) : [$row] as $rate) {
-                $code = $rate['rate_code'] ?? $rate['code'] ?? null;
+            $group = ['logistic_name' => $row['logistic_name'] ?? data_get($row, 'logistic.name') ?? $row['name'] ?? null, 'logistic_code' => $row['logistic_code'] ?? data_get($row, 'logistic.code') ?? $row['code'] ?? null];
+
+            foreach (isset($row['rates']) && is_array($row['rates']) ? array_map(fn ($r) => (array) $r + $group, $row['rates']) : [$row] as $rate) {
+                $code = $rate['rate_code'] ?? data_get($rate, 'rate.code') ?? $rate['code'] ?? null;
                 $price = Arr::first([$rate['shipment_price'] ?? null, $rate['final_price'] ?? null, $rate['price'] ?? null, $rate['shipping_cost'] ?? null], fn ($v) => is_numeric($v));
 
                 if (blank($code) || $price === null || (isset($rate['is_active']) && ! $rate['is_active'])) {
                     continue;
                 }
 
+                $logistic = $rate['logistic_name'] ?? data_get($rate, 'logistic.name') ?? $rate['logistic_code'] ?? data_get($rate, 'logistic.code') ?? '';
+                $insurance = (int) ($rate['insurance_price'] ?? $rate['insurance_fee'] ?? 0);
+                $min = is_numeric($rate['min_duration'] ?? null) ? (int) $rate['min_duration'] : null;
+                $max = is_numeric($rate['max_duration'] ?? null) ? (int) $rate['max_duration'] : null;
+
                 $out[] = new CarrierRate(
                     (string) $code,
-                    (string) ($rate['logistic_name'] ?? data_get($rate, 'logistic.name') ?? $rate['logistic_code'] ?? ''),
+                    (string) $logistic,
                     (string) ($rate['rate_name'] ?? $rate['service_name'] ?? $rate['service'] ?? data_get($rate, 'rate.name') ?? ''),
                     (int) $price,
                     (int) ($rate['cod_fee'] ?? $rate['cod_price'] ?? $rate['cod_amount'] ?? 0),
-                    (int) ($rate['insurance_fee'] ?? $rate['insurance_price'] ?? 0),
-                    isset($rate['min_duration']) ? (int) $rate['min_duration'] : null,
-                    isset($rate['max_duration']) ? (int) $rate['max_duration'] : null,
+                    $insurance,
+                    $min,
+                    $max,
+                    array_filter([
+                        'rate_code' => (string) $code,
+                        'logistic_code' => ($c = $rate['logistic_code'] ?? data_get($rate, 'logistic.code')) !== null ? (string) $c : null,
+                        'logistic_name' => (string) $logistic,
+                        'shipment_price' => (int) $price,
+                        'insurance_price' => $insurance,
+                        'min_duration' => $min,
+                        'max_duration' => $max,
+                        'cashback' => is_numeric($rate['cashback'] ?? null) ? (int) $rate['cashback'] : null,
+                        'is_flat_rate' => isset($rate['is_flat_rate']) ? (bool) $rate['is_flat_rate'] : null,
+                        'signed_key' => filled($rate['signed_key'] ?? null) ? (string) $rate['signed_key'] : null,
+                        'rateID' => ($id = $rate['rateID'] ?? $rate['rate_id'] ?? null) !== null ? $id : null,
+                    ], fn ($v) => $v !== null),
                 );
             }
         }
 
         return $out;
+    }
+
+    /** 1000 g => 1, 1500 g => 1.5: Everpro weighs in kg. */
+    public static function kg(int $grams): int|float
+    {
+        $kg = round(max(1, $grams) / 1000, 3);
+
+        return fmod($kg, 1.0) === 0.0 ? (int) $kg : $kg;
+    }
+
+    /** The field names of a rates answer (never the values), once a day per agency, to check them against the docs. */
+    private function logRateKeys(mixed $data, array $rows): void
+    {
+        if (! Cache::add('everpro-rate-keys:'.$this->account->tenant_id, 1, now()->addDay())) {
+            return;
+        }
+
+        $first = is_array($rows[0] ?? null) ? $rows[0] : [];
+        $nested = is_array($first['rates'][0] ?? null) ? $first['rates'][0] : null;
+
+        Log::info('Everpro rates answer keys', array_filter([
+            'tenant' => $this->account->tenant_id,
+            'data' => is_array($data) && ! Arr::isList($data) ? array_keys($data) : gettype($data),
+            'rate' => array_keys($first),
+            'nested_rate' => $nested !== null ? array_keys($nested) : null,
+        ], fn ($v) => $v !== null));
     }
 
     public function pickupTimes(string $rateCode): array
@@ -278,36 +336,45 @@ class EverproCarrier implements CarrierProvider
     public function createOrder(OrderRequest $order): CarrierOrder
     {
         try {
+            $rate = $order->rate;
+            $dimensions = array_filter([
+                'length' => (int) ($order->dimensions['length'] ?? 0), 'width' => (int) ($order->dimensions['width'] ?? 0), 'height' => (int) ($order->dimensions['height'] ?? 0),
+            ], fn ($v) => $v >= 1);
+
+            // Flat, as /v2/orders documents it; weight in kg. What the chosen rate gave back goes with it.
             $data = $this->call('post', '/shipment/v2/orders', array_filter([
                 'client_order_no' => $order->clientOrderNo,
                 'rate_code' => $order->rateCode,
                 'shipment_type' => $order->shipmentType,
-                'pickup_time' => $order->pickupTime,
+                'pickup_time' => $order->shipmentType === 'PICKUP' ? $order->pickupTime : null,
+                'min_duration' => (int) ($rate['min_duration'] ?? 1),
+                'max_duration' => (int) ($rate['max_duration'] ?? $rate['min_duration'] ?? 1),
+                'shipment_price' => $order->shippingPrice,
+                'signed_key' => $rate['signed_key'] ?? null,
+                'rateID' => $rate['rateID'] ?? null,
+                'cashback' => $rate['cashback'] ?? null,
+                'is_flat_rate' => $rate['is_flat_rate'] ?? null,
                 'is_cod' => $order->cod,
                 'cod_price' => $order->cod ? $order->codAmount : 0,
-                'shipment_price' => $order->shippingPrice,
                 'is_use_insurance' => $order->insurance,
-                'package_count' => 1,
-                'package_desc' => mb_substr($order->description, 0, 150),
-                'package_price' => $order->itemValue,
+                'insurance_price' => $order->insurance ? (int) ($rate['insurance_price'] ?? 0) : null,
+                'package_desc' => mb_substr($order->description, 0, 150) ?: 'Paket',
+                'package_price' => max(1, $order->itemValue),
                 'package_type_id' => 1,
-                'weight' => max(1, $order->weightGrams),
-                'length' => (int) ($order->dimensions['length'] ?? 1),
-                'width' => (int) ($order->dimensions['width'] ?? 1),
-                'height' => (int) ($order->dimensions['height'] ?? 1),
+                'weight' => self::kg($order->weightGrams),
                 'shipper_name' => $order->shipper['name'],
                 'shipper_phone' => $order->shipper['phone'],
                 'shipper_email' => $order->shipper['email'] ?? null,
                 'shipper_address' => $order->shipper['address'],
-                'shipper_sub_district_id' => $order->shipper['location_id'],
-                'shipper_postal_code' => $order->shipper['postal_code'] ?? null,
+                'shipper_postal_code' => (string) ($order->shipper['postal_code'] ?? ''),
+                'shipper_sub_district_name' => $order->shipper['sub_district'] ?? null,
                 'receiver_name' => $order->receiver['name'],
                 'receiver_phone' => $order->receiver['phone'],
                 'receiver_address' => $order->receiver['address'],
                 'receiver_address_note' => $order->receiver['note'] ?? null,
-                'receiver_sub_district_id' => $order->receiver['location_id'],
-                'receiver_postal_code' => $order->receiver['postal_code'] ?? null,
-            ], fn ($v) => $v !== null));
+                'receiver_postal_code' => (string) ($order->receiver['postal_code'] ?? ''),
+                'receiver_sub_district_name' => $order->receiver['sub_district'] ?? null,
+            ], fn ($v) => $v !== null && $v !== '') + (count($dimensions) === 3 ? $dimensions : []));
         } catch (CarrierException $e) {
             // The number is already booked (a retry after a timeout): carry on with that order.
             if ($e->httpStatus === 409 || preg_match('/already|sudah (ada|digunakan|terdaftar)|duplicate/i', $e->getMessage())) {

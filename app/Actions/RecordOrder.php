@@ -3,6 +3,7 @@
 namespace App\Actions;
 
 use App\Automation\StageAutomation;
+use App\Leads\ChatShippingDetails;
 use App\Models\Lead;
 use App\Models\Stage;
 use App\Models\User;
@@ -95,6 +96,8 @@ class RecordOrder
             return $this->automation->applies() ? $this->automation->orderConfirmed($lead, $payment) : $this->moveToPayment($lead, $actor);
         });
 
+        $this->structure($lead);
+
         return array_filter([
             'status' => 'tercatat',
             'pesan' => 'Pesanan tercatat'.($stage ? ' dan lead dipindah ke tahap '.$stage : '').'.',
@@ -138,11 +141,23 @@ class RecordOrder
             return $this->automation->orderDrafted($lead);
         });
 
+        $this->structure($lead);
+
         return array_filter([
             'status' => 'draft_tercatat',
             'pesan' => 'Data pesanan dicatat'.($stage ? ' dan lead dipindah ke tahap '.$stage : '').'. Menunggu konfirmasi pembeli.',
             'tahap' => $stage,
         ], fn ($v) => $v !== null);
+    }
+
+    /** The address just written, split into its parts and placed, so "Buat resi" finds the kelurahan. */
+    private function structure(Lead $lead): void
+    {
+        try {
+            app(ChatShippingDetails::class)->structure($lead);
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 
     /** Only forward: a lead already past payment, won or lost stays where it is. */

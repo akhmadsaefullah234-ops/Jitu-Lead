@@ -3,6 +3,7 @@
 namespace App\Filament\Support;
 
 use App\Automation\RetailStages;
+use App\Leads\ChatShippingDetails;
 use App\Models\Lead;
 use App\Models\Shipment;
 use App\Shipping\Carriers\CarrierException;
@@ -17,11 +18,15 @@ use Closure;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
+use Filament\Schemas\Components\Actions;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\HtmlString;
@@ -41,41 +46,147 @@ class ShipmentActions
         return Carriers::configured(app(CurrentTenant::class)->get());
     }
 
-    private static function draft(Lead $lead, ?string $location, ?string $rate): ShipmentDraft
+    /** Address fields of the "Buat resi" form => the lead's address part they edit (null: the address text, the name). */
+    private const ADDRESS_FIELDS = [
+        'addr_name' => 'name', 'addr_text' => 'shipping_address', 'addr_rt_rw' => 'rt_rw', 'addr_landmark' => 'landmark',
+        'addr_kelurahan' => 'kelurahan', 'addr_kecamatan' => 'kecamatan', 'addr_kota' => 'kota', 'addr_kode_pos' => 'kode_pos',
+    ];
+
+    /** @param  array<string, mixed>  $address  the address fields of the form, when shown */
+    private static function draft(Lead $lead, ?string $location, ?string $rate, array $address = []): ShipmentDraft
     {
-        $key = $lead->getKey().'|'.$location.'|'.$rate;
+        $lead = self::withAddress($lead, $address);
+        $key = $lead->getKey().'|'.$location.'|'.$rate.'|'.md5(json_encode([$lead->name, $lead->shipping_address, $lead->shipping_address_parts]));
 
         return self::$drafts[$key] ??= app(Shipments::class)->draft($lead, ['location_id' => $location, 'rate_code' => $rate]);
+    }
+
+    /** The lead as the form has it (not saved). */
+    private static function withAddress(Lead $lead, array $address): Lead
+    {
+        $address = array_intersect_key($address, self::ADDRESS_FIELDS);
+
+        if ($address === []) {
+            return $lead;
+        }
+
+        $copy = clone $lead;
+        $parts = (array) $lead->shipping_address_parts;
+
+        foreach ($address as $field => $value) {
+            $value = trim((string) $value);
+
+            match ($target = self::ADDRESS_FIELDS[$field]) {
+                'name', 'shipping_address' => $copy->{$target} = $value !== '' ? $value : null,
+                default => $parts[$target] = $value,
+            };
+        }
+
+        $copy->shipping_address_parts = array_filter($parts, fn ($v) => $v !== '' && $v !== null) ?: null;
+
+        return $copy;
+    }
+
+    /** @return array<string, ?string> the form's address fields from a lead */
+    private static function addressState(Lead $lead): array
+    {
+        $parts = (array) $lead->shipping_address_parts;
+
+        return collect(self::ADDRESS_FIELDS)->map(fn (string $target) => match ($target) {
+            'name', 'shipping_address' => $lead->{$target},
+            default => $parts[$target] ?? null,
+        })->all();
+    }
+
+    private static function needsAddress(Lead $lead): bool
+    {
+        return ! ChatShippingDetails::complete($lead) || array_intersect(app(Shipments::class)->leadProblems($lead), [
+            'Nama penerima belum diisi.', 'Alamat kirim lengkap belum diisi.', 'Kecamatan atau kode pos tujuan belum diisi di alamat lead.',
+        ]) !== [];
+    }
+
+    /** The address as edited in the form, onto the lead, before booking. */
+    private static function saveAddress(Lead $lead, array $data): void
+    {
+        $edited = self::withAddress($lead, $data);
+        $changes = array_filter([
+            'name' => $edited->name !== $lead->name ? $edited->name : null,
+            'shipping_address' => $edited->shipping_address !== $lead->shipping_address ? $edited->shipping_address : null,
+            'shipping_address_parts' => $edited->shipping_address_parts != $lead->shipping_address_parts ? $edited->shipping_address_parts : null,
+        ], fn ($v) => $v !== null);
+
+        if ($changes === []) {
+            return;
+        }
+
+        $lead->forceFill($changes)->save();
+        $lead->activities()->create(['user_id' => auth()->id(), 'type' => 'note', 'body' => 'Alamat kirim diubah sebelum membuat resi.', 'meta' => ['fields' => array_keys($changes)]]);
     }
 
     /** @param  Closure(): ?Lead  $lead */
     public static function create(Closure $lead, string $name = 'createShipment'): Action
     {
+        $address = fn (Get $get) => self::needsAddress($lead()) ? array_map(fn ($f) => $get($f), array_combine(array_keys(self::ADDRESS_FIELDS), array_keys(self::ADDRESS_FIELDS))) : [];
+        $field = fn (string $name, string $label) => TextInput::make($name)->label($label)->live(onBlur: true)->maxLength(150)->default(fn () => self::addressState($lead())[$name] ?? null);
+
         return Action::make($name)->label('Buat resi')->icon(Heroicon::OutlinedTruck)->color('gray')
             ->visible(fn () => self::available() && ($l = $lead()) !== null && ! $l->trashed() && Shipment::latestFor($l) === null)
             ->modalHeading('Buat resi otomatis')
             ->modalDescription('Periksa dulu sebelum dikirim ke penyedia pengiriman. Resi yang terbit dikirim ke pembeli lewat WhatsApp seperti biasa.')
             ->modalSubmitActionLabel('Buat resi')
             ->schema([
+                Section::make('Alamat penerima')->description('Alamat lead belum lengkap. Ambil dari chat atau isi di sini; disimpan ke lead saat resi dibuat.')
+                    ->visible(fn () => self::needsAddress($lead()))
+                    ->columns(2)
+                    ->schema([
+                        Actions::make([
+                            Action::make('fromChat')->label('Ambil dari chat')->icon(Heroicon::OutlinedChatBubbleLeftRight)->link()
+                                ->action(function (Set $set) use ($lead) {
+                                    $record = $lead();
+                                    $found = app(ChatShippingDetails::class)->fromConversation($record, save: false);
+                                    $copy = clone $record;
+                                    $copy->forceFill($found['changes'] ?? []);
+
+                                    foreach (self::addressState($copy) as $f => $value) {
+                                        $set($f, $value);
+                                    }
+
+                                    $set('location_id', null);
+                                    Notification::make()->title(($found['labels'] ?? []) === [] ? 'Tidak ada data alamat baru di chat.' : 'Dari chat: '.implode(', ', $found['labels']).'. Periksa lalu buat resi.')
+                                        ->{($found['labels'] ?? []) === [] ? 'warning' : 'success'}()->send();
+                                }),
+                        ])->key('addressActions')->columnSpanFull(),
+                        $field('addr_name', 'Nama penerima'),
+                        $field('addr_rt_rw', 'RT/RW'),
+                        Textarea::make('addr_text')->label('Alamat lengkap')->rows(2)->live(onBlur: true)->maxLength(1000)->columnSpanFull()->default(fn () => self::addressState($lead())['addr_text'] ?? null),
+                        $field('addr_landmark', 'Patokan'),
+                        $field('addr_kelurahan', 'Kelurahan / desa'),
+                        $field('addr_kecamatan', 'Kecamatan'),
+                        $field('addr_kota', 'Kota / kabupaten'),
+                        $field('addr_kode_pos', 'Kode pos')->maxLength(5)->rule('nullable')->rule('regex:/^\d{5}$/'),
+                    ]),
                 Select::make('location_id')->label('Kelurahan tujuan')->live()
-                    ->options(fn () => collect(self::draft($lead(), null, null)->candidates)->mapWithKeys(fn (CarrierLocation $l) => [$l->id => $l->label()])->all())
+                    ->options(fn (Get $get) => collect(self::draft($lead(), null, null, $address($get))->candidates)->mapWithKeys(fn (CarrierLocation $l) => [$l->id => $l->label()])->all())
                     ->default(fn () => self::draft($lead(), null, null)->destination?->id)
-                    ->visible(fn () => count(self::draft($lead(), null, null)->candidates) > 1 || (self::draft($lead(), null, null)->destination === null && self::draft($lead(), null, null)->candidates !== [])),
+                    ->visible(fn (Get $get) => count(($d = self::draft($lead(), null, null, $address($get)))->candidates) > 1 || ($d->destination === null && $d->candidates !== [])),
                 Select::make('rate_code')->label('Kurir dan layanan')->live()
-                    ->options(fn (Get $get) => collect(self::draft($lead(), $get('location_id'), null)->rates)
+                    ->options(fn (Get $get) => collect(self::draft($lead(), $get('location_id'), null, $address($get))->rates)
                         ->mapWithKeys(fn (CarrierRate $r) => [$r->code => $r->name().' · Rp'.number_format($r->price, 0, ',', '.').($r->etaMax ? " · {$r->etaMin}-{$r->etaMax} hari" : '')])->all())
                     ->default(fn () => self::draft($lead(), null, null)->rate?->code)
-                    ->visible(fn (Get $get) => self::draft($lead(), $get('location_id'), null)->rates !== []),
-                Text::make(fn (Get $get) => self::preview(self::draft($lead(), $get('location_id'), $get('rate_code'))))->columnSpanFull(),
+                    ->visible(fn (Get $get) => self::draft($lead(), $get('location_id'), null, $address($get))->rates !== []),
+                Text::make(fn (Get $get) => self::preview(self::draft($lead(), $get('location_id'), $get('rate_code'), $address($get))))->columnSpanFull(),
             ])
             ->action(function (array $data, Action $action) use ($lead) {
                 $record = $lead();
-                $draft = app(Shipments::class)->draft($record, ['location_id' => $data['location_id'] ?? null, 'rate_code' => $data['rate_code'] ?? null]);
+                $choice = ['location_id' => $data['location_id'] ?? null, 'rate_code' => $data['rate_code'] ?? null];
+                $draft = app(Shipments::class)->draft(self::withAddress($record, $data), $choice);
 
                 if (! $draft->ok()) {
                     Notification::make()->title('Resi belum bisa dibuat')->body(implode(' ', $draft->problems))->danger()->send();
                     $action->halt();
                 }
+
+                self::saveAddress($record, $data);
 
                 try {
                     [$shipment, $new] = app(Shipments::class)->book($record, $draft, auth()->user());
