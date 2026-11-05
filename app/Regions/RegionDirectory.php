@@ -43,6 +43,31 @@ class RegionDirectory
         return Cache::remember('regions.available.'.self::version(), 600, fn () => Region::query()->exists());
     }
 
+    /**
+     * Postal codes of the villages whose name starts with $name, then of the villages in districts named so ("kedungwaringin"),
+     * for looking a place up by name at a courier that only searches by postal code.
+     *
+     * @return list<string>
+     */
+    public static function postalCodesFor(string $name, int $limit = 8): array
+    {
+        $key = self::searchKey($name);
+
+        if (mb_strlen($key) < 3) {
+            return [];
+        }
+
+        return Cache::remember('regions.postal.'.self::version().'.'.sha1($key), 3600, function () use ($key, $limit) {
+            $like = addcslashes($key, '%_\\').'%';
+            $villages = Region::query()->where('level', Region::VILLAGE)->where('search', 'like', $like)->whereNotNull('postal_code')->orderByRaw('search = ? desc', [$key])->limit(50)->pluck('postal_code');
+
+            $districts = Region::query()->where('level', Region::DISTRICT)->where('search', 'like', $like)->orderByRaw('search = ? desc', [$key])->limit(5)->pluck('code');
+            $inDistricts = $districts->isEmpty() ? collect() : Region::query()->where('level', Region::VILLAGE)->whereIn('parent_code', $districts)->whereNotNull('postal_code')->pluck('postal_code');
+
+            return $villages->merge($inDistricts)->filter(fn ($c) => preg_match('/^\d{5}$/', (string) $c))->unique()->take($limit)->values()->all();
+        });
+    }
+
     /** "Kabupaten Bandung Barat" => "bandung barat": how names are compared and searched. */
     public static function searchKey(?string $name): string
     {

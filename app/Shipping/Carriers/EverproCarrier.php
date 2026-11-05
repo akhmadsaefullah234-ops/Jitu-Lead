@@ -3,6 +3,7 @@
 namespace App\Shipping\Carriers;
 
 use App\Models\CarrierAccount;
+use App\Regions\RegionDirectory;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
@@ -28,6 +29,9 @@ class EverproCarrier implements CarrierProvider
 {
     private const TOKEN_MARGIN = 300;
 
+    /** Postal codes looked up at most for one search by name. */
+    private const MAX_POSTAL_LOOKUPS = 8;
+
     public function __construct(private CarrierAccount $account) {}
 
     public function key(): string
@@ -48,45 +52,156 @@ class EverproCarrier implements CarrierProvider
 
     // ---- Account -------------------------------------------------------------------------------------------
 
+    /** GET /balance/v1/detail answers {"data": {"cash": 125000, "name": "..."}}; other names are read as a fallback. */
     public function balance(): ?int
     {
         $data = $this->call('get', '/balance/v1/detail');
-        $value = Arr::first([data_get($data, 'balance'), data_get($data, 'available_balance'), data_get($data, 'amount'), is_numeric($data) ? $data : null], fn ($v) => is_numeric($v));
 
-        return $value !== null ? (int) $value : null;
+        if (is_numeric($data)) {
+            return (int) $data;
+        }
+
+        foreach (['cash', 'balance', 'available_balance', 'amount', 'saldo', 'balance.cash'] as $key) {
+            if (is_numeric($value = data_get($data, $key))) {
+                return (int) $value;
+            }
+        }
+
+        // Only the keys, never the values, so the field can be added here without exposing the account.
+        Log::warning('Everpro balance not found in the answer', ['tenant' => $this->account->tenant_id, 'keys' => is_array($data) ? array_keys($data) : gettype($data)]);
+
+        return null;
     }
 
     // ---- Places --------------------------------------------------------------------------------------------
 
+    /**
+     * By postal code: POST /location/v1/postalcode (it only takes a 5-digit code). By name ("kedungwaringin",
+     * "Sekeloa, Coblong, Kota Bandung"): the postal codes of matching villages and districts, from the imported
+     * regions (App\Regions\RegionDirectory) or else Everpro's own list (/location/v1/sub-districts by name,
+     * /location/v1/districts by name then their sub-districts), then those codes through /postalcode, keeping the
+     * places whose kelurahan, kecamatan or kota match the text. Only answers that worked are cached.
+     */
     public function locations(?string $postalCode, ?string $area = null): array
     {
-        $postalCode = preg_replace('/\D/', '', (string) $postalCode) ?: null;
-        $area = filled($area) ? mb_substr(trim($area), 0, 150) : null;
+        $postalCode = preg_match('/^\d{5}$/', $code = preg_replace('/\D/', '', (string) $postalCode)) ? $code : null;
+        $terms = array_values(array_unique(array_filter(array_map(
+            fn ($t) => RegionDirectory::searchKey($t), preg_split('/[,\n]+/', mb_substr((string) $area, 0, 150)),
+        ), fn ($t) => mb_strlen($t) >= 3)));
 
-        if ($postalCode === null && $area === null) {
+        if ($postalCode !== null) {
+            return $this->rank($this->byPostalCode($postalCode), $terms, keepAll: true);
+        }
+
+        if ($terms === []) {
             return [];
         }
 
-        $key = 'everpro-loc:'.($this->account->sandbox ? 's' : 'p').':'.sha1(($postalCode ?? '').'|'.mb_strtolower((string) $area));
+        // The most specific word first (kelurahan, then kecamatan, then kota); local regions before Everpro's list.
+        foreach ($terms as $term) {
+            foreach ([fn () => RegionDirectory::available() ? RegionDirectory::postalCodesFor($term) : [], fn () => $this->postalCodesFromEverpro($term)] as $source) {
+                $places = [];
 
-        $rows = Cache::remember($key, now()->addDays(30), function () use ($postalCode, $area) {
-            try {
-                $data = $this->call('post', '/location/v1/postalcode', array_filter(['postal_code' => $postalCode, 'address' => $area]));
-            } catch (CarrierException $e) {
-                if ($e->httpStatus === 404) {
-                    return [];
+                foreach (array_slice(array_values(array_unique($source())), 0, self::MAX_POSTAL_LOOKUPS) as $code) {
+                    array_push($places, ...$this->byPostalCode($code));
                 }
 
-                throw $e;
+                if (($found = $this->rank($places, $terms)) !== []) {
+                    return $found;
+                }
             }
+        }
+
+        return [];
+    }
+
+    /** @return list<CarrierLocation> */
+    private function byPostalCode(string $code): array
+    {
+        $rows = $this->cached('postal:'.$code, function () use ($code) {
+            $data = $this->call('post', '/location/v1/postalcode', ['postal_code' => $code]);
 
             return array_values(array_filter(array_map(fn ($r) => is_array($r) && filled($r['sub_district_id'] ?? null) ? [
                 'id' => (string) $r['sub_district_id'], 'subDistrict' => (string) ($r['sub_district_name'] ?? ''), 'district' => $r['district_name'] ?? null,
-                'city' => $r['city_name'] ?? null, 'province' => $r['province_name'] ?? null, 'postalCode' => isset($r['postal_code']) ? (string) $r['postal_code'] : null,
+                'city' => $r['city_name'] ?? null, 'province' => $r['province_name'] ?? null, 'postalCode' => isset($r['postal_code']) ? (string) $r['postal_code'] : $code,
             ] : null, (array) (Arr::isList((array) $data) ? $data : data_get($data, 'locations', [])))));
         });
 
         return array_map(CarrierLocation::fromArray(...), $rows);
+    }
+
+    /** @return list<string> postal codes of Everpro sub-districts named $term, or of the sub-districts of districts named $term */
+    private function postalCodesFromEverpro(string $term): array
+    {
+        $codes = fn ($rows) => array_values(array_filter(array_map(fn ($r) => is_array($r) && preg_match('/^\d{5}$/', (string) ($r['postal_code'] ?? '')) ? (string) $r['postal_code'] : null, (array) $rows)));
+        $named = fn ($rows, string $field) => array_values(array_filter((array) $rows, fn ($r) => is_array($r) && str_starts_with(RegionDirectory::searchKey($r[$field] ?? ''), $term)));
+
+        $villages = $this->cached('sub-districts:'.$term, fn () => (array) $this->call('get', '/location/v1/sub-districts', ['sub_district_name' => $term]));
+        $found = $codes($named($villages, 'sub_district_name'));
+
+        $districts = $this->cached('districts:'.$term, fn () => (array) $this->call('get', '/location/v1/districts', ['district_name' => $term]));
+
+        foreach (array_slice($named($districts, 'district_name'), 0, 3) as $district) {
+            if (filled($district['district_id'] ?? null)) {
+                $children = $this->cached('sub-districts-of:'.$district['district_id'], fn () => (array) $this->call('get', '/location/v1/sub-districts', ['district_id' => $district['district_id']]));
+                array_push($found, ...$codes($children));
+            }
+        }
+
+        return array_values(array_unique($found));
+    }
+
+    /**
+     * Places matching the most words of the text first (kelurahan before kecamatan before kota); without $keepAll
+     * the ones matching none are dropped.
+     *
+     * @param  list<CarrierLocation>  $places
+     * @param  list<string>  $terms
+     * @return list<CarrierLocation>
+     */
+    private function rank(array $places, array $terms, bool $keepAll = false): array
+    {
+        $unique = collect($places)->unique(fn (CarrierLocation $l) => $l->id);
+
+        if ($terms === []) {
+            return $unique->values()->all();
+        }
+
+        // An exact name counts double a name that only starts with the text (someone still typing).
+        $match = fn (?string $name, string $t) => ($k = RegionDirectory::searchKey($name)) === $t ? 2 : (str_starts_with($k, $t) ? 1 : 0);
+        $score = fn (CarrierLocation $l) => collect($terms)->sum(fn ($t) => $match($l->subDistrict, $t) * 4 + $match($l->district, $t) * 2 + $match($l->city, $t));
+
+        return $unique->map(fn ($l) => [$l, $score($l)])->filter(fn ($p) => $keepAll || $p[1] > 0)
+            ->sortBy([[fn ($p) => $p[1], 'desc'], [fn ($p) => $p[0]->subDistrict, 'asc']])->map(fn ($p) => $p[0])->values()->all();
+    }
+
+    /**
+     * Cached for 30 days when the call worked. "Not found" (404) is an empty answer that is not kept, nor is any
+     * error, so a slow or failing Everpro never leaves an empty search behind.
+     */
+    private function cached(string $key, \Closure $fetch): array
+    {
+        $key = 'everpro-loc2:'.($this->account->sandbox ? 's' : 'p').':'.sha1($key);
+
+        if (is_array($hit = Cache::get($key))) {
+            return $hit;
+        }
+
+        try {
+            $rows = (array) $fetch();
+        } catch (CarrierException $e) {
+            if ($e->httpStatus === 404) {
+                return [];
+            }
+
+            throw $e;
+        }
+
+        if ($rows !== []) {
+            Cache::put($key, $rows, now()->addDays(30));
+        }
+
+        return $rows;
     }
 
     // ---- Prices and pickup -------------------------------------------------------------------------------
