@@ -23,6 +23,12 @@ return [
     'timeout' => 20,
     'tries' => 3,
 
+    // Bulk "Cetak label": seconds per label PDF download, the most labels in one PDF, and how long the
+    // merged PDF is kept (hours; its link works for one hour).
+    'label_timeout' => 15,
+    'label_max' => 100,
+    'label_keep_hours' => 24,
+
     // Parcels not yet delivered or returned are tracked again this often (hours) when no callback came.
     'track_every_hours' => 2,
 

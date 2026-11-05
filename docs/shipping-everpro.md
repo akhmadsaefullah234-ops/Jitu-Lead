@@ -50,7 +50,13 @@ tidak), juga untuk resi yang tidak dikenal. URL satu agensi tidak bisa menyentuh
 - Menu ⋯ di Inbox dan tombol **Pengiriman** di halaman lead: **Buat resi**, **Lacak paket**, **Cetak label**,
   **Batalkan kiriman** (hanya sebelum paket diambil kurir).
 - Daftar lead: aksi massal **Buat resi** (hanya lead di tahap Dikemas & dikirim tanpa kiriman aktif; lead yang datanya
-  belum lengkap dilewati dan disebutkan) dan **Cetak label** (daftar tautan label).
+  belum lengkap dilewati dan disebutkan) dan **Cetak label**: label tiap lead terpilih diunduh di server (maks. 100
+  sekali cetak, batas waktu 15 detik per label) lalu digabung jadi satu PDF, satu label per halaman dengan ukuran asli
+  penyedia, urut seperti tabel. PDF disimpan privat (`storage/app/private/label-sheets/{tenant}/`, nama acak), dibuka
+  lewat tautan bertanda tangan 1 jam yang hanya bisa dibuka anggota toko itu, dan dihapus setelah 24 jam oleh
+  `shipping:labels-prune` (terjadwal tiap jam). Ringkasan menyebut lead yang dilewati beserta alasannya (belum ada resi
+  / label gagal diambil). Catatan: label PDF yang memakai kompresi xref (PDF 1.5+) tidak terbaca oleh FPDI versi gratis
+  dan akan dilewati dengan alasan "label gagal diambil".
 - Alamat penerima dipetakan dari rincian alamat lead ke lokasi Everpro. Endpoint `/location/v1/postalcode` hanya menerima
   kode pos 5 digit, jadi: kode pos dipakai langsung bila ada; kalau tidak, nama kelurahan/kecamatan/kota dicari dulu kode
   posnya (dari data wilayah yang diimpor, atau daftar `/location/v1/sub-districts` dan `/location/v1/districts` Everpro),

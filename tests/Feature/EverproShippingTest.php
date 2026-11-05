@@ -26,6 +26,7 @@ use App\Models\WaMessage;
 use App\Shipping\Carriers\CarrierException;
 use App\Shipping\Carriers\Carriers;
 use App\Shipping\Carriers\ShipmentStatus;
+use App\Shipping\Shipments\LabelSheet;
 use App\Shipping\Shipments\Shipments;
 use App\Support\CurrentTenant;
 use App\Support\PhoneNumber;
@@ -40,7 +41,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
+use setasign\Fpdi\Fpdi;
+use setasign\Fpdi\PdfParser\StreamReader;
 use Tests\TestCase;
 
 /**
@@ -97,6 +101,7 @@ class EverproShippingTest extends TestCase
             'client-api-sandbox.everpro.id/*' => fn (Request $r) => $this->everpro($r),
             'api.anthropic.com/*' => fn () => Http::response(array_shift($this->ai) ?? ['stop_reason' => 'end_turn', 'content' => [['type' => 'text', 'text' => 'Baik, Kak.']]]),
             'gw.example.com/*' => fn () => Http::response(['id' => 'g'.++$this->n]),
+            'labels.example.com/*' => fn (Request $r) => $this->labelFile($r),
         ]);
         Mail::fake();
     }
@@ -149,12 +154,35 @@ class EverproShippingTest extends TestCase
             $path === '/shipment/v2/orders' => $ok(['client_order_no' => $r->data()['client_order_no'], 'order_reference_id' => 'ER-'.count($this->callsTo('/shipment/v2/orders')), 'actual_price' => 18000]),
             str_ends_with($path, '/generate') => $ok(['awb_number' => $this->noAwb ? null : 'JNE0001234']),
             str_ends_with($path, '/awb') => $ok(['awb_number' => $this->noAwb ? null : 'JNE0001234']),
-            str_ends_with($path, '/label') => $ok(['url_label_pdf' => 'https://labels.example.com/JNE0001234.pdf']),
+            str_ends_with($path, '/label') => $ok(['url_label_pdf' => 'https://labels.example.com/'.basename(dirname($path)).'.pdf']),
             str_ends_with($path, '/cancel') => $ok(null),
             $path === '/shipment/v1/orders/track' => $ok(array_shift($this->track) ?? []),
             str_ends_with($path, '/track') => $ok(array_shift($this->track) ?? ['awb_number' => 'JNE0001234', 'status' => 'WAITING', 'tracking_history' => []]),
             default => Http::response(['message' => 'not found'], 404),
         };
+    }
+
+    /** A label PDF of its own size per tracking number (width from the digits), a server error for AWB-DOWN, a web page for AWB-HTML. */
+    private function labelFile(Request $r)
+    {
+        $awb = basename((string) parse_url($r->url(), PHP_URL_PATH), '.pdf');
+
+        return match ($awb) {
+            'AWB-DOWN' => Http::response('error', 500),
+            'AWB-HTML' => Http::response('<html>login</html>', 200, ['Content-Type' => 'text/html']),
+            default => Http::response(self::pdf((int) preg_replace('/\D/', '', $awb) ?: 100), 200, ['Content-Type' => 'application/pdf']),
+        };
+    }
+
+    /** A small one-page PDF, $width × 150 mm. */
+    private static function pdf(int $width): string
+    {
+        $pdf = new \FPDF('P', 'mm', [$width, 150]);
+        $pdf->AddPage();
+        $pdf->SetFont('Helvetica', '', 10);
+        $pdf->Cell(0, 10, 'Label');
+
+        return $pdf->Output('S');
     }
 
     /** Like production: only a 5-digit postal code. */
@@ -674,7 +702,134 @@ class EverproShippingTest extends TestCase
         $this->assertSame(2, $this->inShop(fn () => Shipment::query()->count()));
         $this->assertNull($this->inShop(fn () => Shipment::query()->where('lead_id', $c->id)->first()));
 
-        Livewire::test(ListLeads::class)->callTableBulkAction('bulkShipmentLabels', [$a, $b])->assertNotified('2 label siap dicetak');
+        Livewire::test(ListLeads::class)->callTableBulkAction('bulkShipmentLabels', [$a, $b])->assertNotified('2 label digabung · 0 dilewati');
+    }
+
+    // ---- Bulk labels in one PDF ------------------------------------------------------------------------------------
+
+    /** A lead named $name with a parcel $awb (null: no tracking number yet). */
+    private function parcel(string $name, string $phone, ?string $awb): Lead
+    {
+        $lead = $this->order('transfer', $phone, ['name' => $name]);
+        $this->inShop(fn () => Shipment::query()->create(['lead_id' => $lead->id, 'provider' => 'everpro', 'client_order_no' => 'QS-'.$phone,
+            'awb' => $awb, 'state' => $awb ? Shipment::SHIPPED : Shipment::PENDING]));
+
+        return $lead;
+    }
+
+    /** @return list<array{0: float, 1: float}> width and height (mm) of each page */
+    private static function pages(string $pdf): array
+    {
+        $reader = new Fpdi;
+        $count = $reader->setSourceFile(StreamReader::createByString($pdf));
+
+        return array_map(fn ($page) => array_map(fn ($v) => round($v), array_values(array_slice($reader->getTemplateSize($reader->importPage($page)), 0, 2))), range(1, $count));
+    }
+
+    private function sheetFile(string $url): string
+    {
+        $file = basename((string) parse_url($url, PHP_URL_PATH));
+
+        return Storage::disk('local')->get(LabelSheet::DIR.'/'.$this->shop->id.'/'.$file);
+    }
+
+    public function test_three_labels_become_one_pdf_of_three_pages_in_table_order(): void
+    {
+        Storage::fake('local');
+        $this->configure();
+        $leads = [$this->parcel('Ani', '6281200000001', 'AWB120'), $this->parcel('Budi', '6281200000002', 'AWB100'), $this->parcel('Citra', '6281200000003', 'AWB80')];
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+
+        $sheet = app(LabelSheet::class)->make($leads);
+
+        $this->assertSame(['Ani · AWB120', 'Budi · AWB100', 'Citra · AWB80'], $sheet['merged']);
+        $this->assertSame([], $sheet['skipped']);
+        $this->assertSame([[120.0, 150.0], [100.0, 150.0], [80.0, 150.0]], self::pages($this->sheetFile($sheet['url'])), 'One page per label, own size, in order.');
+        $this->assertCount(1, Storage::disk('local')->allFiles(LabelSheet::DIR));
+        $this->assertMatchesRegularExpression('#/label-kiriman/'.$this->shop->id.'/[A-Za-z0-9]{40}\.pdf\?expires=#', $sheet['url']);
+
+        $this->get($sheet['url'])->assertOk()->assertHeader('Content-Type', 'application/pdf');
+
+        Livewire::test(ListLeads::class)->callTableBulkAction('bulkShipmentLabels', $leads)->assertNotified('3 label digabung · 0 dilewati');
+    }
+
+    public function test_leads_without_a_tracking_number_or_whose_label_fails_are_skipped_and_named(): void
+    {
+        Storage::fake('local');
+        $this->configure();
+        Log::spy();
+        $leads = [
+            $this->parcel('Ani', '6281200000001', 'AWB100'),
+            $this->parcel('Budi', '6281200000002', null),
+            $this->parcel('Citra', '6281200000003', 'AWB-DOWN'),
+            $this->parcel('Dewi', '6281200000004', 'AWB-HTML'),
+        ];
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+
+        $sheet = app(LabelSheet::class)->make($leads);
+
+        $this->assertSame(['Ani · AWB100'], $sheet['merged']);
+        $this->assertSame([['name' => 'Budi', 'reason' => 'belum ada resi'], ['name' => 'Citra', 'reason' => 'label gagal diambil'], ['name' => 'Dewi', 'reason' => 'label gagal diambil']], $sheet['skipped']);
+        $this->assertCount(1, self::pages($this->sheetFile($sheet['url'])));
+        Log::shouldHaveReceived('warning')->with('Shipping label could not be fetched for the bulk print', \Mockery::on(fn ($ctx) => array_keys($ctx) === ['tenant', 'lead', 'step'] && $ctx['step'] === 'download'));
+
+        Livewire::test(ListLeads::class)->callTableBulkAction('bulkShipmentLabels', $leads)->assertNotified('1 label digabung · 3 dilewati');
+
+        // Nothing to print: no file, only the reasons.
+        $none = app(LabelSheet::class)->make([$leads[1]]);
+        $this->assertNull($none['url']);
+        Livewire::test(ListLeads::class)->callTableBulkAction('bulkShipmentLabels', [$leads[1]])->assertNotified('0 label digabung · 1 dilewati');
+    }
+
+    public function test_one_print_takes_at_most_the_configured_number_of_labels(): void
+    {
+        Storage::fake('local');
+        config(['carriers.label_max' => 2]);
+        $this->configure();
+        $leads = [$this->parcel('Ani', '6281200000001', 'AWB100'), $this->parcel('Budi', '6281200000002', 'AWB101'), $this->parcel('Citra', '6281200000003', 'AWB102')];
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+
+        $sheet = app(LabelSheet::class)->make($leads);
+
+        $this->assertCount(2, $sheet['merged']);
+        $this->assertSame([['name' => 'Citra', 'reason' => 'lebih dari 2 label sekali cetak']], $sheet['skipped']);
+        $this->assertSame(2, collect(Http::recorded())->filter(fn ($pair) => str_contains($pair[0]->url(), 'labels.example.com'))->count());
+    }
+
+    public function test_the_pdf_link_expires_and_is_only_for_members_of_the_agency(): void
+    {
+        Storage::fake('local');
+        $this->configure();
+        $lead = $this->parcel('Ani', '6281200000001', 'AWB100');
+        $admin = $this->adminOf($this->shop);
+        $this->actingInTenant($admin, $this->shop);
+        $url = app(LabelSheet::class)->make([$lead])['url'];
+
+        $this->get($url)->assertOk();
+
+        // Another agency's people, and visitors who are not signed in, get nothing.
+        $other = app(ProvisionTenant::class)('Toko Lain', 'toko-lain', User::factory()->create(), 'retail');
+        $this->actingAs($this->adminOf($other))->get($url)->assertNotFound();
+        auth()->logout();
+        $this->get($url)->assertNotFound();
+
+        // A changed link, and the same link after an hour, are refused.
+        $this->actingAs($admin)->get(str_replace('/'.$this->shop->id.'/', '/'.$other->id.'/', $url))->assertForbidden();
+        $this->travel(61)->minutes();
+        $this->get($url)->assertForbidden();
+    }
+
+    public function test_merged_label_files_are_deleted_after_a_day(): void
+    {
+        Storage::fake('local');
+        $disk = Storage::disk('local');
+        $disk->put(LabelSheet::DIR.'/1/old.pdf', '%PDF');
+        $disk->put(LabelSheet::DIR.'/1/new.pdf', '%PDF');
+        touch($disk->path(LabelSheet::DIR.'/1/old.pdf'), now()->subHours(25)->getTimestamp());
+
+        $this->artisan('shipping:labels-prune')->assertSuccessful();
+
+        $this->assertSame([LabelSheet::DIR.'/1/new.pdf'], $disk->allFiles(LabelSheet::DIR));
     }
 
     // ---- AI ------------------------------------------------------------------------------------------------------

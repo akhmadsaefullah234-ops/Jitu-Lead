@@ -12,6 +12,8 @@
         "laravel/framework": "^13.17",
         "laravel/tinker": "^3.0",
         "minishlink/web-push": "^11.0",
+        "setasign/fpdf": "^1.8",
+        "setasign/fpdi": "^2.6",
         "smalot/pdfparser": "^2.12"
     },
     "require-dev": {
