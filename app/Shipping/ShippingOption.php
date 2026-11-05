@@ -2,7 +2,7 @@
 
 namespace App\Shipping;
 
-/** One courier's price for the parcel. */
+/** One courier's price for the parcel: what the buyer pays, and before a shipping promo what it would have been. */
 final class ShippingOption
 {
     public function __construct(
@@ -10,7 +10,15 @@ final class ShippingOption
         public readonly int $price,
         public readonly ?int $etaMin,
         public readonly ?int $etaMax,
+        public readonly ?int $normalPrice = null,
+        public readonly ?string $promo = null,
     ) {}
+
+    /** What the promo takes off, 0 without one. */
+    public function discount(): int
+    {
+        return $this->normalPrice !== null ? max(0, $this->normalPrice - $this->price) : 0;
+    }
 
     public function eta(): ?string
     {

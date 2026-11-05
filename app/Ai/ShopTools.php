@@ -137,6 +137,8 @@ class ShopTools
             'kurir' => $option->courier,
             'ongkir' => $option->price,
             'ongkir_teks' => ShippingQuote::rupiah($option->price),
+            'potongan_ongkir_teks' => $option->discount() > 0 ? ShippingQuote::rupiah($option->discount()) : null,
+            'promo_ongkir' => $option->discount() > 0 ? $option->promo : null,
             'total' => $total,
             'total_teks' => $total !== null ? ShippingQuote::rupiah($total) : null,
         ], fn ($v) => $v !== null);
@@ -204,6 +206,7 @@ class ShopTools
         return implode("\n", array_filter([
             'ONGKIR DAN PESANAN:',
             'Untuk ongkir WAJIB memanggil tool '.self::CHECK.'. Jangan menghitung, menjumlahkan, mengalikan, atau menebak ongkir maupun total sendiri. Sebut hanya angka yang tertulis di hasil tool, apa adanya.',
+            'Ongkir di hasil tool sudah dipotong promo ongkir produk. Bila ada promo_ongkir, sebut promonya beserta ongkir_normal_teks dan potongan_ongkir_teks; jangan memotong ongkir lagi.',
             'Bila kota/kabupaten tujuan belum jelas, tanyakan kota atau kecamatannya dulu, jangan memanggil tool.',
             'Bila pembeli menulis singkatan atau nama tidak resmi (mis. Jaksel, Tangsel, Kab Bdg, Jogja), sebut tujuannya dengan nama resmi persis seperti kolom "tujuan" di hasil '.self::CHECK.', dan pakai nama resmi itu di alamat pesanan.',
             'Bila hasil tool berstatus '.ShippingQuote::NEEDS_ADMIN.' atau '.ShippingQuote::NOT_AVAILABLE.', panggil tool '.ReplySignals::HANDOFF_TOOL.'.',

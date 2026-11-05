@@ -6,6 +6,7 @@ use App\Automation\RetailStages;
 use App\Catalog\ProductMatcher;
 use App\LeadForms\FormFields;
 use App\Models\Lead;
+use App\Models\LeadForm;
 use App\Models\Shipment;
 use App\Models\WaMessage;
 use App\Regions\RegionDirectory;
@@ -38,6 +39,9 @@ class ChatShippingDetails
 
     private const ADDRESS_KEYS = ['shipping_address', 'rt_rw', 'house', 'landmark', 'dusun', 'street', 'kelurahan', 'kecamatan', 'kota', 'provinsi', 'kode_pos'];
 
+    /** @var ?list<list<string>> the fixed text of each form's opening WhatsApp message */
+    private ?array $formChunks = null;
+
     public function __construct(private ChatOrderParser $parser, private ProductMatcher $products) {}
 
     /** One message the buyer just sent. */
@@ -49,6 +53,10 @@ class ChatShippingDetails
 
         $asked = WaMessage::query()->where('conversation_id', $message->conversation_id)->where('direction', 'out')
             ->where('id', '<', $message->getKey())->latest('id')->value('body');
+        if (filled($lead->shipping_address) && $this->fromForm((string) $message->body)) {
+            return null;
+        }
+
         $parsed = $this->parser->parse((string) $message->body, $asked);
 
         if ($parsed === []) {
@@ -61,7 +69,7 @@ class ChatShippingDetails
     /**
      * The whole conversation once, oldest first (moving to Dikemas & dikirim, "Ambil dari chat", the backfill).
      *
-     * @return array{changes: array<string, mixed>, labels: list<string>, previous: list<string>}|null
+     * @return array{changes: array<string, mixed>, labels: list<string>, previous: list<string>, parts_before: int, parts_after: int}|null
      */
     public function fromConversation(Lead $lead, bool $save = true): ?array
     {
@@ -80,7 +88,7 @@ class ChatShippingDetails
             foreach ($messages as $message) {
                 if ($message->direction === 'out') {
                     $asked = $message->body;
-                } elseif ($message->type === 'text' && filled($message->body)) {
+                } elseif ($message->type === 'text' && filled($message->body) && ! (filled($state['shipping_address']) && $this->fromForm((string) $message->body))) {
                     $state = $this->apply($state, $this->parser->parse((string) $message->body, $asked));
                 }
             }
@@ -152,20 +160,33 @@ class ChatShippingDetails
         if (filled($parsed['address'] ?? null)) {
             $old = trim((string) $state['shipping_address']);
             $new = trim((string) $parsed['address']);
+            $oldParts = $old === '' ? $state['parts'] : array_filter($state['parts'], fn ($v) => $v !== '' && $v !== null) + $this->parser->addressParts($old);
 
             if ($old === '') {
                 $state['shipping_address'] = $new;
                 $state['parts'] = $parts + $state['parts'];
-            } elseif (self::same($old, $new)) {
-                // The same address again (perhaps longer): keep the fuller text, add what it adds. Splitting the
-                // lead's own text only fills the gaps.
-                $state['shipping_address'] = mb_strlen(self::key($new)) > mb_strlen(self::key($old)) ? $new : $old;
+            } elseif (self::same($old, $new) && ! ($parsed['explicit'] ?? false)) {
+                // The same address again: keep the text with more parts, add what it adds. Splitting the lead's
+                // own text only fills the gaps.
+                $keepNew = self::count($parts) > self::count($oldParts)
+                    || (self::count($parts) === self::count($oldParts) && mb_strlen(self::key($new)) > mb_strlen(self::key($old)));
+                $added = $keepNew || ($parsed['fill'] ?? false) ? [] : array_diff_key(array_filter($parts, fn ($v) => $v !== '' && $v !== null), $oldParts, ['street' => 1]);
+                $state['shipping_address'] = $keepNew ? $new : $this->withPieces($old, $added, $parts + $state['parts']);
+                $state['given'] = array_unique([...$state['given'], ...array_keys($added)]);
                 $state['parts'] = ($parsed['fill'] ?? false) ? $state['parts'] + $parts : $parts + $state['parts'];
-            } else {
+            } elseif (($parsed['explicit'] ?? false) || self::count($parts) >= self::count($oldParts)) {
+                // A new address ("alamat ganti …"), or a different one at least as complete: the latest wins.
                 $state['previous'][] = $old;
                 $state['shipping_address'] = $new;
                 $state['parts'] = $parts;
                 $state['codes'] = null;
+            } else {
+                // Fewer parts than the lead already has (a short repeat, the form's own message): it only fills
+                // what is still empty, never shortens the address.
+                $added = array_diff_key(array_filter($parts, fn ($v) => $v !== '' && $v !== null), $oldParts, ['street' => 1]);
+                $state['parts'] = $oldParts + $added;
+                $state['given'] = array_unique([...$state['given'], ...array_keys($added)]);
+                $state['shipping_address'] = $this->withPieces($old, $added, $state['parts']);
             }
         } elseif ($parts !== []) {
             $added = array_filter($parts, fn ($v, $k) => self::key((string) ($state['parts'][$k] ?? '')) !== self::key((string) $v), ARRAY_FILTER_USE_BOTH);
@@ -234,7 +255,7 @@ class ChatShippingDetails
     /**
      * Places the address with the regions, writes what changed, and notes it on the lead.
      *
-     * @return array{changes: array<string, mixed>, labels: list<string>, previous: list<string>}
+     * @return array{changes: array<string, mixed>, labels: list<string>, previous: list<string>, parts_before: int, parts_after: int}
      */
     private function finish(Lead $lead, array $state, bool $save, bool $activity = true): array
     {
@@ -257,6 +278,7 @@ class ChatShippingDetails
 
         $changes = [];
         $original = array_diff_key((array) $lead->shipping_address_parts, ['codes' => 1]);
+        $partsBefore = self::count(array_filter($original, fn ($v) => $v !== '' && $v !== null) + ($lead->shipping_address ? $this->parser->addressParts((string) $lead->shipping_address) : []));
 
         if ($parts != $original) {
             $changes['shipping_address_parts'] = ($parts === [] ? null : $parts + array_filter(['codes' => $state['codes']]));
@@ -307,7 +329,7 @@ class ChatShippingDetails
             }
         }
 
-        return ['changes' => $changes, 'labels' => $labels, 'previous' => $state['previous']];
+        return ['changes' => $changes, 'labels' => $labels, 'previous' => $state['previous'], 'parts_before' => $partsBefore, 'parts_after' => self::count($parts)];
     }
 
     /** @return list<string> what changed, in words */
@@ -348,6 +370,38 @@ class ChatShippingDetails
         [$short, $long] = mb_strlen($a) <= mb_strlen($b) ? [$words($a), $words($b)] : [$words($b), $words($a)];
 
         return $short !== [] && count(array_intersect($short, $long)) / count($short) >= 0.8;
+    }
+
+    /** How many parts an address has (street, number, RT/RW, landmark, kelurahan … postal code). */
+    public static function count(array $parts): int
+    {
+        return count(array_filter(array_intersect_key($parts, FormFields::ADDRESS_PARTS), fn ($v) => is_string($v) && trim($v) !== ''));
+    }
+
+    /**
+     * The message a form opens the chat with ("Halo admin, saya … mau order …", or the form's own wa_message):
+     * it repeats what the form already saved, often shorter, so it is never read as a new address.
+     */
+    public function fromForm(string $body): bool
+    {
+        if (preg_match('/^\s*(?:halo|hai|hi|assalamu\S*|permisi)\b[^\n]{0,40}\bsaya\b[^\n]{0,80}\b(?:mau|ingin|akan|sudah)\s+(?:order|pesan|memesan|beli|membeli|mengisi)/iu', $body)) {
+            return true;
+        }
+
+        $this->formChunks ??= LeadForm::query()->get(['after_submit'])
+            ->map(fn (LeadForm $f) => array_values(array_filter(array_map(fn ($c) => self::key($c), preg_split('/\{[^}]+\}/', (string) ($f->after_submit['wa_message'] ?? ''))), fn ($c) => mb_strlen($c) >= 8)))
+            ->filter()->values()->all();
+        $text = self::key($body);
+
+        foreach ($this->formChunks as $chunks) {
+            $found = count(array_filter($chunks, fn ($c) => str_contains($text, $c)));
+
+            if ($found >= min(2, count($chunks))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static function key(string $text): string

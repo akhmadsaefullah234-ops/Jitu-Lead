@@ -85,7 +85,7 @@ final class ShippingQuote
         $subtotal = $this->subtotal();
 
         foreach ($this->options as $o) {
-            $lines[] = '- '.$o->courier.': '.self::rupiah($o->price).($o->eta() ? ' ('.$o->eta().')' : '')
+            $lines[] = '- '.$o->courier.': '.self::rupiah($o->price).($o->discount() > 0 ? ' (normal '.self::rupiah($o->normalPrice).', '.$o->promo.')' : '').($o->eta() ? ' ('.$o->eta().')' : '')
                 .($subtotal !== null ? ', total '.self::rupiah($subtotal + $o->price) : '');
         }
 
@@ -108,6 +108,11 @@ final class ShippingQuote
                 'kurir' => $o->courier,
                 'ongkir' => $o->price,
                 'ongkir_teks' => self::rupiah($o->price),
+                'ongkir_normal' => $o->discount() > 0 ? $o->normalPrice : null,
+                'ongkir_normal_teks' => $o->discount() > 0 ? self::rupiah($o->normalPrice) : null,
+                'potongan_ongkir' => $o->discount() > 0 ? $o->discount() : null,
+                'potongan_ongkir_teks' => $o->discount() > 0 ? self::rupiah($o->discount()) : null,
+                'promo_ongkir' => $o->discount() > 0 ? $o->promo : null,
                 'estimasi' => $o->eta(),
                 'total' => $subtotal !== null ? $subtotal + $o->price : null,
                 'total_teks' => $subtotal !== null ? self::rupiah($subtotal + $o->price) : null,

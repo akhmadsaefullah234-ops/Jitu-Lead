@@ -206,10 +206,16 @@ class EverproCarrier implements CarrierProvider
 
     // ---- Prices and pickup -------------------------------------------------------------------------------
 
+    /** The groups a /v2/rates answer comes in, in the order the preview lists them. */
+    public const RATE_GROUPS = ['regular', 'express', 'same_day', 'instant', 'cargo', 'vehicle'];
+
     /**
      * POST /shipment/v2/rates takes a flat body: postal codes (no location ids), package_type_id 1 (regular),
-     * weight in kg, shipment_type and item_price (> 0). The rates come back as a list, or grouped per courier;
-     * each keeps what /v2/orders wants back from it (signed_key, rateID, cashback, is_flat_rate, durations).
+     * weight in kg, shipment_type and item_price (> 0). The answer is grouped by kind of service
+     * ({regular: [...], express: [...], same_day, instant, cargo, vehicle}); each rate names its courier in
+     * logistic_name (logistic_code is always empty) and its service in rate_name / rate_code, and keeps what
+     * /v2/orders wants back from it (signed_key, cashback, is_flat_rate, durations). A plain list still reads.
+     * The price is shipment_price_after_discount (else price) plus any surcharge; numbers may come as strings.
      */
     public function rates(RateRequest $request): array
     {
@@ -231,58 +237,100 @@ class EverproCarrier implements CarrierProvider
             'is_use_insurance' => $request->insurance,
         ], fn ($v) => $v !== null && $v !== '') + (count($dimensions) === 3 ? $dimensions : []));
 
-        $rows = Arr::isList((array) $data) ? (array) $data : (array) (data_get($data, 'rates') ?? data_get($data, 'logistics') ?? data_get($data, 'data') ?? []);
-        $this->logRateKeys($data, $rows);
+        $groups = $this->rateGroups($data);
+        $this->logRateKeys($groups);
         $out = [];
 
-        foreach ($rows as $row) {
-            if (! is_array($row)) {
-                continue;
-            }
-
-            // Grouped per courier ({logistic, rates: [...]}) or flat.
-            $group = ['logistic_name' => $row['logistic_name'] ?? data_get($row, 'logistic.name') ?? $row['name'] ?? null, 'logistic_code' => $row['logistic_code'] ?? data_get($row, 'logistic.code') ?? $row['code'] ?? null];
-
-            foreach (isset($row['rates']) && is_array($row['rates']) ? array_map(fn ($r) => (array) $r + $group, $row['rates']) : [$row] as $rate) {
-                $code = $rate['rate_code'] ?? data_get($rate, 'rate.code') ?? $rate['code'] ?? null;
-                $price = Arr::first([$rate['shipment_price'] ?? null, $rate['final_price'] ?? null, $rate['price'] ?? null, $rate['shipping_cost'] ?? null], fn ($v) => is_numeric($v));
-
-                if (blank($code) || $price === null || (isset($rate['is_active']) && ! $rate['is_active'])) {
+        foreach ($groups as $category => $rows) {
+            foreach ($rows as $row) {
+                if (! is_array($row)) {
                     continue;
                 }
 
-                $logistic = $rate['logistic_name'] ?? data_get($rate, 'logistic.name') ?? $rate['logistic_code'] ?? data_get($rate, 'logistic.code') ?? '';
-                $insurance = (int) ($rate['insurance_price'] ?? $rate['insurance_fee'] ?? 0);
-                $min = is_numeric($rate['min_duration'] ?? null) ? (int) $rate['min_duration'] : null;
-                $max = is_numeric($rate['max_duration'] ?? null) ? (int) $rate['max_duration'] : null;
+                // Grouped per courier ({logistic, rates: [...]}) or flat.
+                $courier = ['logistic_name' => $row['logistic_name'] ?? data_get($row, 'logistic.name') ?? null, 'logistic_code' => $row['logistic_code'] ?? data_get($row, 'logistic.code') ?? $row['code'] ?? null];
 
-                $out[] = new CarrierRate(
-                    (string) $code,
-                    (string) $logistic,
-                    (string) ($rate['rate_name'] ?? $rate['service_name'] ?? $rate['service'] ?? data_get($rate, 'rate.name') ?? ''),
-                    (int) $price,
-                    (int) ($rate['cod_fee'] ?? $rate['cod_price'] ?? $rate['cod_amount'] ?? 0),
-                    $insurance,
-                    $min,
-                    $max,
-                    array_filter([
-                        'rate_code' => (string) $code,
-                        'logistic_code' => ($c = $rate['logistic_code'] ?? data_get($rate, 'logistic.code')) !== null ? (string) $c : null,
-                        'logistic_name' => (string) $logistic,
-                        'shipment_price' => (int) $price,
-                        'insurance_price' => $insurance,
-                        'min_duration' => $min,
-                        'max_duration' => $max,
-                        'cashback' => is_numeric($rate['cashback'] ?? null) ? (int) $rate['cashback'] : null,
-                        'is_flat_rate' => isset($rate['is_flat_rate']) ? (bool) $rate['is_flat_rate'] : null,
-                        'signed_key' => filled($rate['signed_key'] ?? null) ? (string) $rate['signed_key'] : null,
-                        'rateID' => ($id = $rate['rateID'] ?? $rate['rate_id'] ?? null) !== null ? $id : null,
-                    ], fn ($v) => $v !== null),
-                );
+                foreach (isset($row['rates']) && is_array($row['rates']) ? array_map(fn ($r) => (array) $r + array_filter($courier), $row['rates']) : [$row] as $rate) {
+                    if (($r = $this->rate($rate, $category)) !== null) {
+                        $out[] = $r;
+                    }
+                }
             }
         }
 
+        // Regular first, then express, ...; cheapest first within a group.
+        usort($out, fn (CarrierRate $a, CarrierRate $b) => [array_search($a->category(), self::RATE_GROUPS, true), $a->price] <=> [array_search($b->category(), self::RATE_GROUPS, true), $b->price]);
+
         return $out;
+    }
+
+    /** @return array<string, list<mixed>> the rate rows per group ("regular", ...; "regular" for a plain list) */
+    private function rateGroups(mixed $data): array
+    {
+        $data = (array) $data;
+
+        if (Arr::isList($data)) {
+            return ['regular' => $data];
+        }
+
+        $grouped = array_filter(Arr::only($data, self::RATE_GROUPS), 'is_array');
+
+        if ($grouped !== []) {
+            return $grouped;
+        }
+
+        $nested = data_get($data, 'rates') ?? data_get($data, 'logistics') ?? data_get($data, 'data');
+
+        return is_array($nested) && $nested !== [] ? $this->rateGroups($nested) : [];
+    }
+
+    private function rate(array $rate, string $category): ?CarrierRate
+    {
+        $int = fn ($v) => is_numeric($v) ? (int) round((float) $v) : null;
+        $code = $rate['rate_code'] ?? data_get($rate, 'rate.code') ?? null;
+        $after = $int($rate['shipment_price_after_discount'] ?? null);
+        $base = Arr::first(array_map($int, [$rate['shipment_price'] ?? null, $rate['price'] ?? null, $rate['final_price'] ?? null, $rate['shipping_cost'] ?? null]), fn ($v) => $v !== null);
+        $shipment = $after ?? $base;
+
+        if (blank($code) || $shipment === null || (isset($rate['is_active']) && ! $rate['is_active'])) {
+            return null;
+        }
+
+        $surcharge = (int) $int($rate['surcharge'] ?? 0);
+        $logistic = trim((string) ($rate['logistic_name'] ?? data_get($rate, 'logistic.name') ?? ($rate['logistic_code'] ?? '') ?: ($rate['name'] ?? '')));
+        $rateName = trim((string) ($rate['rate_name'] ?? $rate['service_name'] ?? $rate['service'] ?? data_get($rate, 'rate.name') ?? ''));
+        $insurance = (int) $int($rate['insurance_price'] ?? $rate['insurance_fee'] ?? 0);
+        [$min, $max] = [$int($rate['min_duration'] ?? null), $int($rate['max_duration'] ?? null)];
+
+        return new CarrierRate(
+            (string) $code,
+            $logistic,
+            // "Regular" reads as "REG", the way couriers are named everywhere else in the app ("JNE REG").
+            strcasecmp($rateName, 'Regular') === 0 ? 'REG' : $rateName,
+            $shipment + $surcharge,
+            (int) $int($rate['cod_fee'] ?? $rate['cod_amount'] ?? 0),
+            $insurance,
+            $min,
+            $max,
+            array_filter([
+                'category' => $category,
+                'rate_code' => (string) $code,
+                'rate_name' => $rateName !== '' ? $rateName : null,
+                'logistic_code' => filled($c = $rate['logistic_code'] ?? data_get($rate, 'logistic.code')) ? (string) $c : null,
+                'logistic_name' => $logistic,
+                'price' => $base,
+                'shipment_price' => $shipment,
+                'surcharge' => $surcharge ?: null,
+                'insurance_price' => $insurance,
+                'min_duration' => $min,
+                'max_duration' => $max,
+                'cashback' => $int($rate['cashback'] ?? null),
+                'is_flat_rate' => isset($rate['is_flat_rate']) ? (bool) $rate['is_flat_rate'] : null,
+                'is_available_pickup_today' => isset($rate['is_available_pickup_today']) ? (bool) $rate['is_available_pickup_today'] : null,
+                'signed_key' => filled($rate['signed_key'] ?? null) ? (string) $rate['signed_key'] : null,
+                'rateID' => $rate['rateID'] ?? $rate['rate_id'] ?? null,
+            ], fn ($v) => $v !== null),
+        );
     }
 
     /** 1000 g => 1, 1500 g => 1.5: Everpro weighs in kg. */
@@ -293,19 +341,22 @@ class EverproCarrier implements CarrierProvider
         return fmod($kg, 1.0) === 0.0 ? (int) $kg : $kg;
     }
 
-    /** The field names of a rates answer (never the values), once a day per agency, to check them against the docs. */
-    private function logRateKeys(mixed $data, array $rows): void
+    /**
+     * The group and field names of a rates answer (never the values), once a month per agency, to check them
+     * against the docs. A warning, so it is written where production logs only warnings.
+     */
+    private function logRateKeys(array $groups): void
     {
-        if (! Cache::add('everpro-rate-keys:'.$this->account->tenant_id, 1, now()->addDay())) {
+        if (! Cache::add('everpro-rate-keys2:'.$this->account->tenant_id, 1, now()->addDays(30))) {
             return;
         }
 
-        $first = is_array($rows[0] ?? null) ? $rows[0] : [];
+        $first = Arr::first(Arr::flatten(array_map(fn ($rows) => array_filter((array) $rows, 'is_array'), $groups), 1), fn ($r) => is_array($r)) ?? [];
         $nested = is_array($first['rates'][0] ?? null) ? $first['rates'][0] : null;
 
-        Log::info('Everpro rates answer keys', array_filter([
+        Log::warning('Everpro rates answer keys', array_filter([
             'tenant' => $this->account->tenant_id,
-            'data' => is_array($data) && ! Arr::isList($data) ? array_keys($data) : gettype($data),
+            'groups' => array_map(fn ($rows) => count((array) $rows), $groups),
             'rate' => array_keys($first),
             'nested_rate' => $nested !== null ? array_keys($nested) : null,
         ], fn ($v) => $v !== null));
@@ -349,7 +400,8 @@ class EverproCarrier implements CarrierProvider
                 'pickup_time' => $order->shipmentType === 'PICKUP' ? $order->pickupTime : null,
                 'min_duration' => (int) ($rate['min_duration'] ?? 1),
                 'max_duration' => (int) ($rate['max_duration'] ?? $rate['min_duration'] ?? 1),
-                'shipment_price' => $order->shippingPrice,
+                // The courier's own price for the chosen rate (shipment_price_after_discount), whatever the buyer was charged
+                'shipment_price' => (int) ($rate['shipment_price'] ?? $order->shippingPrice),
                 'signed_key' => $rate['signed_key'] ?? null,
                 'rateID' => $rate['rateID'] ?? null,
                 'cashback' => $rate['cashback'] ?? null,
