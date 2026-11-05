@@ -15,7 +15,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * parcel's journey, newest last.
  */
 #[Fillable(['lead_id', 'provider', 'client_order_no', 'sequence', 'order_id', 'awb', 'courier', 'rate_code', 'state', 'status', 'raw_status', 'status_reason',
-    'is_cod', 'cod_amount', 'price', 'charged', 'weight_grams', 'label_url', 'request', 'events', 'error', 'attempts', 'awb_notified_at', 'tracked_at', 'final_at', 'cancelled_at'])]
+    'is_cod', 'cod_amount', 'price', 'charged', 'weight_grams', 'label_url', 'request', 'events', 'error', 'attempts', 'awb_notified_at', 'tracked_at', 'final_at', 'cancelled_at',
+    'source', 'track_failures', 'untrackable_at', 'linked_at'])]
 class Shipment extends Model
 {
     use BelongsToTenant;
@@ -33,11 +34,21 @@ class Shipment extends Model
 
     public const CANCELLED = 'cancelled';
 
+    /** Booked through JITU LEAD. */
+    public const AUTO = 'auto';
+
+    /** A tracking number made elsewhere (the provider's own app) and linked to the lead: no order to cancel or label. */
+    public const MANUAL = 'manual';
+
+    /** Tracking that does not know a linked number stops after this many tries. */
+    public const MAX_TRACK_FAILURES = 3;
+
     protected function casts(): array
     {
         return [
             'is_cod' => 'boolean', 'request' => 'array', 'events' => 'array',
             'awb_notified_at' => 'datetime', 'tracked_at' => 'datetime', 'final_at' => 'datetime', 'cancelled_at' => 'datetime',
+            'untrackable_at' => 'datetime', 'linked_at' => 'datetime',
         ];
     }
 
@@ -59,7 +70,18 @@ class Shipment extends Model
     /** Still open at the courier: not booked yet, or booked and not yet collected. */
     public function cancellable(): bool
     {
-        return in_array($this->state, [self::ORDERED, self::SHIPPED], true) && in_array($this->status, [null, ShipmentStatus::AWB_CREATED], true);
+        return $this->source !== self::MANUAL && in_array($this->state, [self::ORDERED, self::SHIPPED], true) && in_array($this->status, [null, ShipmentStatus::AWB_CREATED], true);
+    }
+
+    public function manual(): bool
+    {
+        return $this->source === self::MANUAL;
+    }
+
+    /** The provider does not know this linked number; tracking stopped. */
+    public function untrackable(): bool
+    {
+        return $this->untrackable_at !== null;
     }
 
     public function needsAction(): bool

@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Leads\Pages;
 
 use App\Actions\ExportLeadsCsv;
 use App\Enums\Role;
+use App\Filament\Pages\ImportResi;
 use App\Filament\Resources\Leads\LeadResource;
 use App\Models\Lead;
 use App\Support\CurrentTenant;
@@ -25,6 +26,9 @@ class ListLeads extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('importResi')->label('Impor resi')->icon(Heroicon::OutlinedLink)->color('gray')
+                ->tooltip('Hubungkan resi yang dibuat di luar JITU LEAD (ekspor aplikasi Everpro)')
+                ->visible(fn () => ImportResi::canAccess())->url(fn () => ImportResi::getUrl()),
             Action::make('export')->label('Ekspor CSV')->icon(Heroicon::OutlinedArrowDownTray)->color('gray')
                 ->tooltip('Unduh lead sesuai pencarian dan filter yang sedang aktif')
                 ->action(fn () => $this->exportCsv()),

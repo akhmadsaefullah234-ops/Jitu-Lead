@@ -17,6 +17,8 @@ use Closure;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
@@ -100,6 +102,49 @@ class ShipmentActions
         }
 
         return new HtmlString('<div style="white-space:pre-line;padding:.6rem .8rem;border-radius:.5rem;background:var(--gray-50);border:1px solid var(--gray-200)">'.e($draft->summary()).'</div>');
+    }
+
+    /**
+     * "Hubungkan resi": a tracking number made outside JITU LEAD (the provider's own app) for this lead, tracked from
+     * now on. The buyer gets the number only when asked for; statuses from before the link are never sent.
+     *
+     * @param  Closure(): ?Lead  $lead
+     */
+    public static function link(Closure $lead, string $name = 'linkShipment'): Action
+    {
+        return Action::make($name)->label('Hubungkan resi')->icon(Heroicon::OutlinedLink)->color('gray')
+            ->visible(fn () => self::available() && ($l = $lead()) !== null && ! $l->trashed() && blank(Shipment::latestFor($l)?->awb))
+            ->modalHeading('Hubungkan resi yang sudah ada')
+            ->modalDescription('Untuk resi yang dibuat di luar JITU LEAD, mis. di aplikasi Everpro. Resi ikut dilacak; pembeli hanya mendapat pesan untuk perubahan status setelah ini.')
+            ->modalSubmitActionLabel('Hubungkan')
+            ->schema([
+                TextInput::make('awb')->label('Nomor resi')->required()->maxLength(40)
+                    ->rule(fn () => function (string $attribute, $value, Closure $fail) use ($lead) {
+                        $awb = Shipments::normalizeAwb($value);
+
+                        if ($problem = Shipments::awbProblem($awb)) {
+                            $fail($problem);
+                        } elseif ($other = Shipments::awbOwner($awb, $lead())) {
+                            $fail('Resi ini sudah dipakai lead lain ('.$other->name.').');
+                        }
+                    }),
+                TextInput::make('courier')->label('Kurir')->default('JNE')->required()->maxLength(60)->datalist(['JNE', 'J&T', 'SiCepat', 'AnterAja', 'Ninja', 'ID Express', 'SAP', 'Lion Parcel', 'POS']),
+                Toggle::make('notify')->label('Kirim nomor resi ke pembeli sekarang')->default(false)
+                    ->helperText('Biasanya CS sudah mengirim resi manual. Bila mati, pembeli tidak dikirimi pesan resi.'),
+                Toggle::make('close_delivered')->label('Bila paket sudah diterima, pindahkan lead ke Selesai')->default(true)
+                    ->helperText('Tanpa pesan ke pembeli.'),
+            ])
+            ->action(function (array $data) use ($lead) {
+                try {
+                    [, $said] = app(Shipments::class)->link($lead(), $data['awb'], $data['courier'], auth()->user(), (bool) $data['notify'], (bool) $data['close_delivered']);
+                } catch (CarrierException $e) {
+                    Notification::make()->title('Resi belum terhubung')->body($e->getMessage())->danger()->send();
+
+                    return;
+                }
+
+                Notification::make()->title('Resi terhubung')->body($said)->{str_contains($said, 'belum') ? 'warning' : 'success'}()->send();
+            });
     }
 
     /** @param  Closure(): ?Lead  $lead */

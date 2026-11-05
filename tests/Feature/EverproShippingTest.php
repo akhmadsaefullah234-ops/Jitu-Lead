@@ -8,10 +8,12 @@ use App\Automation\RetailStages;
 use App\Enums\AiMode;
 use App\Enums\WaChannelStatus;
 use App\Enums\WaChannelType;
+use App\Filament\Pages\ImportResi;
 use App\Filament\Pages\Inbox;
 use App\Filament\Pages\ShippingSettingsPage;
 use App\Filament\Resources\Leads\Pages\EditLead;
 use App\Filament\Resources\Leads\Pages\ListLeads;
+use App\Filament\Support\ShipmentTimeline;
 use App\Mail\ShipmentNeedsAction;
 use App\Models\AiDraft;
 use App\Models\CarrierAccount;
@@ -27,9 +29,11 @@ use App\Shipping\Carriers\CarrierException;
 use App\Shipping\Carriers\Carriers;
 use App\Shipping\Carriers\ShipmentStatus;
 use App\Shipping\Shipments\LabelSheet;
+use App\Shipping\Shipments\ResiImport;
 use App\Shipping\Shipments\Shipments;
 use App\Support\CurrentTenant;
 use App\Support\PhoneNumber;
+use App\Support\SpreadsheetReader;
 use App\WhatsApp\GatewayUrlGuard;
 use App\WhatsApp\InboundMessage;
 use Carbon\CarbonImmutable;
@@ -85,6 +89,9 @@ class EverproShippingTest extends TestCase
 
     private bool $locationDown = false;
 
+    /** Tracking numbers Everpro does not know (made outside this account). */
+    private array $unknownAwbs = [];
+
     /** The documented answer of GET /balance/v1/detail. */
     private array $balanceAnswer = ['cash' => 750000, 'name' => 'Quicker Sport'];
 
@@ -131,6 +138,10 @@ class EverproShippingTest extends TestCase
             $this->unauthorizedOnce = false;
 
             return Http::response(['message' => 'token expired'], 401);
+        }
+
+        if (str_ends_with($path, '/track') && in_array(basename(dirname($path)), $this->unknownAwbs, true)) {
+            return Http::response(['message' => 'order not found', 'data' => null], 404);
         }
 
         return match (true) {
@@ -685,6 +696,172 @@ class EverproShippingTest extends TestCase
         $calls = count($this->callsTo('/shipment/v1/orders/track'));
         $this->artisan('shipping:track')->assertSuccessful();
         $this->assertCount($calls, $this->callsTo('/shipment/v1/orders/track'));
+    }
+
+    // ---- Tracking numbers made outside JITU LEAD ---------------------------------------------------------------
+
+    /** A lead in Dikemas & dikirim whose tracking number was made in the Everpro app. */
+    private function packed(string $phone = '6281234567890', array $extra = []): Lead
+    {
+        return $this->order('cod', $phone, $extra);
+    }
+
+    private function link(Lead $lead, string $awb, bool $notify = false, bool $close = true): array
+    {
+        return $this->inShop(fn () => app(Shipments::class)->link($lead, $awb, 'JNE', $this->adminOf($this->shop), $notify, $close));
+    }
+
+    public function test_linking_a_tracking_number_tracks_it_once_without_telling_the_buyer(): void
+    {
+        $this->configure();
+        $lead = $this->packed();
+        $before = count($this->sent());
+        // Picked up three days ago: history only.
+        $this->track[] = ['awb_number' => 'JNE7700112233', 'status' => 'PICKED_UP', 'tracking_history' => [
+            ['date' => '2026-11-02T03:00:00Z', 'status' => 'PICKED_UP', 'description' => 'Paket diambil kurir'],
+        ]];
+
+        [$shipment, $said] = $this->link($lead, ' jne 7700 112233 ');
+
+        $this->assertSame('JNE7700112233', $shipment->awb);
+        $this->assertSame(Shipment::MANUAL, $shipment->source);
+        $this->assertNull($shipment->order_id);
+        $this->assertSame(ShipmentStatus::PICKED_UP, $shipment->status);
+        $this->assertSame('Status sekarang: '.ShipmentStatus::label(ShipmentStatus::PICKED_UP).'.', $said);
+        $this->assertSame('JNE7700112233', $lead->fresh()->tracking_number);
+        $this->assertSame('JNE', $lead->fresh()->courier);
+        $this->assertNotNull($lead->fresh()->shipped_at);
+        $this->assertSame($before, count($this->sent()), 'No tracking number message (option off) and no message for a status from before the link.');
+        $this->assertSame([], $this->callsTo('/shipment/v2/orders'), 'No order is made at Everpro.');
+        $this->assertFalse($shipment->cancellable());
+
+        // Later changes reach the buyer as usual.
+        $this->track[] = ['awb_number' => 'JNE7700112233', 'status' => 'ON_DELIVERY', 'tracking_history' => []];
+        $this->artisan('shipping:track')->assertSuccessful();
+        $this->assertSame(ShipmentStatus::OUT_FOR_DELIVERY, $this->shipment()->status);
+        $this->assertCount($before + 1, $this->sent());
+        $this->assertStringContainsString('sedang diantar kurir', collect($this->sent())->last());
+
+        // One number, one lead; the format must look like a tracking number.
+        $other = $this->packed('6281234567891');
+        $this->assertThrows(fn () => $this->link($other, 'JNE7700112233'), CarrierException::class, 'sudah dipakai lead lain');
+        $this->assertThrows(fn () => $this->link($other, 'abc'), CarrierException::class, 'Format nomor resi');
+    }
+
+    public function test_the_tracking_number_message_goes_only_when_asked_for(): void
+    {
+        $this->configure();
+        $lead = $this->packed();
+        $before = count($this->sent());
+
+        $this->link($lead, 'JNE7700112244', notify: true);
+
+        $this->assertCount($before + 1, $this->sent());
+        $this->assertStringContainsString('JNE7700112244', collect($this->sent())->last());
+    }
+
+    public function test_a_parcel_already_delivered_closes_the_lead_without_any_message(): void
+    {
+        $this->configure();
+        $lead = $this->packed();
+        $before = count($this->sent());
+        $this->track[] = ['awb_number' => 'JNE7700112255', 'status' => 'DELIVERED', 'tracking_history' => [
+            ['date' => '2026-11-01T03:00:00Z', 'status' => 'PICKED_UP', 'description' => 'Paket diambil kurir'],
+            ['date' => '2026-11-03T05:00:00Z', 'status' => 'DELIVERED', 'description' => 'Diterima oleh RINA'],
+        ]];
+
+        $this->link($lead, 'JNE7700112255');
+
+        $fresh = $this->inShop(fn () => $lead->fresh('stage'));
+        $this->assertSame('Selesai', $fresh->stage->name);
+        $this->assertSame($before, count($this->sent()));
+        $this->assertSame(0, $this->inShop(fn () => ShipmentNotice::query()->count()));
+        // Dated to the delivery, so a review follow-up whose time has passed is not sent.
+        $this->assertSame('2026-11-03 05:00', $fresh->stage_entered_at->utc()->format('Y-m-d H:i'));
+    }
+
+    public function test_a_number_everpro_does_not_know_stops_being_tracked_after_three_tries(): void
+    {
+        $this->configure();
+        $lead = $this->packed();
+        $this->unknownAwbs = ['JNE7700112266'];
+
+        [, $said] = $this->link($lead, 'JNE7700112266');
+        $this->assertStringContainsString('resi belum dikenali Everpro', $said);
+
+        $this->artisan('shipping:track')->assertSuccessful();
+        $this->artisan('shipping:track')->assertSuccessful();
+
+        $shipment = $this->shipment();
+        $this->assertSame(3, $shipment->track_failures);
+        $this->assertTrue($shipment->untrackable());
+        $this->assertStringContainsString('Tidak bisa dilacak', $this->inShop(fn () => (string) ShipmentTimeline::html($shipment)));
+        $this->assertSame(1, $this->inShop(fn () => $lead->activities()->where('body', 'like', '%tidak bisa dilacak%')->count()));
+
+        $calls = count(array_filter($this->calls, fn ($c) => str_ends_with($c['path'], '/JNE7700112266/track')));
+        $this->artisan('shipping:track')->assertSuccessful();
+        $this->assertCount($calls, array_filter($this->calls, fn ($c) => str_ends_with($c['path'], '/JNE7700112266/track')), 'No fourth try.');
+    }
+
+    public function test_the_import_matches_by_phone_and_saves_only_what_was_confirmed(): void
+    {
+        $this->configure();
+        $rina = $this->packed('6281234567890', ['name' => 'Rina Kartika']);
+        $budi1 = $this->packed('6281234567891', ['name' => 'Budi']);
+        // Budi ordered twice: two leads with one number, neither waiting more than the other.
+        $budi2 = $this->inShop(fn () => tap(Lead::query()->create(['name' => 'Budi', 'phone' => $budi1->phone, 'stage_id' => $budi1->stage_id]))->refresh());
+        $tenantOther = app(ProvisionTenant::class)('Toko Lain', 'toko-lain', User::factory()->create(), 'retail');
+        app(CurrentTenant::class)->run($tenantOther, fn () => Lead::query()->create(['name' => 'Orang Lain', 'phone' => PhoneNumber::normalize('6281299990000'), 'stage_id' => (new RetailStages)->stage(RetailStages::SHIPPING)->id]));
+
+        $csv = "No Resi;Nama Penerima;No HP Penerima;Ekspedisi\n"
+            ."JNE8800000001;Rina Kartika;0812-3456-7890;JNE\n"
+            ."JNE8800000002;Budi;081234567891;SiCepat\n"
+            ."JNE8800000003;Orang Lain;081299990000;JNE\n"
+            ."xx;Salah;0811;JNE\n";
+        $path = tempnam(sys_get_temp_dir(), 'resi');
+        file_put_contents($path, $csv);
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+
+        $page = Livewire::test(ImportResi::class)->call('read', $path, 'ekspor.csv');
+
+        $this->assertSame(['awb' => 0, 'name' => 1, 'phone' => 2, 'courier' => 3], $page->get('columns'));
+        $matches = $page->get('matches');
+        $this->assertSame([ResiImport::MATCHED, ResiImport::AMBIGUOUS, ResiImport::UNMATCHED, ResiImport::INVALID], array_column($matches, 'status'));
+        $this->assertSame($rina->id, $matches[0]['lead_id']);
+        $this->assertEqualsCanonicalizing([$budi1->id, $budi2->id], array_keys($matches[1]['options']));
+        $this->assertArrayNotHasKey(0, array_filter($matches[2]['options'], fn ($label) => str_contains($label, 'Orang Lain')), 'Another agency\'s lead is never offered.');
+        $this->assertSame([(string) $rina->id, '', '', ''], $page->get('choices'));
+
+        // The agent picks Budi's second order and skips the rest.
+        $page->set('choices.1', (string) $budi2->id)->call('save')->assertNotified('2 resi terhubung');
+
+        $this->assertSame('JNE8800000001', $rina->fresh()->tracking_number);
+        $this->assertSame('JNE8800000002', $budi2->fresh()->tracking_number);
+        $this->assertSame('SiCepat', $budi2->fresh()->courier);
+        $this->assertNull($budi1->fresh()->tracking_number);
+        $this->assertSame(2, $this->inShop(fn () => Shipment::query()->where('source', Shipment::MANUAL)->count()));
+        $this->assertSame(0, app(CurrentTenant::class)->run($tenantOther, fn () => Shipment::query()->count()));
+
+        // Read again, the saved rows show as already linked.
+        $this->assertSame([ResiImport::LINKED, ResiImport::LINKED], array_slice(array_column($page->get('matches'), 'status'), 0, 2));
+    }
+
+    public function test_an_xlsx_export_is_read_too(): void
+    {
+        $path = tempnam(sys_get_temp_dir(), 'xlsx').'.xlsx';
+        $zip = new \ZipArchive;
+        $zip->open($path, \ZipArchive::CREATE);
+        $zip->addFromString('xl/sharedStrings.xml', '<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>AWB Number</t></si><si><t>Receiver Name</t></si><si><t>Rina</t></si></sst>');
+        $zip->addFromString('xl/worksheets/sheet1.xml', '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+            .'<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c><c r="C1" t="inlineStr"><is><t>Receiver Phone</t></is></c></row>'
+            .'<row r="2"><c r="A2" t="inlineStr"><is><t>JNE8800000009</t></is></c><c r="B2" t="s"><v>2</v></c><c r="C2"><v>6281234567890</v></c></row>'
+            .'</sheetData></worksheet>');
+        $zip->close();
+
+        $rows = SpreadsheetReader::rows($path);
+
+        $this->assertSame([['AWB Number', 'Receiver Name', 'Receiver Phone'], ['JNE8800000009', 'Rina', '6281234567890']], $rows);
+        $this->assertSame(['awb' => 0, 'name' => 1, 'phone' => 2, 'courier' => null], ResiImport::guessColumns($rows[0]));
     }
 
     // ---- Bulk ----------------------------------------------------------------------------------------------------

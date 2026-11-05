@@ -39,6 +39,12 @@ class Carriers
         return new $class($account);
     }
 
+    /** "everpro" => "Everpro". */
+    public static function label(?string $provider): string
+    {
+        return (string) (config('carriers.labels.'.$provider) ?? ucfirst((string) $provider));
+    }
+
     /** @return array<string, string> provider key => name, for the settings form */
     public static function options(): array
     {
