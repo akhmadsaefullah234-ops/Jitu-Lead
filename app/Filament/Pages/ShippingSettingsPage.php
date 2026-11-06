@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Enums\Role;
+use App\Filament\Resources\Shipments\ShipmentResource;
 use App\Models\CarrierAccount;
 use App\Models\Stage;
 use App\Regions\RegionDirectory;
@@ -12,6 +13,7 @@ use App\Shipping\Carriers\Carriers;
 use App\Shipping\Carriers\ShipmentStatus;
 use App\Shipping\Regions;
 use App\Shipping\Shipments\AutoShipments;
+use App\Shipping\Shipments\Shipments;
 use App\Shipping\Shipments\StatusNotices;
 use App\Shipping\ShippingSettings;
 use App\Support\CurrentTenant;
@@ -102,6 +104,7 @@ class ShippingSettingsPage extends Page
             'service' => $account?->setting('service') ?? 'JNE REG',
             'shipment_type' => $account?->setting('shipment_type') ?? 'PICKUP',
             'insurance' => (bool) $account?->setting('insurance', false),
+            'low_balance' => Shipments::lowBalanceLevel($account),
             'auto' => [
                 'enabled' => (bool) $account?->setting('auto.enabled', false),
                 'stage_id' => AutoShipments::settings($account)['stage_id'],
@@ -148,6 +151,8 @@ class ShippingSettingsPage extends Page
                     ->helperText('Dipakai bila pembeli belum memilih kurir.'),
                 Select::make('shipment_type')->label('Cara serah paket')->options(['PICKUP' => 'Dijemput kurir (PICKUP)', 'DROP' => 'Antar ke agen (DROP)'])->native(false)->selectablePlaceholder(false),
                 Toggle::make('insurance')->label('Pakai asuransi')->inline(false),
+                TextInput::make('low_balance')->label('Peringatan saldo rendah')->numeric()->integer()->minValue(0)->prefix('Rp')
+                    ->helperText('Di bawah saldo ini, menu Pengiriman dan halaman ini menampilkan peringatan. Kiriman transfer yang ongkirnya melebihi saldo menunggu saldo (tanpa order) dan dicoba lagi otomatis.'),
             ]),
             Section::make('Resi otomatis')->columns(2)->visible(fn (Get $get) => filled($get('provider')))
                 ->description('Bila aktif, resi dibuat sendiri untuk lead yang masuk tahap pemicu dan datanya lengkap: cara bayar COD, atau transfer yang sudah dicek lunas; '
@@ -211,7 +216,9 @@ class ShippingSettingsPage extends Page
         return new HtmlString('<div style="display:grid;gap:.35rem;font-size:.875rem">'
             .'<div><strong>URL callback</strong> (salin ke dashboard Everpro > Pengaturan > Konfigurasi, untuk AWB dan status pengiriman):</div>'
             .'<code style="word-break:break-all;padding:.4rem .6rem;border-radius:.4rem;background:var(--gray-100)">'.e($url).'</code>'
-            .'<div><strong>Saldo:</strong> '.e($balance).' · <strong>Mode:</strong> '.($account->sandbox ? 'sandbox' : 'production').'</div></div>');
+            .'<div><strong>Saldo:</strong> '.e($balance).' · <strong>Mode:</strong> '.($account->sandbox ? 'sandbox' : 'production').'</div>'
+            .(($warning = ShipmentResource::balanceWarning()) !== null ? '<div>'.$warning->toHtml().'</div>' : '')
+            .'</div>');
     }
 
     /** @return array<string, string> */
@@ -273,6 +280,7 @@ class ShippingSettingsPage extends Page
                 'sender_address' => trim((string) ($state['sender_address'] ?? '')), 'origin_id' => $state['origin_id'] ?? null,
                 'service' => trim((string) ($state['service'] ?? '')) ?: 'JNE REG', 'shipment_type' => ($state['shipment_type'] ?? 'PICKUP') === 'DROP' ? 'DROP' : 'PICKUP',
                 'insurance' => (bool) ($state['insurance'] ?? false),
+                'low_balance' => max(0, (int) ($state['low_balance'] ?? config('carriers.low_balance', 100000))),
                 'auto' => [
                     'enabled' => (bool) ($state['auto']['enabled'] ?? false),
                     'stage_id' => filled($state['auto']['stage_id'] ?? null) ? (int) $state['auto']['stage_id'] : null,

@@ -23,6 +23,7 @@ class ShipmentTimeline
             ShipmentStatus::DELIVERED => '#166534', ShipmentStatus::DELIVERY_FAILED, ShipmentStatus::RETURNING, ShipmentStatus::RETURNED => '#9f1239', default => 'var(--gray-700)',
         };
         $head = '<div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:center"><strong style="color:'.$color.'">'.e(ShipmentStatus::label($shipment->status)).'</strong>'
+            .($shipment->waitingBalance() ? '<span style="padding:.05rem .5rem;border-radius:999px;background:#fef3c7;color:#92400e;font-size:.75rem;font-weight:600">Menunggu saldo</span>' : '')
             .($shipment->needsAction() ? '<span style="padding:.05rem .5rem;border-radius:999px;background:#ffe4e6;color:#9f1239;font-size:.75rem;font-weight:600">Perlu tindakan</span>' : '')
             .'<span style="color:var(--gray-500)">'.e(trim(($shipment->courier ?? '').' · '.($shipment->awb ?: $shipment->client_order_no), ' ·')).'</span>'
             .(filled($shipment->awb) ? '<a href="'.e(StageAutomation::trackingUrl($shipment->courier, $shipment->awb)).'" target="_blank" rel="noopener" style="text-decoration:underline">Lacak di situs kurir</a>' : '')
@@ -40,7 +41,7 @@ class ShipmentTimeline
             $head .= '<div style="color:#9f1239;font-size:.85rem;font-weight:600">Tidak bisa dilacak: resi tidak dikenali penyedia setelah '.Shipment::MAX_TRACK_FAILURES.' kali dicoba. Cek status kiriman manual.</div>';
         }
 
-        if ($shipment->state === Shipment::FAILED && $shipment->error) {
+        if (($shipment->state === Shipment::FAILED || $shipment->waitingBalance()) && $shipment->error) {
             $head .= '<div style="color:#9f1239;font-size:.85rem">'.e($shipment->error).'</div>';
         }
 

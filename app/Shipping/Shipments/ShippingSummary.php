@@ -4,6 +4,7 @@ namespace App\Shipping\Shipments;
 
 use App\Enums\Role;
 use App\Filament\Resources\Shipments\ShipmentResource;
+use App\Models\CarrierAccount;
 use App\Models\Lead;
 use App\Models\Shipment;
 use App\Models\Tenant;
@@ -25,7 +26,7 @@ class ShippingSummary
 
     /**
      * @param  Builder|null  $leads  the leads the reader may see (an agent: their own), null for all
-     * @return array{auto: int, auto_cod: int, failed: int, skipped: int, unprinted: int, action: int}
+     * @return array{auto: int, auto_cod: int, failed: int, skipped: int, unprinted: int, action: int, balance: int}
      */
     public function numbers(CarbonImmutable $from, CarbonImmutable $to, ?Builder $leads = null): array
     {
@@ -40,6 +41,7 @@ class ShippingSummary
             'skipped' => ($leads ? clone $leads : Lead::query())->where('auto_shipment_state', AutoShipments::SKIPPED)->whereBetween('leads.updated_at', [$from, $to])->count(),
             'unprinted' => $own(Shipment::query()->tab('unprinted'))->count(),
             'action' => $own(Shipment::query()->tab('action'))->whereNull('final_at')->count(),
+            'balance' => $own(Shipment::query()->tab('balance'))->count(),
         ];
     }
 
@@ -67,6 +69,8 @@ class ShippingSummary
             $n['skipped'] > 0 ? "{$n['skipped']} lead perlu dilengkapi untuk resi" : null,
             $n['unprinted'] > 0 ? "{$n['unprinted']} resi belum dicetak" : null,
             $n['action'] > 0 ? "{$n['action']} kiriman perlu tindakan" : null,
+            $n['balance'] > 0 ? "{$n['balance']} kiriman menunggu saldo" : null,
+            Shipments::lowBalance($account = CarrierAccount::query()->first()) ? 'saldo '.config('carriers.labels.'.$account->provider, 'penyedia').' rendah ('.$rp((int) $account->balance).')' : null,
         ]);
 
         Notification::make()->title('Ringkasan pengiriman')->body(implode(' · ', $lines))->info()

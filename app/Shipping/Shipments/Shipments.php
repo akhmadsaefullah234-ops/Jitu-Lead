@@ -479,6 +479,18 @@ class Shipments
             }
         }
 
+        // Still short: said again with today's numbers, and nothing is sent.
+        if ($shipment->waitingBalance()) {
+            $balance = $this->checkBalance($this->account(), $this->provider());
+
+            if ($balance !== null && $balance < $this->balanceNeeded($shipment)) {
+                $message = self::balanceMessage($this->balanceNeeded($shipment), $balance);
+                $shipment->forceFill(['error' => $message])->save();
+
+                throw new CarrierException($message, CarrierException::BALANCE);
+            }
+        }
+
         $retried = DB::transaction(function () use ($shipment, $remote) {
             Lead::query()->whereKey($shipment->lead_id)->lockForUpdate()->first();
             $fresh = Shipment::query()->whereKey($shipment->getKey())->lockForUpdate()->first();
@@ -491,9 +503,13 @@ class Shipments
                 throw new CarrierException('Lead ini sudah punya kiriman lain yang aktif.');
             }
 
-            // Refused before booking: booked again under the same number. Booked but no tracking number: only asked for it again.
-            $fresh->forceFill($fresh->state === Shipment::FAILED && $remote === null ? ['state' => Shipment::PENDING, 'error' => null]
-                : ['state' => Shipment::ORDERED, 'error' => null, 'request' => array_diff_key((array) $fresh->request, ['awb_tries' => 1, 'order_candidates' => 1])])->save();
+            // Refused before booking (or held for balance before ordering): booked under the same number. Booked but no
+            // tracking number: only asked for it again.
+            $fresh->forceFill(match (true) {
+                $fresh->state === Shipment::PENDING && $remote === null => ['error' => null, 'balance_wait_at' => null],
+                $fresh->state === Shipment::FAILED && $remote === null => ['state' => Shipment::PENDING, 'error' => null, 'balance_wait_at' => null],
+                default => ['state' => Shipment::ORDERED, 'error' => null, 'balance_wait_at' => null, 'request' => array_diff_key((array) $fresh->request, ['awb_tries' => 1, 'order_candidates' => 1])],
+            })->save();
 
             if ($remote !== null) {
                 $this->keepRemote($fresh, $remote);
@@ -503,7 +519,155 @@ class Shipments
         });
 
         $retried->lead->activities()->create(['user_id' => $actor?->getKey(), 'type' => 'note', 'body' => 'Mencoba lagi kiriman '.$retried->client_order_no.' ('.$retried->courier.').']);
+        $this->autoResumed($retried);
         CreateShipment::dispatch($retried->getKey(), $this->current->id());
+    }
+
+    // ---- Waiting for balance ("Menunggu saldo") -----------------------------------------------------------
+
+    /** What the provider takes from the balance for this parcel: its own shipping price (and insurance). */
+    public function balanceNeeded(Shipment $shipment): int
+    {
+        $insurance = (bool) data_get($shipment->request, 'insurance') ? (int) data_get($shipment->request, 'rate.insurance_price', 0) : 0;
+
+        return max(0, (int) $shipment->price) + max(0, $insurance);
+    }
+
+    public static function balanceMessage(int $needed, ?int $balance): string
+    {
+        $rp = fn (int $v) => 'Rp '.number_format($v, 0, ',', '.');
+
+        return 'Saldo Everpro tidak cukup (perlu '.$rp($needed).($balance !== null ? ', saldo '.$rp($balance) : '').'). Isi saldo lalu tekan Coba lagi.';
+    }
+
+    /** The provider's balance now (kept on the account for the warnings), or null when it cannot say. */
+    public function checkBalance(?CarrierAccount $account, CarrierProvider $provider): ?int
+    {
+        try {
+            $balance = $provider->balance();
+        } catch (CarrierException) {
+            return null;
+        }
+
+        if ($balance !== null && $account !== null) {
+            $account->forceFill(['balance' => $balance, 'balance_at' => now()])->save();
+        }
+
+        return $balance;
+    }
+
+    /**
+     * The balance does not cover the parcel: it waits ("Menunggu saldo") with what is needed and what there is, and
+     * the admins are told once (bell, email). The provider's own words are kept on the parcel and in the lead note.
+     */
+    public function waitForBalance(Shipment $shipment, ?int $balance = null, ?CarrierException $e = null): void
+    {
+        $needed = $this->balanceNeeded($shipment);
+        $balance ??= $this->checkBalance($this->account(), $this->provider());
+        $message = self::balanceMessage($needed, $balance);
+        $first = $shipment->balance_wait_at === null;
+        $request = (array) $shipment->request;
+
+        if ($e?->providerMessage !== null) {
+            $request['provider_error'] = ['message' => mb_substr($e->providerMessage, 0, 250), 'status' => $e->httpStatus, 'at' => now()->toIso8601String()];
+        }
+
+        $shipment->forceFill(['balance_wait_at' => $shipment->balance_wait_at ?? now(), 'balance_needed' => $needed, 'error' => $message, 'request' => $request])->save();
+
+        if (! $first) {
+            return;
+        }
+
+        $lead = $shipment->lead;
+        $said = $e?->providerMessage !== null ? ' Jawaban '.config('carriers.labels.'.$shipment->provider, 'penyedia').': "'.mb_substr($e->providerMessage, 0, 200).'"'.($e->httpStatus ? ' ('.$e->httpStatus.')' : '').'.' : '';
+        $lead->activities()->create(['type' => 'note', 'body' => 'Kiriman '.$shipment->client_order_no.' menunggu saldo: '.$message.$said
+            .($shipment->order_id === null ? ' Order belum dibuat di '.config('carriers.labels.'.$shipment->provider, 'penyedia').'.' : '').' Dicoba lagi otomatis setelah saldo cukup.']);
+
+        if ($shipment->automatic) {
+            $lead->forceFill(['auto_shipment_state' => AutoShipments::WAITING_BALANCE, 'auto_shipment_note' => Str::limit('Resi otomatis menunggu saldo: '.$message, 490, '')])->save();
+        }
+
+        $this->notices->alertAdmins($shipment, $shipment->automatic ? 'Resi otomatis menunggu saldo Everpro' : 'Kiriman menunggu saldo Everpro',
+            $message.' Dicoba lagi otomatis setelah saldo cukup (dicek tiap 10 menit).', mail: true);
+        Log::warning('Shipment waits for balance', ['tenant' => $this->current->id(), 'shipment' => $shipment->getKey(), 'needed' => $needed, 'balance' => $balance]);
+    }
+
+    /**
+     * Every 10 minutes while parcels wait (shipping:balance-wait): the balance is read once and the parcels it covers
+     * are sent again, oldest first; the rest keep waiting. Returns how many were sent again.
+     */
+    public function resumeWaiting(): int
+    {
+        $waiting = Shipment::query()->tab('balance')->with('lead')->orderBy('balance_wait_at')->orderBy('id')->get();
+
+        if ($waiting->isEmpty() || ($account = $this->account()) === null || ! $account->hasCredentials()) {
+            return 0;
+        }
+
+        $balance = $this->checkBalance($account, $this->provider());
+
+        if ($balance === null) {
+            return 0;
+        }
+
+        $resumed = 0;
+
+        foreach ($waiting as $shipment) {
+            $needed = $this->balanceNeeded($shipment);
+
+            // In order: a later, cheaper parcel never jumps the queue.
+            if ($needed > $balance) {
+                $shipment->forceFill(['error' => self::balanceMessage($needed, $balance)])->save();
+
+                break;
+            }
+
+            $balance -= $needed;
+            $updated = DB::transaction(function () use ($shipment) {
+                $fresh = Shipment::query()->whereKey($shipment->getKey())->lockForUpdate()->first();
+
+                if ($fresh === null || ! $fresh->waitingBalance()) {
+                    return false;
+                }
+
+                // Never a second order: one already made is only asked for its tracking number.
+                $fresh->forceFill(['error' => null, 'balance_wait_at' => null, 'request' => array_diff_key((array) $fresh->request, ['awb_tries' => 1])])->save();
+
+                return true;
+            });
+
+            if (! $updated) {
+                continue;
+            }
+
+            $shipment->lead->activities()->create(['type' => 'note', 'body' => 'Saldo '.config('carriers.labels.'.$shipment->provider, 'penyedia').' sudah cukup: kiriman '.$shipment->client_order_no.' dicoba lagi otomatis.']);
+            $this->autoResumed($shipment);
+            CreateShipment::dispatch($shipment->getKey(), $this->current->id());
+            $resumed++;
+        }
+
+        return $resumed;
+    }
+
+    /** An automatic resi that waited for balance is on its way again. */
+    private function autoResumed(Shipment $shipment): void
+    {
+        $lead = $shipment->lead;
+
+        if ($shipment->automatic && $lead !== null && $lead->auto_shipment_state === AutoShipments::WAITING_BALANCE) {
+            $lead->forceFill(['auto_shipment_state' => AutoShipments::DONE, 'auto_shipment_note' => 'Dicoba lagi setelah saldo cukup.'])->save();
+        }
+    }
+
+    /** The account's balance is known and below the agency's warning level (Pengaturan > Pengiriman). */
+    public static function lowBalance(?CarrierAccount $account): bool
+    {
+        return $account !== null && $account->balance !== null && $account->balance < self::lowBalanceLevel($account);
+    }
+
+    public static function lowBalanceLevel(?CarrierAccount $account): int
+    {
+        return max(0, (int) ($account?->setting('low_balance') ?? config('carriers.low_balance', 100000)));
     }
 
     /** The provider calls for a booked parcel (runs on the queue). Safe to run again: the order number is the same. */
@@ -519,6 +683,18 @@ class Shipments
         $request = (array) $shipment->request;
         $parts = (array) $lead->shipping_address_parts;
         $shipment->forceFill(['attempts' => $shipment->attempts + 1])->save();
+
+        if ($shipment->state === Shipment::PENDING && ! $shipment->is_cod) {
+            // Prepaid: the shipping is paid from the balance. Not enough: no order at the provider (none left
+            // orphaned), the parcel waits for the balance instead.
+            $balance = $this->checkBalance($account, $provider);
+
+            if ($balance !== null && $balance < $this->balanceNeeded($shipment)) {
+                $this->waitForBalance($shipment, $balance);
+
+                return;
+            }
+        }
 
         if ($shipment->state === Shipment::PENDING) {
             $order = $provider->createOrder(new OrderRequest(
@@ -752,7 +928,7 @@ class Shipments
                 return false;
             }
 
-            $locked->forceFill(['awb' => $awb, 'state' => Shipment::SHIPPED, 'error' => null, 'awb_notified_at' => now(),
+            $locked->forceFill(['awb' => $awb, 'state' => Shipment::SHIPPED, 'error' => null, 'balance_wait_at' => null, 'awb_notified_at' => now(),
                 'status' => ShipmentStatus::rank($locked->status) > 0 ? $locked->status : ShipmentStatus::AWB_CREATED])->save();
             $shipment->setRawAttributes($locked->getAttributes(), true);
 
@@ -785,6 +961,13 @@ class Shipments
 
     public function failed(Shipment $shipment, CarrierException $e): void
     {
+        // Not the parcel's fault: it waits for the balance (no order made twice, no endless retries).
+        if ($e->kind === CarrierException::BALANCE && ! $shipment->manual() && in_array($shipment->state, [Shipment::PENDING, Shipment::ORDERED], true)) {
+            $this->waitForBalance($shipment, null, $e);
+
+            return;
+        }
+
         $shipment->forceFill(['state' => $shipment->order_id === null && $shipment->state === Shipment::PENDING ? Shipment::FAILED : $shipment->state, 'error' => Str::limit($e->getMessage(), 250, '')])->save();
         $shipment->lead->activities()->create(['type' => 'note', 'body' => 'Kiriman '.$shipment->client_order_no.' belum berhasil dibuat: '.$e->getMessage()]);
 
@@ -815,8 +998,12 @@ class Shipments
             throw new CarrierException('Kiriman ini sudah diambil kurir atau sudah selesai, tidak bisa dibatalkan.');
         }
 
-        $this->provider()->cancel($shipment->provider_order_no ?: $shipment->client_order_no, $reason);
-        $shipment->forceFill(['state' => Shipment::CANCELLED, 'status' => ShipmentStatus::CANCELLED, 'cancelled_at' => now(), 'final_at' => now()])->save();
+        // Held for balance before it was ordered: there is nothing at the provider to cancel.
+        if ($shipment->state !== Shipment::PENDING) {
+            $this->provider()->cancel($shipment->provider_order_no ?: $shipment->client_order_no, $reason);
+        }
+
+        $shipment->forceFill(['state' => Shipment::CANCELLED, 'status' => ShipmentStatus::CANCELLED, 'cancelled_at' => now(), 'final_at' => now(), 'balance_wait_at' => null])->save();
         $this->addEvents($shipment, [new TrackEvent(now()->toIso8601String(), 'CANCELED', ShipmentStatus::CANCELLED, 'Kiriman dibatalkan oleh '.$actor->name)]);
         $shipment->lead->activities()->create(['user_id' => $actor->getKey(), 'type' => 'note', 'body' => 'Kiriman '.($shipment->awb ?? $shipment->client_order_no).' dibatalkan: '.$reason]);
     }

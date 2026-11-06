@@ -19,6 +19,8 @@ Schedule::command('shipping:labels-prune')->hourly()->withoutOverlapping();
 Schedule::command('shipping:auto-resi')->everyMinute()->withoutOverlapping();
 // Parcels still waiting for a tracking number are matched with Everpro's order list again (its TRD… order numbers).
 Schedule::command('shipping:fix-everpro-orders --waiting --apply')->everyTenMinutes()->withoutOverlapping();
+// "Menunggu saldo": the balance is read and the parcels it now covers are sent again (no second order).
+Schedule::command('shipping:balance-wait')->everyTenMinutes()->withoutOverlapping();
 // Daily/weekly/monthly reports to owners and admins at the time each agency (or person) picked, in its time zone.
 Schedule::command('reports:daily')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('leads:reassign')->everyFiveMinutes()->withoutOverlapping();

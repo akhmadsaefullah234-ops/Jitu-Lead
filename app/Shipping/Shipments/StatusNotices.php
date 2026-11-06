@@ -8,7 +8,9 @@ use App\Enums\MessageStatus;
 use App\Enums\Role;
 use App\Filament\Pages\Inbox;
 use App\Filament\Resources\Leads\LeadResource;
+use App\Filament\Resources\Shipments\ShipmentResource;
 use App\Mail\ShipmentNeedsAction;
+use App\Mail\ShipmentWaitsForBalance;
 use App\Models\CarrierAccount;
 use App\Models\Lead;
 use App\Models\Shipment;
@@ -277,6 +279,41 @@ class StatusNotices
         foreach ($people as $person) {
             try {
                 Mail::to($person->email)->send(new ShipmentNeedsAction($tenant, $lead, $shipment, $title, $body));
+            } catch (Throwable $e) {
+                report($e);
+            }
+        }
+    }
+
+    /** The agency's admins (whoever owns the lead), in the bell and by email: for the balance, which only an admin can fix. */
+    public function alertAdmins(Shipment $shipment, string $title, string $body, bool $mail = false): void
+    {
+        $tenant = $this->current->get();
+        $lead = $shipment->lead;
+        $people = $tenant->activeUsers()->wherePivot('role', Role::Admin->value)->get();
+
+        if ($people->isEmpty()) {
+            return;
+        }
+
+        try {
+            Notification::make()->title($title.': '.$lead->name)->body($body)->warning()
+                ->actions([
+                    Action::make('open')->label('Buka Pengiriman')->url(ShipmentResource::getUrl('index', ['tab' => 'balance'], panel: 'app', tenant: $tenant)),
+                    Action::make('lead')->label('Buka lead')->url(LeadResource::getUrl('edit', ['record' => $lead], panel: 'app', tenant: $tenant)),
+                ])
+                ->sendToDatabase($people);
+        } catch (Throwable $e) {
+            report($e);
+        }
+
+        if (! $mail) {
+            return;
+        }
+
+        foreach ($people as $person) {
+            try {
+                Mail::to($person->email)->send(new ShipmentWaitsForBalance($tenant, $lead, $shipment, $title, $body));
             } catch (Throwable $e) {
                 report($e);
             }

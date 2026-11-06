@@ -18,7 +18,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable(['lead_id', 'provider', 'client_order_no', 'sequence', 'order_id', 'awb', 'courier', 'rate_code', 'state', 'status', 'raw_status', 'status_reason',
     'is_cod', 'cod_amount', 'price', 'charged', 'weight_grams', 'label_url', 'request', 'events', 'error', 'attempts', 'awb_notified_at', 'tracked_at', 'final_at', 'cancelled_at',
     'provider_order_no', 'cod_fee', 'cod_disbursement', 'cashback', 'source', 'track_failures', 'untrackable_at', 'linked_at', 'label_path', 'label_saved_at', 'label_attempts', 'label_failed_at', 'printed_at', 'printed_by',
-    'print_count', 'automatic'])]
+    'print_count', 'automatic', 'balance_wait_at', 'balance_needed'])]
 class Shipment extends Model
 {
     use BelongsToTenant;
@@ -51,7 +51,7 @@ class Shipment extends Model
             'is_cod' => 'boolean', 'request' => 'array', 'events' => 'array',
             'awb_notified_at' => 'datetime', 'tracked_at' => 'datetime', 'final_at' => 'datetime', 'cancelled_at' => 'datetime',
             'untrackable_at' => 'datetime', 'linked_at' => 'datetime', 'label_saved_at' => 'datetime', 'label_failed_at' => 'datetime',
-            'printed_at' => 'datetime', 'automatic' => 'boolean',
+            'printed_at' => 'datetime', 'automatic' => 'boolean', 'balance_wait_at' => 'datetime', 'balance_needed' => 'integer',
             'cod_fee' => 'integer', 'cod_disbursement' => 'integer', 'cashback' => 'integer',
         ];
     }
@@ -90,12 +90,24 @@ class Shipment extends Model
     public function retryable(): bool
     {
         return ! $this->manual() && (($this->state === self::FAILED && $this->order_id === null)
-            || ($this->state === self::ORDERED && blank($this->awb) && filled($this->error)));
+            || ($this->state === self::ORDERED && blank($this->awb) && filled($this->error))
+            || $this->waitingBalance());
+    }
+
+    /**
+     * "Menunggu saldo": held because the provider's balance does not cover the shipping, either before the order
+     * was made (no order at the provider) or when its tracking number was asked for. Tried again by itself once the
+     * balance is enough (shipping:balance-wait), or with "Coba lagi"; never booked a second time.
+     */
+    public function waitingBalance(): bool
+    {
+        return $this->balance_wait_at !== null && in_array($this->state, [self::PENDING, self::ORDERED], true) && blank($this->awb);
     }
 
     public function cancellable(): bool
     {
-        return $this->source !== self::MANUAL && in_array($this->state, [self::ORDERED, self::SHIPPED], true) && in_array($this->status, [null, ShipmentStatus::AWB_CREATED], true);
+        return $this->source !== self::MANUAL && ((in_array($this->state, [self::ORDERED, self::SHIPPED], true) && in_array($this->status, [null, ShipmentStatus::AWB_CREATED], true))
+            || ($this->state === self::PENDING && $this->waitingBalance()));
     }
 
     public function manual(): bool
@@ -117,6 +129,7 @@ class Shipment extends Model
     /** Tabs of the Pengiriman menu. */
     public const TABS = [
         'awaiting' => 'Menunggu resi',
+        'balance' => 'Menunggu saldo',
         'unprinted' => 'Belum dicetak',
         'printed' => 'Sudah dicetak, menunggu dijemput',
         'transit' => 'Dalam perjalanan',
@@ -138,7 +151,8 @@ class Shipment extends Model
             'transit' => $query->where('state', self::SHIPPED)->whereNull('final_at')
                 ->whereIn('status', [ShipmentStatus::PICKED_UP, ShipmentStatus::IN_TRANSIT, ShipmentStatus::OUT_FOR_DELIVERY]),
             'awaiting' => $query->whereIn('state', [self::PENDING, self::ORDERED])->whereNull('error'),
-            'action' => $query->where(fn ($q) => $q->where('state', self::FAILED)
+            'balance' => $query->whereIn('state', [self::PENDING, self::ORDERED])->whereNotNull('balance_wait_at')->whereNull('awb'),
+            'action' => $query->whereNull('balance_wait_at')->where(fn ($q) => $q->where('state', self::FAILED)
                 ->orWhere(fn ($q) => $q->whereIn('state', [self::PENDING, self::ORDERED])->whereNotNull('error'))
                 ->orWhereIn('status', [ShipmentStatus::DELIVERY_FAILED, ShipmentStatus::RETURNING, ShipmentStatus::RETURNED])
                 ->orWhere(fn ($q) => $q->where('state', self::SHIPPED)->whereNull('printed_at')->whereNull('label_path')->whereNotNull('label_failed_at'))),

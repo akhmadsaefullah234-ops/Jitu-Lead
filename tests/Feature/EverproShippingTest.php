@@ -22,6 +22,7 @@ use App\Jobs\FetchShipmentAwb;
 use App\Leads\AddressCheck;
 use App\Leads\ChatShippingDetails;
 use App\Mail\ShipmentNeedsAction;
+use App\Mail\ShipmentWaitsForBalance;
 use App\Models\AiDraft;
 use App\Models\CarrierAccount;
 use App\Models\LabelBatch;
@@ -110,6 +111,14 @@ class EverproShippingTest extends TestCase
     /** Everpro refuses /generate (once per value set). */
     private ?string $generateError = null;
 
+    private int $generateStatus = 422;
+
+    /** GET .../awb answers 404 "awb number not found" (no tracking number was made). */
+    private bool $awbMissing = false;
+
+    /** Balances GET /balance/v1/detail answers in turn before falling back to $balanceAnswer. */
+    private array $balances = [];
+
     /** The /v2/orders answer is "data": null. */
     private bool $orderDataNull = false;
 
@@ -176,7 +185,7 @@ class EverproShippingTest extends TestCase
         }
 
         return match (true) {
-            $path === '/balance/v1/detail' => $ok($this->balanceAnswer),
+            $path === '/balance/v1/detail' => $ok($this->balances !== [] ? ['cash' => array_shift($this->balances), 'name' => 'Quicker Sport'] : $this->balanceAnswer),
             $path === '/location/v1/postalcode' => $this->postalCode($r),
             $path === '/location/v1/sub-districts' && isset($r->data()['district_id']) => $r->data()['district_id'] === 'D-KDW'
                 ? $ok([['sub_district_id' => 'SD-KDW', 'sub_district_name' => 'Kedungwaringin', 'postal_code' => '17540'], ['sub_district_id' => 'SD-KDJ', 'sub_district_name' => 'Karangsambung', 'postal_code' => '17540']])
@@ -191,7 +200,8 @@ class EverproShippingTest extends TestCase
             $path === '/shipment/v1/pickup-times' => $ok(['available_pickup_time' => [['rate_code' => 'REG23', 'pickup_time_list' => [['date' => '2026-11-05', 'pickup_times' => [['start_at' => '2026-11-05T07:00:00Z', 'end_at' => '2026-11-05T09:00:00Z']]]]]]]),
             $path === '/shipment/v2/orders' && $this->orderError !== null => Http::response(['message' => $this->orderError], 422),
             $path === '/shipment/v2/orders' && $this->orderDataNull => $this->listed($r, $ok(null)),
-            str_ends_with($path, '/generate') && $this->generateError !== null => Http::response(['message' => $this->generateError], 422),
+            str_ends_with($path, '/generate') && $this->generateError !== null => Http::response(['message' => $this->generateError], $this->generateStatus),
+            str_ends_with($path, '/awb') && $this->awbMissing => Http::response(['message' => 'awb number not found', 'data' => null], 404),
             $path === '/shipment/v1/orders' => $ok(['orders' => array_map(fn ($o) => ['awb_number' => $o['awb_number'] ?? ($this->noAwb ? '' : $o['_awb'] ?? 'JNE0001234')] + $o, $this->remoteOrders),
                 'pagination' => ['page' => 1, 'limit' => 50, 'total_page' => 1, 'total_data' => count($this->remoteOrders)]]),
             $path === '/shipment/v2/orders' => $this->listed($r, null) ?? $ok(['client_order_no' => $r->data()['client_order_no'], 'order_reference_id' => 'ER-'.count($this->callsTo('/shipment/v2/orders')), 'actual_price' => 18000]),
@@ -747,9 +757,12 @@ class EverproShippingTest extends TestCase
 
         $shipment = $this->book($lead);
 
-        $this->assertSame(Shipment::FAILED, $shipment->state);
-        $this->assertStringContainsString('Saldo Everpro tidak cukup', $shipment->error);
-        $this->assertTrue($this->inShop(fn () => $lead->activities()->where('body', 'like', '%Saldo Everpro tidak cukup%')->exists()));
+        // Waits for the balance instead of failing; no order was taken.
+        $this->assertSame(Shipment::PENDING, $shipment->state);
+        $this->assertTrue($shipment->waitingBalance());
+        $this->assertNull($shipment->order_id);
+        $this->assertStringContainsString('Saldo Everpro tidak cukup (perlu Rp 18.000', $shipment->error);
+        $this->assertTrue($this->inShop(fn () => $lead->activities()->where('body', 'like', '%Saldo Everpro tidak cukup%Saldo tidak mencukupi%')->exists()));
     }
 
     // ---- Callbacks ---------------------------------------------------------------------------------------------
@@ -1634,7 +1647,7 @@ class EverproShippingTest extends TestCase
     {
         $this->autoOn();
         $lead = $this->readyOrder();
-        $this->orderError = 'Saldo tidak mencukupi';
+        $this->orderError = 'receiver address is not valid';
 
         $this->runAuto();
         $this->runAuto(60);
@@ -1643,7 +1656,7 @@ class EverproShippingTest extends TestCase
         $this->assertCount(1, $this->callsTo('/shipment/v2/orders'), 'Tried once.');
         $lead = $this->inShop(fn () => $lead->fresh());
         $this->assertSame(AutoShipments::FAILED, $lead->auto_shipment_state);
-        $this->assertStringContainsString('Saldo Everpro tidak cukup', $lead->auto_shipment_note);
+        $this->assertStringContainsString('Everpro menolak permintaan: receiver address is not valid', $lead->auto_shipment_note);
         $admin = $this->adminOf($this->shop);
         $this->assertTrue($admin->notifications()->where('data->title', 'Resi gagal dibuat: Rina Kartika')->exists());
 
@@ -2203,5 +2216,121 @@ class EverproShippingTest extends TestCase
         $paid = $this->order('transfer', '6281234567899', ['paid_at' => now()]);
         $this->assertFalse($this->inShop(fn () => app(Shipments::class)->draft($paid))->unpaid);
         $this->assertStringContainsString('Bukan COD: pembeli sudah bayar di muka.', $this->inShop(fn () => app(Shipments::class)->draft($paid))->summary());
+    }
+
+    // ---- Balance ("Menunggu saldo") ------------------------------------------------------------------------------
+
+    public function test_a_prepaid_parcel_above_the_balance_waits_without_an_order_and_is_sent_once_the_balance_is_enough(): void
+    {
+        $this->autoOn();
+        $this->balanceAnswer = ['cash' => 10000, 'name' => 'Quicker Sport'];
+        $lead = $this->readyOrder('transfer', extra: ['paid_at' => now()]);
+
+        $this->runAuto();
+
+        $shipment = $this->shipment();
+        $this->assertSame([], $this->callsTo('/shipment/v2/orders'), 'No order at Everpro, so none is left orphaned.');
+        $this->assertSame(Shipment::PENDING, $shipment->state);
+        $this->assertTrue($shipment->waitingBalance());
+        $this->assertSame('Saldo Everpro tidak cukup (perlu Rp 18.000, saldo Rp 10.000). Isi saldo lalu tekan Coba lagi.', $shipment->error);
+        $this->assertSame([$shipment->id], $this->inShop(fn () => Shipment::query()->tab('balance')->pluck('id')->all()));
+        $this->assertSame([], $this->inShop(fn () => Shipment::query()->tab('action')->pluck('id')->all()), 'Not "Perlu tindakan": it waits by itself.');
+        $this->assertSame(AutoShipments::WAITING_BALANCE, $this->inShop(fn () => $lead->fresh()->auto_shipment_state));
+
+        // The admins are told once: bell and email; and the daily report says so.
+        $admin = $this->adminOf($this->shop);
+        $this->assertSame(1, $admin->notifications()->where('data->title', 'Resi otomatis menunggu saldo Everpro: Rina Kartika')->count());
+        Mail::assertSent(ShipmentWaitsForBalance::class, fn ($m) => $m->hasTo($admin->email) && str_contains($m->detail, 'perlu Rp 18.000, saldo Rp 10.000'));
+        $text = app(DailyReport::class)->build($this->shop, $admin)['text'];
+        $this->assertStringContainsString('• Menunggu saldo Everpro (saat ini): 1', $text);
+        $this->assertStringContainsString('Saldo Everpro rendah: *Rp 10.000*', $text);
+
+        // The warning in the Pengiriman menu and the settings
+        $this->actingInTenant($admin, $this->shop);
+        Livewire::test(ListShipments::class)->assertSee('Saldo Everpro rendah')->assertSee('1 kiriman menunggu saldo')
+            ->set('activeTab', 'balance')->assertCanSeeTableRecords([$shipment])->assertSee('Menunggu saldo');
+        Livewire::test(ShippingSettingsPage::class)->assertSee('Saldo Everpro rendah')->assertSet('carrier.low_balance', 100000);
+
+        // Still short ten minutes later: nothing is sent, nobody is told again.
+        $this->travel(10)->minutes();
+        $this->artisan('shipping:balance-wait')->assertSuccessful();
+        $this->assertSame([], $this->callsTo('/shipment/v2/orders'));
+        $this->assertSame(1, $admin->notifications()->where('data->title', 'Resi otomatis menunggu saldo Everpro: Rina Kartika')->count());
+
+        // Topped up: booked once, the tracking number comes, and the next check does nothing.
+        $this->balanceAnswer = ['cash' => 500000, 'name' => 'Quicker Sport'];
+        $this->travel(10)->minutes();
+        $this->artisan('shipping:balance-wait')->assertSuccessful();
+        $this->artisan('shipping:balance-wait')->assertSuccessful();
+
+        $this->assertCount(1, $this->callsTo('/shipment/v2/orders'));
+        $this->assertSame([Shipment::SHIPPED, 'JNE0001234', null], [$this->shipment()->state, $this->shipment()->awb, $this->shipment()->balance_wait_at]);
+        $this->assertSame(AutoShipments::DONE, $this->inShop(fn () => $lead->fresh()->auto_shipment_state));
+        $this->assertSame(1, $this->inShop(fn () => Shipment::query()->count()));
+    }
+
+    public function test_lead_466_a_refused_generate_keeps_everpros_real_reason_and_coba_lagi_never_books_again(): void
+    {
+        Storage::fake('local');
+        $this->configure();
+        $this->orderDataNull = true;
+        $this->noAwb = true;
+        $this->awbMissing = true;
+        $this->generateError = 'insufficient balance, please top up balance first';
+        $this->generateStatus = 406;
+        // Enough before booking (the ongkir of this order is Rp 18.000), then short when the number is generated.
+        $this->balances = [750000, 10000];
+        $lead = $this->order('transfer', extra: ['paid_at' => now()]);
+
+        $shipment = $this->book($lead);
+
+        $this->assertCount(1, $this->callsTo('/shipment/v2/orders'));
+        $this->assertSame(Shipment::ORDERED, $shipment->state);
+        $this->assertTrue($shipment->waitingBalance());
+        $this->assertSame('Saldo Everpro tidak cukup (perlu Rp 18.000, saldo Rp 10.000). Isi saldo lalu tekan Coba lagi.', $shipment->error);
+        $this->assertStringNotContainsString('awb number not found', $shipment->error, 'The 404 of the lookup after a refused generate never hides the reason.');
+        $this->assertSame(['message' => 'insufficient balance, please top up balance first', 'status' => 406], array_intersect_key((array) data_get($shipment->request, 'provider_error'), ['message' => 1, 'status' => 1]));
+        $note = $this->inShop(fn () => $lead->activities()->where('body', 'like', '%menunggu saldo%')->value('body'));
+        $this->assertStringContainsString('"insufficient balance, please top up balance first" (406)', $note);
+        $this->assertStringNotContainsString('awb number not found', $note);
+        $this->assertTrue($this->adminOf($this->shop)->notifications()->where('data->title', 'Kiriman menunggu saldo Everpro: Rina Kartika')->exists());
+
+        // The ten-minute repair job no longer asks Everpro again and again.
+        $generates = fn () => count(array_filter($this->calls, fn ($c) => str_ends_with($c['path'], '/generate')));
+        $before = $generates();
+        $this->artisan('shipping:fix-everpro-orders --waiting --apply')->assertSuccessful();
+        $this->assertSame($before, $generates());
+
+        // Coba lagi while the balance is still short: told so, nothing is sent.
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+        $this->balanceAnswer = ['cash' => 10000, 'name' => 'Quicker Sport'];
+        Livewire::test(ListShipments::class)->set('activeTab', 'balance')->callTableAction('retry', $shipment)->assertNotified('Kiriman belum bisa dicoba lagi');
+        $this->assertSame($before, $generates());
+
+        // Topped up: Coba lagi only generates the number of the order Everpro already has.
+        $this->balanceAnswer = ['cash' => 500000, 'name' => 'Quicker Sport'];
+        $this->generateError = null;
+        $this->noAwb = false;
+        $this->awbMissing = false;
+        Livewire::test(ListShipments::class)->set('activeTab', 'balance')->callTableAction('retry', $shipment)->assertNotified('Resi JNE0001234 terbit.');
+
+        $this->assertCount(1, $this->callsTo('/shipment/v2/orders'), 'No new order at Everpro.');
+        $this->assertSame([Shipment::SHIPPED, 'JNE0001234', null], [$this->shipment()->state, $this->shipment()->awb, $this->shipment()->balance_wait_at]);
+        $this->assertSame(1, $this->inShop(fn () => Shipment::query()->count()));
+    }
+
+    public function test_cod_parcels_are_not_held_by_the_balance_check_and_the_low_balance_level_is_the_agencys(): void
+    {
+        $this->configure(settings: ['low_balance' => 5000]);
+        $this->balanceAnswer = ['cash' => 10000, 'name' => 'Quicker Sport'];
+
+        $shipment = $this->book($this->order('cod'));
+
+        $this->assertSame([], $this->callsTo('/balance/v1/detail'), 'COD is not paid from the balance.');
+        $this->assertSame(Shipment::SHIPPED, $shipment->state);
+
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+        $this->inShop(fn () => CarrierAccount::query()->firstOrFail()->forceFill(['balance' => 10000, 'balance_at' => now()])->save());
+        Livewire::test(ListShipments::class)->assertDontSee('Saldo Everpro rendah');
     }
 }

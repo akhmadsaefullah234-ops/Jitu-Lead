@@ -211,7 +211,7 @@ class LeadsTable
             return null;
         }
 
-        if ($lead->auto_shipment_state === AutoShipments::FAILED) {
+        if (in_array($lead->auto_shipment_state, [AutoShipments::FAILED, AutoShipments::WAITING_BALANCE], true)) {
             return $lead->auto_shipment_note;
         }
 

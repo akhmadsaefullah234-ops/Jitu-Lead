@@ -482,8 +482,19 @@ class EverproCarrier implements CarrierProvider, ListsOrders, ValidatesPhones
         try {
             $awb = data_get($this->call('post', '/shipment/v1/orders/'.rawurlencode($clientOrderNo).'/generate'), 'awb_number');
         } catch (CarrierException $e) {
-            // Asked before (a retry): the number may already be there.
-            if ($e->retryable() || ($found = $this->awb($clientOrderNo)->awb) === null) {
+            if ($e->retryable()) {
+                throw $e;
+            }
+
+            // Asked before (a retry): the number may already be there. When it is not, the lookup's own answer
+            // ("awb number not found") says nothing: the generate error (a shortage of balance) is what is kept.
+            try {
+                $found = $this->awb($clientOrderNo)->awb;
+            } catch (CarrierException) {
+                $found = null;
+            }
+
+            if ($found === null) {
                 throw $e;
             }
 
@@ -687,14 +698,14 @@ class EverproCarrier implements CarrierProvider, ListsOrders, ValidatesPhones
         }
 
         if (preg_match('/saldo|balance|insufficient/i', $message)) {
-            return new CarrierException('Saldo Everpro tidak cukup. Isi saldo di dashboard Everpro, lalu coba lagi.', CarrierException::BALANCE, $status);
+            return new CarrierException('Saldo Everpro tidak cukup. Isi saldo di dashboard Everpro, lalu coba lagi.', CarrierException::BALANCE, $status, $message);
         }
 
         if ($status >= 500 || $status === 429) {
-            return new CarrierException('Everpro sedang tidak bisa memproses (kode '.$status.'). Coba lagi beberapa saat.', CarrierException::UNAVAILABLE, $status);
+            return new CarrierException('Everpro sedang tidak bisa memproses (kode '.$status.'). Coba lagi beberapa saat.', CarrierException::UNAVAILABLE, $status, $message ?: null);
         }
 
-        return new CarrierException('Everpro menolak permintaan'.($message !== '' ? ': '.mb_substr($message, 0, 200) : ' (kode '.$status.')').'.', CarrierException::REJECTED, $status);
+        return new CarrierException('Everpro menolak permintaan'.($message !== '' ? ': '.mb_substr($message, 0, 200) : ' (kode '.$status.')').'.', CarrierException::REJECTED, $status, $message ?: null);
     }
 
     private function http(): PendingRequest
