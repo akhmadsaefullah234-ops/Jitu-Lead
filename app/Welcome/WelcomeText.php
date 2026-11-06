@@ -38,8 +38,8 @@ class WelcomeText
         'varian' => 'varian yang dipilih',
         'warna' => 'warna / varian',
         'jumlah' => 'jumlah pesanan',
-        'ongkir' => 'ongkir termurah',
-        'kurir' => 'kurir termurah',
+        'ongkir' => 'ongkir dengan kurir utama',
+        'kurir' => 'kurir utama toko',
     ];
 
     /** {jawaban:<field key>}: the answer to any field of the form. */
@@ -187,7 +187,7 @@ class WelcomeText
             : self::rupiah($subtotal).' + ongkir '.self::rupiah($shipping[1]).' ('.$shipping[0].') = '.self::rupiah($subtotal + $shipping[1]);
     }
 
-    /** @return array{0: string, 1: int}|null the cheapest courier and its price */
+    /** @return array{0: string, 1: int}|null the shop's primary courier (Kurir utama) and its price */
     private function shipping(Lead $lead, Tenant $tenant): ?array
     {
         $parts = (array) $lead->shipping_address_parts;
@@ -199,7 +199,7 @@ class WelcomeText
         try {
             $quote = Shipping::quote($tenant, $parts['kota'], $lead->shipping_province ?? ($parts['provinsi'] ?? null), [[
                 'product_id' => $lead->property_id, 'produk' => $lead->property?->name, 'varian' => $lead->variant, 'jumlah' => $lead->quantity ?: 1,
-            ]], $parts['kecamatan'] ?? null);
+            ]], $parts['kecamatan'] ?? null, null, $parts['kode_pos'] ?? null, $parts['kelurahan'] ?? null);
         } catch (Throwable $e) {
             report($e);
 
@@ -210,9 +210,9 @@ class WelcomeText
             return null;
         }
 
-        $cheapest = collect($quote->options)->sortBy('price')->first();
+        $primary = $quote->options[0];
 
-        return [$cheapest->courier, $cheapest->price];
+        return [$primary->courier, $primary->price];
     }
 
     private function shortAddress(Lead $lead): ?string

@@ -44,8 +44,7 @@ class ShippingPromos
             return $off === 0 ? $o : new ShippingOption($o->courier, $o->price - $off, $o->etaMin, $o->etaMax, $o->price, $label);
         }, $quote->options);
 
-        return new ShippingQuote($quote->status, $quote->message, $options, $quote->city, $quote->province, $quote->zone,
-            $quote->actualGrams, $quote->volumeGrams, $quote->billableKg, $quote->items);
+        return $quote->copy(['options' => $options]);
     }
 
     /**

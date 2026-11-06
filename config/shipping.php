@@ -1,13 +1,15 @@
 <?php
 
+use App\Shipping\EverproShippingRates;
 use App\Shipping\ZoneShippingRates;
 
 /*
  * Shipping cost for retail agencies (tenants.shipping, edited under Pengaturan > Pengiriman).
  *
- * "providers" maps the provider an agency uses to the class that quotes it (App\Shipping\ShippingProvider).
- * Only "zone" exists now: per-kg rates per zone that the agency types in itself. A courier API
- * (KiriminAja, JNE) becomes another entry here; the AI tools and the inbox button do not change.
+ * "providers" maps the provider an agency uses (Pengaturan > Pengiriman > Sumber ongkir) to the class that quotes
+ * it (App\Shipping\ShippingProvider). "zone": per-kg rates per zone that the agency types in itself (the default).
+ * "everpro": Everpro's live rates for the destination's postal code, the zone table when Everpro cannot answer.
+ * Another courier API becomes another entry here; the AI tools and the inbox button do not change.
  *
  * "presets" are starting settings filled in for a known agency by slug (see the migration that adds them).
  */
@@ -15,6 +17,14 @@ return [
 
     'providers' => [
         'zone' => ZoneShippingRates::class,
+        'everpro' => EverproShippingRates::class,
+    ],
+
+    // Buyers' prices from Everpro: seconds to wait before falling back to the zone table, and hours an answer is kept
+    // (per sender, destination postal code and weight).
+    'everpro' => [
+        'timeout' => 3,
+        'cache_hours' => 6,
     ],
 
     // Where a buyer tracks a parcel, by the courier's first word ("JNE REG" => jne). {resi} is the tracking number.

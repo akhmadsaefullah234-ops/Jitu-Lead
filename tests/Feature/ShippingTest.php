@@ -17,6 +17,7 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Models\WaChannel;
 use App\Models\WaMessage;
+use App\Shipping\CourierChoice;
 use App\Shipping\Shipping;
 use App\Shipping\ShippingItem;
 use App\Shipping\ShippingQuote;
@@ -81,7 +82,7 @@ class ShippingTest extends TestCase
 
     private function quote(string $city, array $items, ?string $province = null): ShippingQuote
     {
-        return $this->inShop(fn () => Shipping::quote($this->shop->fresh(), $city, $province, $items));
+        return $this->inShop(fn () => Shipping::quote($this->shop->fresh(), $city, $province, $items, courier: CourierChoice::ALL));
     }
 
     private function prices(ShippingQuote $quote): array
@@ -228,7 +229,7 @@ class ShippingTest extends TestCase
         $channel = $this->channel(AiMode::Auto);
         $this->ai = [
             $this->toolUse('cek_ongkir', ['items' => [['product_id' => $this->kaos->id, 'varian' => 'L', 'jumlah' => 4]], 'kota' => 'Bandung']),
-            $this->text('Ongkir ke Bandung untuk 4 kaos: JNE REG Rp 28.000, SiCepat REG Rp 26.000 (1–3 hari). Total dengan SiCepat Rp 382.000, Kak.'),
+            $this->text('Ongkir ke Bandung untuk 4 kaos dengan JNE REG Rp 28.000 (1–3 hari). Totalnya Rp 384.000, Kak.'),
         ];
 
         $message = $this->inbound($channel, 'Kak, ongkir 4 kaos lari ke Bandung berapa?');
@@ -387,6 +388,11 @@ class ShippingTest extends TestCase
             ->assertActionVisible('shippingQuote')
             ->callAction('shippingQuote', ['items' => [['product_id' => $this->kaos->id, 'varian' => 'L', 'jumlah' => 4]], 'kota' => 'Bandung', 'provinsi' => 'Jawa Barat'])
             ->assertHasNoActionErrors()
+            ->assertSet('draft', "Ongkir ke Bandung, Jawa Barat (berat 2 kg):\n- JNE REG: Rp 28.000 (1–3 hari), total Rp 384.000");
+
+        // The agent may ask for every courier when the buyer wants another
+        Livewire::test(Inbox::class, ['leadId' => $lead->id])
+            ->callAction('shippingQuote', ['items' => [['product_id' => $this->kaos->id, 'varian' => 'L', 'jumlah' => 4]], 'kota' => 'Bandung', 'provinsi' => 'Jawa Barat', 'kurir' => CourierChoice::ALL])
             ->assertSet('draft', "Ongkir ke Bandung, Jawa Barat (berat 2 kg):\n- JNE REG: Rp 28.000 (1–3 hari), total Rp 384.000\n- SiCepat REG: Rp 26.000 (1–3 hari), total Rp 382.000");
 
         Livewire::test(Inbox::class, ['leadId' => $lead->id])

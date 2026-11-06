@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\Ai\LeadQuote;
 use App\Automation\StageAutomation;
 use App\Leads\ChatShippingDetails;
 use App\Models\Lead;
@@ -10,6 +11,7 @@ use App\Models\User;
 use App\Shipping\Shipping;
 use App\Shipping\ShippingItem;
 use App\Shipping\ShippingQuote;
+use App\Shipping\ShippingSettings;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -35,7 +37,11 @@ class RecordOrder
      */
     public function __invoke(Lead $lead, array $order, User $actor, string $by = 'agen'): array
     {
-        $quote = Shipping::quote($lead->tenant, $order['kota'] ?? null, $order['provinsi'] ?? null, $order['items'] ?? [], $order['kecamatan'] ?? null);
+        // No courier named: the shop's primary courier. A courier it does not use asks for an admin.
+        $courier = filled($order['kurir'] ?? null) ? trim((string) $order['kurir']) : null;
+        $place = LeadQuote::exactPlace($lead, $order['kota'] ?? null);
+        $quote = Shipping::quote($lead->tenant, $order['kota'] ?? null, $order['provinsi'] ?? null, $order['items'] ?? [], $order['kecamatan'] ?? null,
+            $courier, $order['kode_pos'] ?? $place['kode_pos'] ?? null, $order['kelurahan'] ?? $place['kelurahan'] ?? null);
 
         if (! $quote->ok()) {
             return ['status' => $quote->status, 'pesan' => $quote->message];
@@ -49,7 +55,7 @@ class RecordOrder
         $payment = in_array($order['pembayaran'] ?? null, self::PAYMENTS, true) ? $order['pembayaran']
             : (in_array($lead->payment_type, [...self::PAYMENTS, 'other'], true) ? $lead->payment_type : 'transfer');
 
-        $option = $quote->option((string) ($order['kurir'] ?? ''));
+        $option = $courier === null ? ($quote->options[0] ?? null) : $quote->option($courier);
         $address = trim((string) ($order['alamat'] ?? ''));
 
         if ($option === null) {
@@ -80,6 +86,7 @@ class RecordOrder
                 'shipping_address' => $fullAddress,
                 'courier' => $option->courier,
                 'shipping_cost' => $option->price,
+                'shipping_cost_source' => $quote->source,
                 'order_items' => array_map(fn (ShippingItem $i) => $i->toArray(), $quote->items),
                 'deal_value' => $total ?? $lead->deal_value,
             ]);
@@ -93,8 +100,11 @@ class RecordOrder
                     .($option->discount() > 0 ? ' (normal '.ShippingQuote::rupiah($option->normalPrice).', '.$option->promo.')' : '').($total !== null ? ', total '.ShippingQuote::rupiah($total) : '')
                     .match ($payment) {
                         'cod' => '. Bayar di tempat (COD)', 'other' => '. Bayar lainnya (QRIS/e-wallet)', default => '. Bayar transfer'
-                    },
-                'meta' => ['ongkir' => $option->price, 'ongkir_normal' => $option->discount() > 0 ? $option->normalPrice : null, 'promo_ongkir' => $option->promo, 'total' => $total, 'berat_kg' => $quote->billableKg, 'zona' => $quote->zone, 'pembayaran' => $payment],
+                    }
+                    // A shop that prices with Everpro sees where this price came from (the zone table when Everpro could not answer).
+                    .(ShippingSettings::of($lead->tenant)->provider() === ShippingSettings::EVERPRO ? '. Ongkir dari '.$quote->sourceLabel() : ''),
+                'meta' => ['ongkir' => $option->price, 'ongkir_normal' => $option->discount() > 0 ? $option->normalPrice : null, 'promo_ongkir' => $option->promo, 'total' => $total,
+                    'berat_kg' => $quote->billableKg, 'zona' => $quote->zone, 'pembayaran' => $payment, 'sumber_ongkir' => $quote->source, 'catatan_sumber_ongkir' => $quote->sourceNote],
             ]);
 
             return $this->automation->applies() ? $this->automation->orderConfirmed($lead, $payment) : $this->moveToPayment($lead, $actor);
