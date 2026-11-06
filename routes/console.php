@@ -13,8 +13,10 @@ Schedule::command('followups:run')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('welcome:send')->everyMinute()->withoutOverlapping();
 Schedule::command('shipping:notices')->everyMinute()->withoutOverlapping();
 Schedule::command('shipping:track')->everyTwoHours()->withoutOverlapping();
-// Merged label PDFs of the bulk "Cetak label" are kept for 24 hours.
+// Print runs are kept 30 days to download again, each parcel's label 90 days (config/carriers.php).
 Schedule::command('shipping:labels-prune')->hourly()->withoutOverlapping();
+// "Resi otomatis": leads whose wait is over are booked; each agency's admins get a morning summary.
+Schedule::command('shipping:auto-resi')->everyMinute()->withoutOverlapping();
 // Daily/weekly/monthly reports to owners and admins at the time each agency (or person) picked, in its time zone.
 Schedule::command('reports:daily')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('leads:reassign')->everyFiveMinutes()->withoutOverlapping();

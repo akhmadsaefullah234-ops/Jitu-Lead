@@ -6,6 +6,7 @@ use App\Automation\StageAutomation;
 use App\Filament\Pages\Inbox;
 use App\Filament\Resources\Leads\LeadResource;
 use App\Filament\Support\ShipmentActions;
+use App\Models\Shipment;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
@@ -36,13 +37,15 @@ class EditLead extends EditRecord
             Action::make('chat')->label('Chat WhatsApp')->icon(Heroicon::OutlinedChatBubbleLeftRight)
                 ->visible(fn () => filled($this->record->phone) && ! $this->record->trashed())
                 ->url(fn () => Inbox::getUrl(['lead' => $this->record->getKey()])),
+            ShipmentActions::cancelAuto(fn () => $this->record),
             ActionGroup::make([
                 ShipmentActions::create(fn () => $this->record),
                 ShipmentActions::link(fn () => $this->record),
                 ShipmentActions::track(fn () => $this->record),
                 ShipmentActions::label(fn () => $this->record),
                 ShipmentActions::cancel(fn () => $this->record),
-            ])->label('Pengiriman')->icon(Heroicon::OutlinedTruck)->button()->color('gray')->visible(fn () => ShipmentActions::available() && ! $this->record->trashed()),
+            ])->label('Pengiriman')->icon(Heroicon::OutlinedTruck)->button()->color('gray')->visible(fn () => ShipmentActions::available() && ! $this->record->trashed())
+                ->badge(fn () => Shipment::query()->tab('unprinted')->where('lead_id', $this->record->getKey())->exists() ? 'Belum dicetak' : null)->badgeColor('warning'),
             DeleteAction::make(),
             ForceDeleteAction::make(),
             RestoreAction::make(),

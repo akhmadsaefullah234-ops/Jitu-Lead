@@ -53,8 +53,8 @@ tidak), juga untuk resi yang tidak dikenal. URL satu agensi tidak bisa menyentuh
   belum lengkap dilewati dan disebutkan) dan **Cetak label**: label tiap lead terpilih diunduh di server (maks. 100
   sekali cetak, batas waktu 15 detik per label) lalu digabung jadi satu PDF, satu label per halaman dengan ukuran asli
   penyedia, urut seperti tabel. PDF disimpan privat (`storage/app/private/label-sheets/{tenant}/`, nama acak), dibuka
-  lewat tautan bertanda tangan 1 jam yang hanya bisa dibuka anggota toko itu, dan dihapus setelah 24 jam oleh
-  `shipping:labels-prune` (terjadwal tiap jam). Ringkasan menyebut lead yang dilewati beserta alasannya (belum ada resi
+  lewat tautan bertanda tangan 1 jam yang hanya bisa dibuka anggota toko itu, dan dihapus setelah 30 hari
+  (`carriers.label_batch_keep_days`) oleh `shipping:labels-prune` (terjadwal tiap jam). Ringkasan menyebut lead yang dilewati beserta alasannya (belum ada resi
   / label gagal diambil). Catatan: label PDF yang memakai kompresi xref (PDF 1.5+) tidak terbaca oleh FPDI versi gratis
   dan akan dilewati dengan alasan "label gagal diambil".
 - Alamat penerima dipetakan dari rincian alamat lead ke lokasi Everpro. Endpoint `/location/v1/postalcode` hanya menerima
@@ -92,6 +92,47 @@ tidak), juga untuk resi yang tidak dikenal. URL satu agensi tidak bisa menyentuh
 - Promo ongkir: `shipment_price` ke Everpro selalu ongkir asli tarif terpilih; `cod_price` = harga x jumlah + ongkir yang
   ditagih ke pembeli setelah promo ongkir produk (ongkir yang tercatat di lead, atau ongkir Everpro dikurangi promo bila
   belum pernah dihitung). Pratinjau menampilkan ongkir asli, potongan/subsidi penjual, cashback Everpro dan total COD.
+
+## Resi otomatis
+
+Pengaturan > Pengiriman > **Resi otomatis** (mati secara bawaan). Bila aktif, lead yang masuk **tahap pemicu**
+(bawaan "Dikemas & dikirim"), baik dipindah AI maupun agen, dijadwalkan resinya setelah **jeda** (bawaan 30 menit).
+Selama jeda, Inbox dan halaman lead menampilkan "Resi otomatis dalam N menit · Batalkan". `shipping:auto-resi`
+(terjadwal tiap menit) membuat resi yang jedanya sudah lewat, setelah memeriksa ulang semua syarat:
+
+- Cara bayar jelas dan dipastikan agen: COD, atau transfer dengan `paid_at`/`payment_proof_at`.
+- Alamat lengkap: RT/RW atau patokan, kelurahan, kecamatan, kota, provinsi, kode pos; dan kelurahan yang ditemukan
+  Everpro punya kode pos yang sama dengan lead. Ragu = tidak otomatis.
+- Produk ada di katalog dengan berat, jumlah dan varian terisi. Kurir pilihan pembeli bila ada (harus tersedia di
+  tarif), selain itu layanan bawaan.
+- Belum ada kiriman aktif (tidak pernah dobel) dan lead tidak ditandai dicurigai spam.
+- Belum melewati **batas harian** (bawaan 50) dan nilai COD tidak di atas **batas COD per paket** (bawaan
+  Rp1.000.000). Selebihnya dibuat manual.
+
+Lead yang tidak memenuhi syarat tetap manual; alasannya dicatat di lead (`auto_shipment_note`) dan terlihat di kolom
+**Resi** serta filter **Kesiapan resi: Siap resi / Perlu dilengkapi** di daftar lead. Galat penyedia (mis. saldo kurang)
+tidak dicoba ulang: lead bertanda "Resi gagal dibuat" dan pemilik lead (atau admin) mendapat notifikasi. Tiap resi
+otomatis dicatat sebagai aktivitas "Resi dibuat otomatis" dengan ongkir asli, ongkir ditagih, subsidi dan COD.
+
+Ringkasan harian: pukul 07.00 waktu toko admin dan leader mendapat notifikasi "Ringkasan pengiriman" (resi otomatis
+kemarin, total COD, gagal, perlu dilengkapi, belum dicetak, perlu tindakan). Laporan harian WhatsApp toko retail yang
+memakai penyedia pengiriman memuat blok **📦 Pengiriman** yang sama.
+
+## Menu Pengiriman
+
+- **Label disimpan** saat resi terbit: PDF diunduh lewat antrean (`SaveShipmentLabel`, maks. 5 kali dengan jeda
+  bertambah) ke `storage/app/private/labels/{tenant}/{tanggal}/{resi}.pdf`. Gagal terus = "Label belum tersedia" di tab
+  Perlu tindakan, dengan tombol **Ambil ulang label**. Cetak memakai file tersimpan, lalu penyedia bila belum ada.
+  Disimpan 90 hari (`carriers.label_store_days`), lalu dihapus `shipping:labels-prune`.
+- Tab: **Belum dicetak** (bawaan, terlama dulu), **Sudah dicetak, menunggu dijemput**, **Dalam perjalanan**, **Perlu
+  tindakan** (gagal antar, retur, label gagal, resi gagal), **Selesai**, **Dibatalkan**, masing-masing dengan jumlah.
+  Filter tanggal, kurir, COD/transfer, produk; cari nama, HP, resi.
+- **Cetak semua yang belum dicetak (N)** membuat satu PDF urut tabel, opsional dengan halaman pertama daftar
+  pengemasan, dan menandai `printed_at`/`printed_by`. Juga **Cetak label terpilih**, **Cetak**/**Cetak ulang** per baris
+  (jumlah cetak dihitung) dan **Tandai sudah/belum dicetak**. **Riwayat cetak** menyimpan tiap cetakan dengan tautan
+  unduh ulang selama filenya masih ada.
+- Chip "Belum dicetak" di Inbox dan halaman lead, angka di menu, dan di laporan harian.
+- Admin dan leader melihat semua kiriman; agen hanya kiriman lead miliknya. File label hanya bisa diunduh anggota toko.
 
 ## Promo ongkir per produk
 

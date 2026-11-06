@@ -4,9 +4,13 @@ namespace App\Reports;
 
 use App\Enums\WaChannelStatus;
 use App\Filament\Pages\Dashboard;
+use App\Filament\Resources\Leads\LeadResource;
+use App\Models\Lead;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Models\WaChannel;
+use App\Shipping\Carriers\Carriers;
+use App\Shipping\Shipments\ShippingSummary;
 use App\Support\CurrentTenant;
 use App\Support\Period;
 use Carbon\CarbonImmutable;
@@ -104,6 +108,20 @@ class DailyReport
                 $block[] = "• Iklan terbaik: {$ad}";
             }
             $this->block($out, '🛒 *Penjualan*', $block);
+
+            if (Carriers::configured($tenant)) {
+                $n = app(ShippingSummary::class)->numbers($period->start, $period->end, LeadResource::onlyVisibleLeads(Lead::query()));
+                $block = [];
+                $this->line($block, 'Resi otomatis', $n['auto']);
+                if ($n['auto_cod'] > 0) {
+                    $block[] = '• Total COD resi otomatis: '.$this->money($n['auto_cod']);
+                }
+                $this->line($block, 'Resi gagal dibuat', $n['failed']);
+                $this->line($block, 'Perlu dilengkapi untuk resi', $n['skipped']);
+                $this->line($block, 'Resi belum dicetak (saat ini)', $n['unprinted']);
+                $this->line($block, 'Kiriman perlu tindakan (saat ini)', $n['action']);
+                $this->block($out, '📦 *Pengiriman*', $block);
+            }
         } else {
             $this->line($block, 'Survei terjadwal', $s['surveys_planned']['now']);
             $this->line($block, 'Survei terlaksana', $s['surveys_done']['now']);

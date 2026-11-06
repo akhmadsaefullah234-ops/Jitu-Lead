@@ -9,6 +9,7 @@ use App\Models\Shipment;
 use App\Shipping\Carriers\CarrierException;
 use App\Shipping\Carriers\CarrierLocation;
 use App\Shipping\Carriers\Carriers;
+use App\Shipping\Shipments\AutoShipments;
 use App\Shipping\Shipments\LabelSheet;
 use App\Shipping\Shipments\ShipmentDraft;
 use App\Shipping\Shipments\Shipments;
@@ -293,6 +294,21 @@ class ShipmentActions
             });
     }
 
+    /** "Resi otomatis dalam 25 menit · Batalkan": the agent stops a scheduled automatic resi. */
+    public static function cancelAuto(Closure $lead, string $name = 'cancelAutoShipment'): Action
+    {
+        return Action::make($name)->label(fn () => 'Resi otomatis dalam '.(AutoShipments::minutesLeft($lead()) ?? 0).' menit · Batalkan')
+            ->icon(Heroicon::OutlinedClock)->color('warning')
+            ->visible(fn () => self::available() && ($l = $lead()) !== null && $l->auto_shipment_state === AutoShipments::SCHEDULED)
+            ->requiresConfirmation()->modalHeading('Batalkan resi otomatis?')
+            ->modalDescription('Resi tidak dibuat otomatis untuk lead ini. Buat resi manual dari menu Pengiriman bila sudah dicek.')
+            ->modalSubmitActionLabel('Batalkan resi otomatis')
+            ->action(function () use ($lead) {
+                app(AutoShipments::class)->cancel($lead(), auth()->user());
+                Notification::make()->title('Resi otomatis dibatalkan')->success()->send();
+            });
+    }
+
     /** @param  Closure(): ?Lead  $lead */
     public static function label(Closure $lead, string $name = 'shipmentLabel'): Action
     {
@@ -410,7 +426,7 @@ class ShipmentActions
         return BulkAction::make('bulkShipmentLabels')->label('Cetak label')->icon(Heroicon::OutlinedPrinter)
             ->visible(fn () => self::available())
             ->action(function (Collection $records, $livewire) {
-                $sheet = app(LabelSheet::class)->make($records);
+                $sheet = app(LabelSheet::class)->make($records, auth()->user());
                 $merged = count($sheet['merged']);
                 $skipped = count($sheet['skipped']);
                 $lines = array_map(fn ($s) => '• '.e($s['name']).': '.e($s['reason']), array_slice($sheet['skipped'], 0, 20));

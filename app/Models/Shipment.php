@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\BelongsToTenant;
 use App\Shipping\Carriers\ShipmentStatus;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -16,7 +17,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 #[Fillable(['lead_id', 'provider', 'client_order_no', 'sequence', 'order_id', 'awb', 'courier', 'rate_code', 'state', 'status', 'raw_status', 'status_reason',
     'is_cod', 'cod_amount', 'price', 'charged', 'weight_grams', 'label_url', 'request', 'events', 'error', 'attempts', 'awb_notified_at', 'tracked_at', 'final_at', 'cancelled_at',
-    'source', 'track_failures', 'untrackable_at', 'linked_at'])]
+    'source', 'track_failures', 'untrackable_at', 'linked_at', 'label_path', 'label_saved_at', 'label_attempts', 'label_failed_at', 'printed_at', 'printed_by',
+    'print_count', 'automatic'])]
 class Shipment extends Model
 {
     use BelongsToTenant;
@@ -48,13 +50,25 @@ class Shipment extends Model
         return [
             'is_cod' => 'boolean', 'request' => 'array', 'events' => 'array',
             'awb_notified_at' => 'datetime', 'tracked_at' => 'datetime', 'final_at' => 'datetime', 'cancelled_at' => 'datetime',
-            'untrackable_at' => 'datetime', 'linked_at' => 'datetime',
+            'untrackable_at' => 'datetime', 'linked_at' => 'datetime', 'label_saved_at' => 'datetime', 'label_failed_at' => 'datetime',
+            'printed_at' => 'datetime', 'automatic' => 'boolean',
         ];
     }
 
     public function lead(): BelongsTo
     {
         return $this->belongsTo(Lead::class);
+    }
+
+    public function printer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'printed_by');
+    }
+
+    /** Has a label to print: booked here (not a linked number) with a tracking number, not cancelled. */
+    public function printable(): bool
+    {
+        return ! $this->manual() && filled($this->awb) && $this->state === self::SHIPPED;
     }
 
     public function notices(): HasMany
@@ -87,6 +101,37 @@ class Shipment extends Model
     public function needsAction(): bool
     {
         return $this->status === ShipmentStatus::DELIVERY_FAILED && $this->final_at === null;
+    }
+
+    /** Tabs of the Pengiriman menu. */
+    public const TABS = [
+        'unprinted' => 'Belum dicetak',
+        'printed' => 'Sudah dicetak, menunggu dijemput',
+        'transit' => 'Dalam perjalanan',
+        'action' => 'Perlu tindakan',
+        'done' => 'Selesai',
+        'cancelled' => 'Dibatalkan',
+    ];
+
+    /** The parcels of one tab of the Pengiriman menu. */
+    public function scopeTab(Builder $query, string $tab): Builder
+    {
+        $waiting = fn (Builder $q) => $q->where('state', self::SHIPPED)->whereNotNull('awb')->whereNull('final_at')
+            ->where(fn ($q) => $q->whereNull('status')->orWhere('status', ShipmentStatus::AWB_CREATED));
+
+        return match ($tab) {
+            'unprinted' => $waiting($query)->where(fn ($q) => $q->whereNull('source')->orWhere('source', '!=', self::MANUAL))
+                ->whereNull('printed_at')->where(fn ($q) => $q->whereNotNull('label_path')->orWhereNull('label_failed_at')),
+            'printed' => $waiting($query)->where(fn ($q) => $q->whereNotNull('printed_at')->orWhere('source', self::MANUAL)),
+            'transit' => $query->where('state', self::SHIPPED)->whereNull('final_at')
+                ->whereIn('status', [ShipmentStatus::PICKED_UP, ShipmentStatus::IN_TRANSIT, ShipmentStatus::OUT_FOR_DELIVERY]),
+            'action' => $query->where(fn ($q) => $q->where('state', self::FAILED)
+                ->orWhereIn('status', [ShipmentStatus::DELIVERY_FAILED, ShipmentStatus::RETURNING, ShipmentStatus::RETURNED])
+                ->orWhere(fn ($q) => $q->where('state', self::SHIPPED)->whereNull('printed_at')->whereNull('label_path')->whereNotNull('label_failed_at'))),
+            'done' => $query->where('status', ShipmentStatus::DELIVERED),
+            'cancelled' => $query->where('state', self::CANCELLED),
+            default => $query,
+        };
     }
 
     /** The newest active (not cancelled or failed) parcel of a lead. */
