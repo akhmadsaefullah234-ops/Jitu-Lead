@@ -3,12 +3,17 @@
 namespace App\Ai;
 
 use App\Models\AiKnowledgeItem;
+use App\Privacy\PersonalData;
 
 /**
  * Picks what the agency has taught the assistant. An agency's notes are small
  * enough to send whole; when they are not, the entries that share the most
  * words with the client's question go first and the rest are cut. Entries
  * written for one product only go to chats about that product, ahead of the rest.
+ *
+ * Entries learned from agents' replies are other buyers' chats: they are cleaned of personal data again on the way
+ * out (names, numbers, addresses and cities become placeholders), so an entry kept before that cleaning existed
+ * still cannot hand buyer A's name or city to buyer B.
  */
 class KnowledgeBase
 {
@@ -25,11 +30,19 @@ class KnowledgeBase
             ->values();
 
         $out = '';
+        $keep = $items->contains('source', 'learned') ? PersonalData::keep() : '';
 
         foreach ($items as $item) {
-            $entry = $item->question
-                ? "Tanya: {$item->question}\nJawab: {$item->content}"
-                : "{$item->title}:\n{$item->content}";
+            if ($item->source === 'learned') {
+                ['question' => $question, 'answer' => $content] = PersonalData::scrubPair((string) $item->question, (string) $item->content, $keep);
+                $title = PersonalData::scrub((string) $item->title, $keep);
+            } else {
+                [$question, $content, $title] = [$item->question, $item->content, $item->title];
+            }
+
+            $entry = $question
+                ? "Tanya: {$question}\nJawab: {$content}"
+                : "{$title}:\n{$content}";
             $entry = mb_substr($entry, 0, 4000)."\n\n";
 
             if (mb_strlen($out) + mb_strlen($entry) > self::BUDGET) {

@@ -6,6 +6,7 @@ use App\Filament\Resources\AiKnowledge\Pages\ManageAiKnowledge;
 use App\Filament\Resources\Properties\Pages\EditProperty;
 use App\Filament\Resources\Properties\PropertyResource;
 use App\Models\AiKnowledgeItem;
+use App\Privacy\KnowledgeScan;
 use App\Support\Industry;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -56,12 +57,34 @@ class AiKnowledgeResource extends Resource
     {
         return [
             TextColumn::make('title')->label('Judul')->searchable()->description(fn (AiKnowledgeItem $r) => str($r->content)->limit(90)),
+            // Red when the entry holds a buyer's personal data (the scan of #54): deactivate or edit it.
+            TextColumn::make('personal_data')->label('Data pribadi')->badge()->color('danger')->icon(Heroicon::OutlinedExclamationTriangle)
+                ->state(fn (AiKnowledgeItem $r) => in_array($r->getKey(), self::flaggedIds(), true) ? 'Ada data pembeli' : null)
+                ->tooltip(fn (AiKnowledgeItem $r) => in_array($r->getKey(), self::flaggedIds(), true) ? 'Memuat data pribadi pembeli. Nonaktifkan atau sunting agar AI tidak memakainya.' : null),
             TextColumn::make('source')->label('Asal')->badge()->formatStateUsing(fn ($state) => match ($state) {
                 'learned' => 'Dipelajari',
                 'upload' => 'Dokumen',
                 default => 'Manual',
             }),
         ];
+    }
+
+    /** @return list<int> the entries (active or not) that hold a buyer's personal data, scanned once per request */
+    public static function flaggedIds(): array
+    {
+        $key = 'ai-knowledge.flagged';
+
+        if (! app()->bound($key)) {
+            app()->instance($key, KnowledgeScan::ids(activeOnly: false));
+        }
+
+        return app($key);
+    }
+
+    /** Called after entries change, so the next look scans again. */
+    public static function forgetFlagged(): void
+    {
+        app()->forgetInstance('ai-knowledge.flagged');
     }
 
     /**
@@ -82,6 +105,7 @@ class AiKnowledgeResource extends Resource
                 ToggleColumn::make('active')->label('Dipakai')->disabled(fn (AiKnowledgeItem $r) => $r->property_id !== null),
             ])->filters([
                 Filter::make('with_products')->label('Tampilkan juga pengetahuan '.$item)->toggle()->query(fn (Builder $q) => $q),
+                Filter::make('personal_data')->label('Hanya yang memuat data pribadi')->toggle()->query(fn (Builder $q) => $q->whereKey(self::flaggedIds())),
             ])->recordActions([
                 EditAction::make()->visible(fn (AiKnowledgeItem $r) => $r->property_id === null),
                 DeleteAction::make()->visible(fn (AiKnowledgeItem $r) => $r->property_id === null),
