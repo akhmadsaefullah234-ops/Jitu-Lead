@@ -23,6 +23,8 @@ final class RemoteOrder
         public readonly ?int $cashback = null,
         public readonly ?string $labelUrl = null,
         public readonly ?string $status = null,
+        /** False when the list gave only a date ("2026-11-06"): then orderedAt is midnight, not the real time. */
+        public readonly bool $timed = true,
     ) {}
 
     /** @param  array<string, mixed>  $row  one entry of "orders" */
@@ -45,6 +47,7 @@ final class RemoteOrder
         }
 
         $cod = $row['is_cod'] ?? null;
+        $timed = $date !== null && (bool) preg_match('/\d{1,2}:\d{2}/', (string) $row['order_date']);
 
         return new self(
             $no,
@@ -61,6 +64,7 @@ final class RemoteOrder
             $int($row['cashback'] ?? null),
             filled($row['label_url'] ?? null) ? (string) $row['label_url'] : null,
             filled($row['status'] ?? null) ? (string) $row['status'] : null,
+            $timed,
         );
     }
 }

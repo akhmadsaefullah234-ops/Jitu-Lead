@@ -19,16 +19,18 @@ use Illuminate\Support\Facades\Log;
  * (looked up in Everpro's order list, then the usual resi flow, one message to the buyer), and imported numbers that
  * are an order number and not a tracking number (swapped silently). A dry run unless --apply.
  */
-#[Signature('shipping:fix-everpro-orders {--tenant= : Hanya agensi ini (id)} {--apply : Simpan perubahan; tanpa ini hanya menampilkan}')]
+#[Signature('shipping:fix-everpro-orders {--tenant= : Hanya agensi ini (id)} {--apply : Simpan perubahan; tanpa ini hanya menampilkan} {--waiting : Hanya kiriman yang menunggu resi (untuk jadwal otomatis)}')]
 #[Description('Cocokkan kiriman tanpa resi dengan daftar order Everpro dan ganti resi impor TRD… dengan AWB asli')]
 class FixEverproOrdersCommand extends Command
 {
     public function handle(CurrentTenant $current): int
     {
         $apply = (bool) $this->option('apply');
+        $waitingOnly = (bool) $this->option('waiting');
+        $states = $waitingOnly ? [Shipment::ORDERED] : [Shipment::ORDERED, Shipment::FAILED];
         $tenants = Shipment::query()->withoutGlobalScopes()
-            ->where(fn ($q) => $q->where(fn ($q) => $q->whereIn('state', [Shipment::ORDERED, Shipment::FAILED])->whereNull('awb')->where('source', '!=', Shipment::MANUAL))
-                ->orWhere(fn ($q) => $q->where('source', Shipment::MANUAL)->whereRaw('upper(awb) like ?', ['TRD%'])))
+            ->where(fn ($q) => $q->where(fn ($q) => $q->whereIn('state', $states)->whereNull('awb')->where('source', '!=', Shipment::MANUAL))
+                ->when(! $waitingOnly, fn ($q) => $q->orWhere(fn ($q) => $q->where('source', Shipment::MANUAL)->whereRaw('upper(awb) like ?', ['TRD%']))))
             ->when($this->option('tenant'), fn ($q, $id) => $q->where('tenant_id', (int) $id))
             ->distinct()->pluck('tenant_id');
         $totals = ['matched' => 0, 'swapped' => 0, 'skipped' => 0];
@@ -38,20 +40,26 @@ class FixEverproOrdersCommand extends Command
                 continue;
             }
 
-            $current->run($tenant, function () use ($tenant, $apply, &$totals) {
+            $current->run($tenant, function () use ($tenant, $apply, $waitingOnly, $states, &$totals) {
                 $shipments = app(Shipments::class);
                 $provider = Carriers::for($tenant);
 
                 // Booked here, no tracking number: found in the order list, then the usual flow (message once, label).
-                $waiting = Shipment::query()->whereIn('state', [Shipment::ORDERED, Shipment::FAILED])->whereNull('awb')->where('source', '!=', Shipment::MANUAL)
-                    ->where(fn ($q) => $q->where('state', Shipment::ORDERED)->orWhereNotNull('error'))->orderBy('id')->get();
+                $waiting = Shipment::query()->whereIn('state', $states)->whereNull('awb')->where('source', '!=', Shipment::MANUAL)
+                    ->where(fn ($q) => $q->where('state', Shipment::ORDERED)->orWhereNotNull('error'))->orderBy('id')->get()
+                    // On the schedule, those waiting for a person to choose among several orders are left alone.
+                    ->reject(fn (Shipment $s) => $waitingOnly && data_get($s->request, 'order_candidates') !== null);
 
                 foreach ($waiting as $shipment) {
-                    $remote = $shipments->remoteOrder($provider, $shipment);
+                    [$remote, $choices] = $shipments->remoteMatch($provider, $shipment);
 
                     if ($remote === null) {
-                        $this->line("#{$shipment->id}: tidak ditemukan di daftar order Everpro");
+                        $this->line("#{$shipment->id}: ".($choices === [] ? 'tidak ditemukan di daftar order Everpro' : count($choices).' order sama-sama cocok, pilih lewat Coba lagi'));
                         $totals['skipped']++;
+
+                        if ($apply && $choices !== []) {
+                            $shipments->askWhichOrder($shipment, $choices);
+                        }
 
                         continue;
                     }
@@ -74,7 +82,7 @@ class FixEverproOrdersCommand extends Command
                 }
 
                 // Imported "resi" that is Everpro's order number.
-                foreach (Shipment::query()->where('source', Shipment::MANUAL)->whereRaw('upper(awb) like ?', ['TRD%'])->orderBy('id')->get() as $shipment) {
+                foreach ($waitingOnly ? [] : Shipment::query()->where('source', Shipment::MANUAL)->whereRaw('upper(awb) like ?', ['TRD%'])->orderBy('id')->get() as $shipment) {
                     if (! Shipments::isProviderOrderNo($shipment->awb)) {
                         continue;
                     }

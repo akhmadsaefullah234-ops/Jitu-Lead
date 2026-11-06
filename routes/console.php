@@ -17,6 +17,8 @@ Schedule::command('shipping:track')->everyTwoHours()->withoutOverlapping();
 Schedule::command('shipping:labels-prune')->hourly()->withoutOverlapping();
 // "Resi otomatis": leads whose wait is over are booked; each agency's admins get a morning summary.
 Schedule::command('shipping:auto-resi')->everyMinute()->withoutOverlapping();
+// Parcels still waiting for a tracking number are matched with Everpro's order list again (its TRD… order numbers).
+Schedule::command('shipping:fix-everpro-orders --waiting --apply')->everyTenMinutes()->withoutOverlapping();
 // Daily/weekly/monthly reports to owners and admins at the time each agency (or person) picked, in its time zone.
 Schedule::command('reports:daily')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('leads:reassign')->everyFiveMinutes()->withoutOverlapping();

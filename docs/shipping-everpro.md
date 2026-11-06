@@ -98,7 +98,10 @@ tidak), juga untuk resi yang tidak dikenal. URL satu agensi tidak bisa menyentuh
 - Everpro mengabaikan `client_order_no` kita (JL-…) dan mencatat order dengan nomornya sendiri (`TRD…`); jawaban order
   v2 bisa `"data": null`. Karena itu, setelah order v2 JITU LEAD mencari order baru di `GET /shipment/v1/orders` (2
   halaman terbaru): nomor HP penerima (62…), COD/bukan, total COD, tanggal order sejak kiriman dibuat, lalu isi paket
-  dan kurir. Order yang sudah dipakai kiriman lain tidak pernah diambil. `shipment_order_no` disimpan sebagai nomor
+  dan kurir. Bila daftar Everpro hanya memberi tanggal (tanpa jam), pembandingannya per hari: hari kiriman dibuat sampai
+  2 hari sesudahnya. Bila beberapa order sama-sama cocok dan tidak ada yang lebih unggul, tidak ada yang dipilih
+  otomatis: kiriman masuk Perlu tindakan dan **Coba lagi** meminta agen memilih order yang benar.
+  Kiriman yang menunggu resi dicocokkan ulang otomatis tiap 10 menit (`shipping:fix-everpro-orders --waiting --apply`). Order yang sudah dipakai kiriman lain tidak pernah diambil. `shipment_order_no` disimpan sebagai nomor
   order Everpro (`provider_order_no`, terlihat dan bisa dicari di menu Pengiriman), dan `awb_number` sebagai resi.
   Generate, batal dan cek order memakai nomor TRD itu; label dan lacak memakai nomor resi. Ongkir, biaya COD, dana cair
   (`total_cod_disbursement`) dan cashback ikut disimpan dan tampil di kolom **Biaya**. `label_url` di daftar itu
