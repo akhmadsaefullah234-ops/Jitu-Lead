@@ -14,6 +14,7 @@ use App\Filament\Pages\ShippingSettingsPage;
 use App\Filament\Resources\Leads\Pages\EditLead;
 use App\Filament\Resources\Leads\Pages\ListLeads;
 use App\Filament\Support\ShipmentTimeline;
+use App\Leads\ChatShippingDetails;
 use App\Mail\ShipmentNeedsAction;
 use App\Models\AiDraft;
 use App\Models\CarrierAccount;
@@ -39,6 +40,7 @@ use App\WhatsApp\GatewayUrlGuard;
 use App\WhatsApp\InboundMessage;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Testing\TestAction;
+use Filament\Notifications\Livewire\Notifications;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Carbon;
@@ -1000,14 +1002,24 @@ class EverproShippingTest extends TestCase
     {
         $this->configure();
         $a = $this->order('cod', '6281234567890');
-        $b = $this->order('transfer', '6281234567891');
-        $c = $this->order('transfer', '6281234567892', ['shipping_address' => 'Bdg']);
+        $b = $this->order('transfer', '6281234567891', ['paid_at' => now()]);
+        $c = $this->order('transfer', '6281234567892', ['shipping_address' => 'Bdg', 'paid_at' => now()]);
+        // Never assumed in bulk: no way of paying, one only read from the chat, a transfer nobody has seen
+        $d = $this->order('cod', '6281234567893', ['name' => 'Dewi Blank', 'payment_type' => null]);
+        $e = $this->order('cod', '6281234567894', ['name' => 'Eka Chat', 'payment_type_source' => 'chat']);
+        $f = $this->order('transfer', '6281234567895', ['name' => 'Fajar Belum Bayar']);
         $this->actingInTenant($this->adminOf($this->shop), $this->shop);
 
-        Livewire::test(ListLeads::class)->callTableBulkAction('bulkCreateShipments', [$a, $b, $c]);
+        Livewire::test(ListLeads::class)->callTableBulkAction('bulkCreateShipments', [$a, $b, $c, $d, $e, $f]);
+        $notices = new Notifications;
+        $notices->mount();
+        $body = (string) $notices->notifications->first(fn ($n) => $n->getTitle() === '2 kiriman dibuat')?->getBody();
+        $this->assertStringContainsString('Dewi Blank: cara bayar belum dipastikan (COD atau transfer)', $body);
+        $this->assertStringContainsString('Eka Chat: cara bayar belum dipastikan', $body);
+        $this->assertStringContainsString('Fajar Belum Bayar: pembayaran transfer belum dikonfirmasi', $body);
 
         $this->assertSame(2, $this->inShop(fn () => Shipment::query()->count()));
-        $this->assertNull($this->inShop(fn () => Shipment::query()->where('lead_id', $c->id)->first()));
+        $this->assertSame([$a->id, $b->id], $this->inShop(fn () => Shipment::query()->orderBy('lead_id')->pluck('lead_id')->all()));
 
         Livewire::test(ListLeads::class)->callTableBulkAction('bulkShipmentLabels', [$a, $b])->assertNotified('2 label digabung · 0 dilewati');
     }
@@ -1291,5 +1303,84 @@ class EverproShippingTest extends TestCase
         $this->inShop(fn () => app(Shipments::class)->book($lead, $draft));
         $order = $this->callsTo('/shipment/v2/orders')[0]['body'];
         $this->assertSame([18000, 313000], [$order['shipment_price'], $order['cod_price']]);
+    }
+
+    public function test_buat_resi_never_assumes_transfer_when_the_way_of_paying_is_unknown(): void
+    {
+        $this->configure();
+        $lead = $this->order('cod', extra: ['payment_type' => null]);
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+
+        $draft = $this->inShop(fn () => app(Shipments::class)->draft($lead));
+        $this->assertFalse($draft->ok());
+        $this->assertContains('Cara bayar belum dipastikan: pilih COD atau Transfer (sudah lunas).', $draft->problems);
+        $this->assertSame([], $this->callsTo('/shipment/v2/rates'), 'Not priced as transfer behind the agent\'s back.');
+
+        // Not without picking
+        $page = Livewire::test(EditLead::class, ['record' => $lead->getRouteKey()])->mountAction('createShipment');
+        $page->callMountedAction()->assertHasActionErrors(['payment' => 'required']);
+        $this->assertSame([], $this->callsTo('/shipment/v2/orders'));
+
+        // Picked COD: saved to the lead as confirmed, and booked as COD
+        $page->setActionData(['payment' => 'cod'])->callMountedAction()->assertHasNoActionErrors();
+        $lead = $this->inShop(fn () => $lead->fresh());
+        $this->assertSame(['cod', null], [$lead->payment_type, $lead->payment_type_source]);
+        $order = $this->callsTo('/shipment/v2/orders')[0]['body'];
+        $this->assertTrue($order['is_cod']);
+        $this->assertSame(310000, $order['cod_price']);
+        $this->assertTrue($this->inShop(fn () => $lead->activities()->where('body', 'like', 'Cara bayar dipastikan%')->exists()));
+    }
+
+    public function test_cod_written_in_the_chat_is_suggested_and_still_confirmed_by_the_agent(): void
+    {
+        $this->configure();
+        $lead = $this->order('cod', extra: ['payment_type' => null]);
+
+        foreach (['C0D aja kak' => 'cod', 'kak saya pakai cod ya, nanti dibayar pas paketnya sampai di rumah' => 'cod', 'tf aja min' => 'transfer'] as $text => $expected) {
+            $this->inShop(fn () => $lead->fresh()->forceFill(['payment_type' => null, 'payment_type_source' => null])->save());
+            $this->inbound($text);
+            $fresh = $this->inShop(fn () => $lead->fresh());
+            $this->assertSame([$expected, 'chat'], [$fresh->payment_type, $fresh->payment_type_source], $text);
+        }
+
+        $this->inbound('COD min');
+        $lead = $this->inShop(fn () => $lead->fresh());
+        $this->assertSame('cod', $this->inShop(fn () => app(Shipments::class)->paymentSuggestion($lead)));
+        $this->assertNull(Shipments::payment($lead), 'Read from the chat: not trusted for Buat resi');
+        $this->assertFalse($this->inShop(fn () => app(Shipments::class)->draft($lead))->ok());
+        $this->assertTrue($this->inShop(fn () => app(Shipments::class)->draft($lead, ['payment' => 'cod']))->ok());
+
+        // A blank lead: the suggestion is read from its messages without saving
+        $this->inShop(fn () => $lead->forceFill(['payment_type' => null, 'payment_type_source' => null])->save());
+        $this->assertSame('cod', $this->inShop(fn () => app(Shipments::class)->paymentSuggestion($lead->fresh())));
+        $this->assertNull($this->inShop(fn () => $lead->fresh()->payment_type));
+
+        // An agent's choice is not undone by re-reading old messages
+        $this->inShop(fn () => $lead->fresh()->forceFill(['payment_type' => 'transfer', 'paid_at' => now()])->save());
+        $this->inShop(fn () => app(ChatShippingDetails::class)->fromConversation($lead->fresh()));
+        $this->assertSame(['transfer', null], $this->inShop(fn () => [$lead->fresh()->payment_type, $lead->fresh()->payment_type_source]));
+    }
+
+    public function test_a_transfer_nobody_has_seen_is_warned_about_and_checked_first(): void
+    {
+        $this->configure();
+        $lead = $this->order('transfer');
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+
+        $draft = $this->inShop(fn () => app(Shipments::class)->draft($lead));
+        $this->assertTrue($draft->ok());
+        $this->assertTrue($draft->unpaid);
+        $this->assertStringContainsString('⚠ Pembayaran transfer belum dikonfirmasi.', $draft->summary());
+
+        $page = Livewire::test(EditLead::class, ['record' => $lead->getRouteKey()])->mountAction('createShipment');
+        $page->callMountedAction()->assertHasActionErrors(['transfer_checked' => 'accepted']);
+        $this->assertSame([], $this->callsTo('/shipment/v2/orders'));
+        $page->setActionData(['transfer_checked' => true])->callMountedAction()->assertHasNoActionErrors();
+        $this->assertFalse($this->callsTo('/shipment/v2/orders')[0]['body']['is_cod']);
+
+        // Paid (or a proof came in): no warning
+        $paid = $this->order('transfer', '6281234567899', ['paid_at' => now()]);
+        $this->assertFalse($this->inShop(fn () => app(Shipments::class)->draft($paid))->unpaid);
+        $this->assertStringContainsString('Bukan COD: pembeli sudah bayar di muka.', $this->inShop(fn () => app(Shipments::class)->draft($paid))->summary());
     }
 }

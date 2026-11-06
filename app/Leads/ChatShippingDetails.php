@@ -99,6 +99,11 @@ class ChatShippingDetails
             $state = $this->apply($state, ['address' => $state['shipping_address'], 'parts' => $this->parser->addressParts($state['shipping_address']), 'fill' => true]);
         }
 
+        // Re-reading old messages never undoes a way of paying an agent confirmed; a new message may (and is asked again).
+        if (filled($lead->payment_type) && $lead->payment_type_source === null) {
+            $state['payment_type'] = $lead->payment_type;
+        }
+
         return $this->finish($lead, $state, $save);
     }
 
@@ -302,6 +307,11 @@ class ChatShippingDetails
             }
         }
 
+        // Read from the chat, not confirmed: "Buat resi" asks the agent first.
+        if (isset($changes['payment_type'])) {
+            $changes['payment_type_source'] = 'chat';
+        }
+
         if (filled($state['product']) && $lead->property_id === null && ($match = $this->products->match(null, $state['product'])) !== null) {
             $changes['property_id'] = $match['product']->getKey();
         }
@@ -316,6 +326,7 @@ class ChatShippingDetails
         $labels = $this->labels($changes, $original, $parts);
 
         if ($save && $changes !== []) {
+            $lead->paymentFromChat = isset($changes['payment_type']);
             $lead->forceFill($changes + (isset($changes['property_id']) ? ['product_source' => 'chat'] : []))->save();
 
             if ($activity && $labels !== []) {

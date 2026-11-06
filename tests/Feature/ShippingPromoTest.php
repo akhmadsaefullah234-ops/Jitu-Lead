@@ -10,6 +10,7 @@ use App\Models\Property;
 use App\Models\Stage;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Shipping\Shipments\Shipments;
 use App\Shipping\Shipping;
 use App\Shipping\ShippingPromos;
 use App\Shipping\ShippingQuote;
@@ -139,5 +140,32 @@ class ShippingPromoTest extends TestCase
         $rules = ShippingPromos::rules($this->kaos->fresh()->shipping_promos);
         $this->assertSame([['area' => 'outside_java_bali', 'provinces' => [], 'type' => 'discount', 'amount' => 25000, 'min_quantity' => 1, 'label' => '']], $rules);
         $this->assertSame(['JNE REG' => 37000, 'SiCepat REG' => 55000], $this->prices($this->quote('Makassar', [['product_id' => $this->kaos->id, 'jumlah' => 1]])));
+    }
+
+    public function test_a_way_of_paying_the_ai_only_heard_stays_unconfirmed_for_buat_resi(): void
+    {
+        $stage = $this->inShop(fn () => Stage::query()->orderBy('position')->value('id'));
+        $lead = $this->inShop(fn () => Lead::create(['name' => 'Rina', 'phone' => '+6281234560438', 'stage_id' => $stage]));
+        $admin = $this->shop->users()->first();
+        $order = ['items' => [['product_id' => $this->tas->id, 'jumlah' => 1]], 'alamat' => 'Jl. Beliang XI B, RT 001/RW 022', 'kota' => 'Makassar', 'nama' => 'Rina'];
+
+        // Draft "dicatat COD": the lead says COD, from the chat
+        $this->inShop(fn () => app(RecordOrder::class)($lead, $order + ['status' => 'draft', 'pembayaran' => 'cod'], $admin, 'AI'));
+        $lead = $lead->fresh();
+        $this->assertSame(['cod', 'chat'], [$lead->payment_type, $lead->payment_type_source]);
+        $this->assertNull(Shipments::payment($lead));
+
+        // Confirmed without a way of paying: assumed transfer, not confirmed
+        $other = $this->inShop(fn () => Lead::create(['name' => 'Budi', 'phone' => '+6281234560439', 'stage_id' => $stage]));
+        $this->inShop(fn () => app(RecordOrder::class)($other, $order + ['status' => 'konfirmasi', 'kurir' => 'JNE REG'], $admin, 'AI'));
+        $this->assertSame(['transfer', 'chat'], [$other->fresh()->payment_type, $other->fresh()->payment_type_source]);
+
+        // Confirmed with COD: confirmed
+        $this->inShop(fn () => app(RecordOrder::class)($lead, $order + ['status' => 'konfirmasi', 'kurir' => 'JNE REG', 'pembayaran' => 'cod'], $admin, 'AI'));
+        $this->assertSame(['cod', null], [$lead->fresh()->payment_type, $lead->fresh()->payment_type_source]);
+
+        // An agent editing it confirms it
+        $this->inShop(fn () => $other->fresh()->update(['payment_type' => 'cod']));
+        $this->assertNull($other->fresh()->payment_type_source);
     }
 }

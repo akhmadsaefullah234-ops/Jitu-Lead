@@ -37,6 +37,9 @@ class ChatOrderParser
     ];
 
     /** Words that say an address is a new one. */
+    /** "pakai COD", "bayar tf", "COD aja", "sistem cod", "via transfer" */
+    private const PAYMENT_CHOICE = '/\b(?:pakai|pake|bayar(?:nya)?|sistem|via|lewat|metode|mau|pilih)\s+(?:c[o0]d|transfer|tf|trf)\b|\b(?:c[o0]d|transfer|tf)\s+(?:aja|saja|ya|yah|min|kak|ka|kk)\b/iu';
+
     private const NEW_ADDRESS = '/\b(?:ganti|ubah|pindah|tukar)\s+alamat|\balamat(?:nya)?\s+(?:saya\s+|kirim(?:nya)?\s+)?(?:ganti|diganti|baru|berubah|beda|lain|pindah|diubah)\b|\b(?:tolong\s+)?(?:di)?kirim(?:kan|in)?\s+ke\s+(?:alamat|sini|jl|jln|jalan|gg|perum|komplek|kp|desa|rumah|kantor|toko)\b/iu';
 
     /** Words of a reply that is not a landmark ("nanti saya kirim", "belum tau"). */
@@ -301,7 +304,8 @@ class ChatOrderParser
 
         $out = $parts === [] ? [] : ['parts' => $parts];
 
-        if (mb_strlen($text) <= 40 && ($payment = self::payment($text)) !== null && $parts === []) {
+        // A short answer ("COD", "tf aja kak"), or a longer one that says how it pays ("saya pakai COD ya kak, ...")
+        if ((mb_strlen($text) <= 40 || preg_match(self::PAYMENT_CHOICE, $text)) && ($payment = self::payment($text)) !== null && $parts === []) {
             $out['payment'] = $payment;
         }
 
@@ -310,7 +314,7 @@ class ChatOrderParser
 
     private static function payment(string $text): ?string
     {
-        $cod = preg_match('/\bcod\b|bayar\s+di\s+tempat|\bbdt\b/iu', $text) === 1;
+        $cod = preg_match('/\bc[o0]d\b|bayar\s+di\s+tempat|\bbdt\b/iu', $text) === 1;
         $transfer = preg_match('/\b(?:transfer|tf|trf|tranfer|bank|bca|bri|bni|mandiri)\b/iu', $text) === 1;
 
         return ($cod xor $transfer) ? ($cod ? 'cod' : 'transfer') : null;

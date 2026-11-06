@@ -29,7 +29,7 @@ use LogicException;
     'budget_min', 'budget_max', 'payment_method', 'property_id', 'survey_at',
     'survey_location', 'unit', 'deal_value', 'lost_reason_id', 'custom_fields', 'stage_entered_at',
     'variant', 'quantity', 'shipping_address', 'courier', 'shipping_cost', 'order_items',
-    'payment_type', 'payment_proof_at', 'paid_at', 'shipping_province', 'tracking_number', 'shipped_at', 'shipping_address_parts',
+    'payment_type', 'payment_type_source', 'payment_proof_at', 'paid_at', 'shipping_province', 'tracking_number', 'shipped_at', 'shipping_address_parts',
     'ad_id', 'ad_title', 'ad_url', 'product_source',
 ])]
 class Lead extends Model
@@ -45,6 +45,9 @@ class Lead extends Model
         'property_id' => Property::class,
         'lost_reason_id' => LostReason::class,
     ];
+
+    /** Set for a save whose way of paying was read from the chat (kept unconfirmed); any other change confirms it. */
+    public bool $paymentFromChat = false;
 
     protected static function booted(): void
     {
@@ -63,6 +66,13 @@ class Lead extends Model
                 && ! Membership::query()->where('tenant_id', $tenantId)->where('user_id', $lead->owner_id)->exists()) {
                 throw new LogicException("Lead owner must be a member of the lead's tenant.");
             }
+
+            // A way of paying set by anyone but the chat reader (an agent, the order form, a confirmed order) is confirmed.
+            if ($lead->isDirty('payment_type') && ! $lead->isDirty('payment_type_source') && ! $lead->paymentFromChat) {
+                $lead->payment_type_source = null;
+            }
+
+            $lead->paymentFromChat = false;
 
             // The clock for "no response yet" starts whenever someone new is given the lead.
             if ($lead->isDirty('owner_id') && ! $lead->isDirty('assigned_at')) {
