@@ -100,6 +100,12 @@ class EverproShippingTest extends TestCase
 
     private bool $noAwb = false;
 
+    /**
+     * Everpro's own order list (GET /shipment/v1/orders), newest first. A prepaid booking lands here under
+     * Everpro's own TRD… number, whatever client_order_no was sent; "awb_number" null = follows $noAwb.
+     */
+    private array $remoteOrders = [];
+
     /** Everpro refuses /generate (once per value set). */
     private ?string $generateError = null;
 
@@ -183,17 +189,39 @@ class EverproShippingTest extends TestCase
             $path === '/shipment/v2/rates' => $ok(self::ratesFixture(($r->data()['is_cod'] ?? false) === true)),
             $path === '/shipment/v1/pickup-times' => $ok(['available_pickup_time' => [['rate_code' => 'REG23', 'pickup_time_list' => [['date' => '2026-11-05', 'pickup_times' => [['start_at' => '2026-11-05T07:00:00Z', 'end_at' => '2026-11-05T09:00:00Z']]]]]]]),
             $path === '/shipment/v2/orders' && $this->orderError !== null => Http::response(['message' => $this->orderError], 422),
-            $path === '/shipment/v2/orders' && $this->orderDataNull => $ok(null),
+            $path === '/shipment/v2/orders' && $this->orderDataNull => $this->listed($r, $ok(null)),
             str_ends_with($path, '/generate') && $this->generateError !== null => Http::response(['message' => $this->generateError], 422),
-            $path === '/shipment/v2/orders' => $ok(['client_order_no' => $r->data()['client_order_no'], 'order_reference_id' => 'ER-'.count($this->callsTo('/shipment/v2/orders')), 'actual_price' => 18000]),
-            str_ends_with($path, '/generate') => $ok(['awb_number' => $this->noAwb ? null : 'JNE0001234']),
-            str_ends_with($path, '/awb') => $ok(['awb_number' => $this->noAwb ? null : 'JNE0001234', 'order_reference_id' => 'ER-LATER']),
+            $path === '/shipment/v1/orders' => $ok(['orders' => array_map(fn ($o) => ['awb_number' => $o['awb_number'] ?? ($this->noAwb ? '' : $o['_awb'] ?? 'JNE0001234')] + $o, $this->remoteOrders),
+                'pagination' => ['page' => 1, 'limit' => 50, 'total_page' => 1, 'total_data' => count($this->remoteOrders)]]),
+            $path === '/shipment/v2/orders' => $this->listed($r, null) ?? $ok(['client_order_no' => $r->data()['client_order_no'], 'order_reference_id' => 'ER-'.count($this->callsTo('/shipment/v2/orders')), 'actual_price' => 18000]),
+            str_ends_with($path, '/generate') => $ok(['awb_number' => $this->noAwb ? null : (collect($this->remoteOrders)->firstWhere('shipment_order_no', basename(dirname($path)))['_awb'] ?? 'JNE0001234')]),            str_ends_with($path, '/awb') => $ok(['awb_number' => $this->noAwb ? null : 'JNE0001234', 'order_reference_id' => 'ER-LATER']),
             str_ends_with($path, '/label') => $ok(['url_label_pdf' => 'https://labels.example.com/'.basename(dirname($path)).'.pdf']),
             str_ends_with($path, '/cancel') => $ok(null),
             $path === '/shipment/v1/orders/track' => $ok(array_shift($this->track) ?? []),
             str_ends_with($path, '/track') => $ok(array_shift($this->track) ?? ['awb_number' => 'JNE0001234', 'status' => 'WAITING', 'tracking_history' => []]),
             default => Http::response(['message' => 'not found'], 404),
         };
+    }
+
+    /** Puts a booking into Everpro's order list, as Everpro numbers it, and answers $answer. */
+    private function listed(Request $r, $answer)
+    {
+        $body = $r->data();
+        $n = count($this->remoteOrders) + 1;
+        array_unshift($this->remoteOrders, [
+            '_awb' => $n === 1 ? 'JNE0001234' : 'JNE000'.(1233 + $n),
+            'shipment_order_no' => 'TRD20261105'.str_pad((string) (count($this->remoteOrders) + 1), 5, '0', STR_PAD_LEFT),
+            'client_order_no' => 'TRD20261105'.str_pad((string) (count($this->remoteOrders) + 1), 5, '0', STR_PAD_LEFT),
+            'order_reference_id' => '', 'awb_number' => null, 'status_id' => 100, 'status' => 'ORDER CREATED',
+            'order_date' => now('Asia/Jakarta')->format('Y-m-d H:i:s'),
+            'receiver_name' => $body['receiver_name'] ?? '', 'receiver_phone_number' => $body['receiver_phone'] ?? '',
+            'package_desc' => $body['package_desc'] ?? '', 'package_price' => $body['package_price'] ?? 0,
+            'courier_detail' => 'JNE Reguler', 'is_cod' => (bool) ($body['is_cod'] ?? false), 'total_cod' => ($body['is_cod'] ?? false) ? (int) $body['cod_price'] : 0,
+            'shipment_price' => 18000, 'cod_fee' => ($body['is_cod'] ?? false) ? 4000 : 0, 'total_cod_disbursement' => ($body['is_cod'] ?? false) ? (int) $body['cod_price'] - 22000 : 0,
+            'cashback' => 2000, 'label_url' => '',
+        ]);
+
+        return $answer;
     }
 
     /** A label PDF of its own size per tracking number (width from the digits), a server error for AWB-DOWN, a web page for AWB-HTML. */
@@ -208,7 +236,7 @@ class EverproShippingTest extends TestCase
         return match ($awb) {
             'AWB-DOWN' => Http::response('error', 500),
             'AWB-HTML' => Http::response('<html>login</html>', 200, ['Content-Type' => 'text/html']),
-            default => Http::response(self::pdf((int) preg_replace('/\D/', '', $awb) ?: 100), 200, ['Content-Type' => 'application/pdf']),
+            default => Http::response(self::pdf(min(2000, (int) preg_replace('/\D/', '', $awb)) ?: 100), 200, ['Content-Type' => 'application/pdf']),
         };
     }
 
@@ -685,7 +713,7 @@ class EverproShippingTest extends TestCase
         // Label and cancel (before pickup only).
         Livewire::test(EditLead::class, ['record' => $lead->getRouteKey()])->assertActionVisible('shipmentLabel')->callAction('cancelShipment');
         $this->assertSame(Shipment::CANCELLED, $this->shipment()->state);
-        $this->assertCount(1, array_filter($this->calls, fn ($c) => str_ends_with($c['path'], $shipment->client_order_no.'/cancel')));
+        $this->assertCount(1, array_filter($this->calls, fn ($c) => str_ends_with($c['path'], 'TRD2026110500001/cancel')), 'Cancelled by Everpro\'s own number.');
 
         // A new parcel after cancelling gets the next number.
         $this->book($lead);
@@ -1021,6 +1049,187 @@ class EverproShippingTest extends TestCase
 
         $this->assertSame([['AWB Number', 'Receiver Name', 'Receiver Phone'], ['JNE8800000009', 'Rina', '6281234567890']], $rows);
         $this->assertSame(['awb' => 0, 'name' => 1, 'phone' => 2, 'courier' => null], ResiImport::guessColumns($rows[0]));
+    }
+
+    // ---- Everpro's own order numbers (TRD…) ----------------------------------------------------------------------
+
+    /** Shipment #16 as GET /shipment/v1/orders showed it in production (lead #358). */
+    private static function trdOrder(array $extra = []): array
+    {
+        return $extra + [
+            'shipment_order_no' => 'TRD2026110602264', 'client_order_no' => 'TRD2026110602264', 'order_reference_id' => '', 'awb_number' => '001798295816',
+            'status_id' => 300, 'status' => 'WAITING FOR PICK UP', 'order_date' => '2026-11-05 09:40:00', 'pickup_time' => 1793937600,
+            'pickup_time_date' => '2026-11-05', 'pickup_time_range' => '14:00 - 16:00',
+            'receiver_name' => 'Gustinah', 'receiver_phone_number' => '6281234567890', 'receiver_location_detail' => 'Sekeloa, Coblong, Kota Bandung', 'receiver_address_note' => '',
+            'package_desc' => 'Tas Badminton Hitam x2', 'package_price' => 300000, 'courier_detail' => 'SiCepat Reguler',
+            'shipment_price' => 52900, 'cod_fee' => 4795, 'total_cod' => 144000, 'total_cod_disbursement' => 86305, 'is_cod' => true, 'cashback' => 13225,
+            'label_url' => '', 'insurance_price' => 0, 'weight' => 2, 'length' => 30, 'width' => 20, 'height' => 10,
+        ];
+    }
+
+    public function test_a_booking_answered_with_data_null_is_found_in_everpros_order_list(): void
+    {
+        Storage::fake('local');
+        $this->configure();
+        $this->orderDataNull = true;
+        // Someone else's parcel, and the same buyer's parcel of yesterday, are never taken.
+        $this->remoteOrders = [
+            self::trdOrder(['shipment_order_no' => 'TRD2026110500777', 'awb_number' => '001700000001', 'receiver_phone_number' => '6281299998888', 'total_cod' => 310000, 'order_date' => '2026-11-05 09:59:00']),
+            self::trdOrder(['shipment_order_no' => 'TRD2026110400123', 'awb_number' => '001700000002', 'total_cod' => 310000, 'order_date' => '2026-11-04 15:00:00']),
+        ];
+        $lead = $this->order('cod');
+
+        $shipment = $this->book($lead);
+
+        $this->assertSame(Shipment::SHIPPED, $shipment->state);
+        $this->assertSame(['TRD2026110500003', 'JNE0001236'], [$shipment->provider_order_no, $shipment->awb], 'The new order, under Everpro\'s own number.');
+        $this->assertSame([18000, 4000, 288000, 2000], [$shipment->price, $shipment->cod_fee, $shipment->cod_disbursement, $shipment->cashback]);
+        $this->assertSame([], array_filter($this->calls, fn ($c) => str_ends_with($c['path'], '/generate')), 'Already has its number: nothing generated.');
+        $this->assertNotNull($shipment->label_path, 'Label asked for by the tracking number though the list has no label_url.');
+        $this->assertTrue(collect($this->calls)->contains(fn ($c) => $c['path'] === '/shipment/v1/orders/JNE0001236/label'));
+        $this->assertCount(1, array_filter($this->sent(), fn ($b) => str_contains((string) $b, 'Nomor resi: JNE0001236')));
+        $this->assertSame(['Ongkir Rp18.000', 'Biaya COD Rp4.000', 'Cair Rp288.000', 'Cashback Rp2.000'], ShipmentResource::fees($shipment));
+
+        // Cancelled by Everpro's number; the next parcel of the same buyer takes the next order, never this one again.
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+        $this->inShop(fn () => app(Shipments::class)->cancel($shipment, $this->adminOf($this->shop)));
+        $this->assertTrue(collect($this->calls)->contains(fn ($c) => $c['path'] === '/shipment/v1/orders/TRD2026110500003/cancel'));
+        $next = $this->book($lead->fresh());
+        $this->assertSame('TRD2026110500004', $next->provider_order_no);
+    }
+
+    public function test_a_prepaid_order_without_a_number_yet_is_generated_by_everpros_number(): void
+    {
+        $this->configure();
+        $this->orderDataNull = true;
+        $this->noAwb = true;
+        $shipment = $this->book($this->order('transfer', extra: ['paid_at' => now()]));
+
+        $generate = array_values(array_filter($this->calls, fn ($c) => str_ends_with($c['path'], '/generate')));
+        $this->assertSame(['/shipment/v1/orders/TRD2026110500001/generate'], array_column($generate, 'path'), 'Never by our JL-… number, which Everpro does not know.');
+        $this->assertSame([Shipment::ORDERED, 'TRD2026110500001'], [$shipment->state, $shipment->provider_order_no]);
+        $this->assertFalse($shipment->is_cod);
+    }
+
+    public function test_coba_lagi_fixes_shipment_16_from_everpros_order_list_and_tells_the_buyer_once(): void
+    {
+        Storage::fake('local');
+        $this->configure();
+        $lead = $this->order('cod', '6281234567890', ['name' => 'Gustinah']);
+        // As in production: booked before this fix, "data": null, then 404 for our JL-… number until 30 minutes passed.
+        $shipment = $this->inShop(fn () => Shipment::query()->forceCreate([
+            'lead_id' => $lead->id, 'provider' => 'everpro', 'sequence' => 1, 'client_order_no' => 'JL-7-'.$lead->id.'-1', 'rate_code' => 'REG',
+            'courier' => 'SiCepat REG', 'state' => Shipment::ORDERED, 'is_cod' => true, 'cod_amount' => 144000, 'price' => 16000, 'weight_grams' => 2000,
+            'request' => ['description' => 'Tas Badminton Hitam x2', 'awb_requested_at' => now()->subMinutes(35)->toIso8601String(), 'awb_tries' => 15],
+            'error' => 'Nomor resi belum terbit setelah 30 menit. Coba lagi atau cek di Everpro.',
+            'created_at' => now()->subMinutes(25),
+        ]));
+        $this->remoteOrders = [
+            self::trdOrder(['shipment_order_no' => 'TRD2026110500900', 'awb_number' => '001700000003', 'receiver_phone_number' => '6281299998888', 'order_date' => '2026-11-05 09:50:00']),
+            self::trdOrder(),
+        ];
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+
+        Livewire::test(ListShipments::class)->set('activeTab', 'action')->callTableAction('retry', $shipment)->assertNotified('Resi 001798295816 terbit.');
+
+        $shipment = $shipment->fresh();
+        $this->assertSame([Shipment::SHIPPED, '001798295816', 'TRD2026110602264', null], [$shipment->state, $shipment->awb, $shipment->provider_order_no, $shipment->error]);
+        $this->assertSame([52900, 4795, 86305, 13225], [$shipment->price, $shipment->cod_fee, $shipment->cod_disbursement, $shipment->cashback]);
+        $this->assertNotNull($shipment->label_path, 'Label downloaded.');
+        $this->assertSame([$shipment->id], $this->inShop(fn () => Shipment::query()->tab('unprinted')->pluck('id')->all()), 'In Belum dicetak.');
+        $this->assertSame('001798295816', $lead->fresh()->tracking_number);
+        $this->assertSame([], array_filter($this->calls, fn ($c) => str_contains($c['path'], 'JL-')), 'Our own number is never asked for again.');
+        $this->assertSame([], $this->callsTo('/shipment/v2/orders'), 'Never booked twice.');
+
+        // Running the repair afterwards changes nothing and sends nothing more.
+        $this->artisan('shipping:fix-everpro-orders', ['--apply' => true])->assertSuccessful();
+        $this->assertCount(1, array_filter($this->sent(), fn ($b) => str_contains((string) $b, 'Nomor resi: 001798295816')), 'The resi message, once.');
+    }
+
+    public function test_coba_lagi_on_a_failed_parcel_that_everpro_did_book_never_books_it_twice(): void
+    {
+        Storage::fake('local');
+        $this->configure();
+        $lead = $this->order('cod', '6281234567890', ['name' => 'Gustinah']);
+        $shipment = $this->inShop(fn () => Shipment::query()->forceCreate([
+            'lead_id' => $lead->id, 'provider' => 'everpro', 'sequence' => 1, 'client_order_no' => 'JL-7-'.$lead->id.'-1', 'rate_code' => 'REG',
+            'courier' => 'SiCepat REG', 'state' => Shipment::FAILED, 'is_cod' => true, 'cod_amount' => 144000, 'weight_grams' => 2000,
+            'request' => [], 'error' => 'order not found', 'created_at' => now()->subMinutes(25),
+        ]));
+        $this->remoteOrders = [self::trdOrder()];
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+
+        Livewire::test(ListShipments::class)->set('activeTab', 'action')->callTableAction('retry', $shipment)->assertNotified('Resi 001798295816 terbit.');
+
+        $this->assertSame([], $this->callsTo('/shipment/v2/orders'), 'Found in Everpro\'s list: not booked again.');
+        $this->assertSame([Shipment::SHIPPED, 'TRD2026110602264'], [$shipment->fresh()->state, $shipment->fresh()->provider_order_no]);
+    }
+
+    public function test_the_repair_command_matches_a_parcel_left_without_a_number(): void
+    {
+        Storage::fake('local');
+        $this->configure();
+        $lead = $this->order('cod', '6281234567890', ['name' => 'Gustinah']);
+        $shipment = $this->inShop(fn () => Shipment::query()->forceCreate([
+            'lead_id' => $lead->id, 'provider' => 'everpro', 'sequence' => 1, 'client_order_no' => 'JL-7-'.$lead->id.'-1', 'rate_code' => 'REG',
+            'courier' => 'SiCepat REG', 'state' => Shipment::ORDERED, 'is_cod' => true, 'cod_amount' => 144000, 'weight_grams' => 2000,
+            'request' => ['awb_requested_at' => now()->subMinutes(35)->toIso8601String()], 'error' => 'Nomor resi belum terbit setelah 30 menit.', 'created_at' => now()->subMinutes(25),
+        ]));
+        $this->remoteOrders = [self::trdOrder()];
+
+        $this->artisan('shipping:fix-everpro-orders')->expectsOutputToContain('#'.$shipment->id.': TRD2026110602264 → 001798295816')->assertSuccessful();
+        $this->assertSame(Shipment::ORDERED, $shipment->fresh()->state, 'A dry run changes nothing.');
+        $this->assertSame([], array_filter($this->sent(), fn ($b) => str_contains((string) $b, '001798295816')), 'Nothing sent on a dry run.');
+
+        $this->artisan('shipping:fix-everpro-orders', ['--apply' => true])->assertSuccessful();
+        $this->assertSame([Shipment::SHIPPED, '001798295816'], [$shipment->fresh()->state, $shipment->fresh()->awb]);
+        $this->assertCount(1, array_filter($this->sent(), fn ($b) => str_contains((string) $b, 'Nomor resi: 001798295816')));
+    }
+
+    public function test_imported_trd_numbers_are_swapped_for_the_real_tracking_number_without_a_message(): void
+    {
+        $this->configure();
+        $this->remoteOrders = [
+            self::trdOrder(['shipment_order_no' => 'TRD2026110508728', 'client_order_no' => 'TRD2026110508728', 'awb_number' => 'JO0330735222', 'courier_detail' => 'J&T Express EZ', 'receiver_phone_number' => '6281234567891']),
+            self::trdOrder(['shipment_order_no' => 'TRD2026110508509', 'client_order_no' => 'TRD2026110508509', 'awb_number' => '6329732600175284', 'courier_detail' => 'SiCepat Reguler', 'receiver_phone_number' => '6281234567892']),
+        ];
+        // Imported on 6 Nov, before this fix: Everpro's order number stored as the tracking number.
+        $broken = [];
+        foreach (['6281234567891' => 'TRD2026110508728', '6281234567892' => 'TRD2026110508509', '6281234567893' => 'TRD2026110500000'] as $phone => $trd) {
+            $lead = $this->packed($phone, ['name' => 'Pembeli '.substr($phone, -2)]);
+            $this->inShop(fn () => $lead->forceFill(['tracking_number' => $trd, 'courier' => 'JNE'])->save());
+            $broken[$trd] = $this->inShop(fn () => Shipment::query()->forceCreate(['lead_id' => $lead->id, 'provider' => 'everpro', 'source' => Shipment::MANUAL, 'sequence' => 1,
+                'client_order_no' => 'MAN-'.$this->shop->id.'-'.$lead->id.'-1', 'awb' => $trd, 'courier' => 'JNE', 'state' => Shipment::SHIPPED,
+                'status' => ShipmentStatus::AWB_CREATED, 'awb_notified_at' => now(), 'linked_at' => now(), 'track_failures' => 3, 'untrackable_at' => now()]));
+        }
+        $before = count($this->sent());
+
+        $this->artisan('shipping:fix-everpro-orders')->expectsOutputToContain('TRD2026110508728 → JO0330735222')->assertSuccessful();
+        $this->assertSame('TRD2026110508728', $broken['TRD2026110508728']->fresh()->awb, 'A dry run changes nothing.');
+
+        $this->artisan('shipping:fix-everpro-orders', ['--apply' => true])
+            ->expectsOutputToContain('TRD2026110500000 → dilewati, tidak ditemukan di daftar order Everpro')->assertSuccessful();
+
+        $fixed = $broken['TRD2026110508728']->fresh();
+        $this->assertSame(['JO0330735222', 'TRD2026110508728', 'J&T Express EZ', null, 0], [$fixed->awb, $fixed->provider_order_no, $fixed->courier, $fixed->untrackable_at, $fixed->track_failures]);
+        $this->assertSame('JO0330735222', $fixed->lead->tracking_number);
+        $this->assertSame('6329732600175284', $broken['TRD2026110508509']->fresh()->lead->tracking_number);
+        $this->assertSame('TRD2026110500000', $broken['TRD2026110500000']->fresh()->awb, 'Unknown: left for a person.');
+        $this->assertSame($before, count($this->sent()), 'Nothing sent to any buyer.');
+
+        // Linking or importing a TRD… number from now on stores the real tracking number.
+        $rina = $this->packed('6281234567890');
+        $this->remoteOrders[] = self::trdOrder(['shipment_order_no' => 'TRD2026110509999', 'awb_number' => 'JX1234567890', 'courier_detail' => 'J&T Cargo']);
+        $this->travel(5)->minutes();
+        [$linked] = $this->link($rina, 'trd2026110509999');
+        $this->assertSame(['JX1234567890', 'TRD2026110509999', 'J&T Cargo'], [$linked->awb, $linked->provider_order_no, $linked->courier]);
+        $this->assertSame('JX1234567890', $rina->fresh()->tracking_number);
+        $this->assertSame($before, count($this->sent()));
+        $this->assertSame(ResiImport::LINKED, $this->inShop(fn () => ResiImport::match([['TRD2026110509999']], ['awb' => 0, 'name' => null, 'phone' => null, 'courier' => null]))[0]['status'], 'Known by its order number too.');
+
+        $this->expectException(CarrierException::class);
+        $this->expectExceptionMessage('TRD2026110500000 adalah nomor order Everpro, bukan nomor resi');
+        $this->link($this->packed('6281234567894'), 'TRD2026110500000');
     }
 
     // ---- Bulk ----------------------------------------------------------------------------------------------------
@@ -1757,7 +1966,7 @@ class EverproShippingTest extends TestCase
         $generate = array_values(array_filter($this->calls, fn ($c) => str_ends_with($c['path'], '/generate')));
         $this->assertCount(1, $generate);
         $this->assertSame('{}', $generate[0]['raw'], 'An object, never [].');
-        $this->assertSame([Shipment::ORDERED, null, null], [$shipment->state, $shipment->order_id, $shipment->error], '"data": null is not an error.');
+        $this->assertSame([Shipment::ORDERED, 'TRD2026110500001', null], [$shipment->state, $shipment->provider_order_no, $shipment->error], '"data": null is not an error: the order is found in Everpro\'s list.');
         $this->assertSame('Menunggu nomor resi', ShipmentResource::status($shipment));
         $this->assertSame([$shipment->id], $this->inShop(fn () => Shipment::query()->tab('awaiting')->pluck('id')->all()));
         Queue::assertPushed(FetchShipmentAwb::class, fn ($job) => $job->shipmentId === $shipment->id && $job->delay !== null);
@@ -1768,7 +1977,7 @@ class EverproShippingTest extends TestCase
 
         $this->assertCount(1, array_filter($this->calls, fn ($c) => str_ends_with($c['path'], '/generate')));
         $shipment = $this->shipment();
-        $this->assertSame([Shipment::SHIPPED, 'JNE0001234', 'ER-LATER'], [$shipment->state, $shipment->awb, $shipment->order_id]);
+        $this->assertSame([Shipment::SHIPPED, 'JNE0001234', 'TRD2026110500001', 'TRD2026110500001'], [$shipment->state, $shipment->awb, $shipment->provider_order_no, $shipment->order_id], 'Found in Everpro\'s list under its own number.');
         $this->assertNotNull($shipment->label_path, 'Label kept.');
         $this->assertSame([$shipment->id], $this->inShop(fn () => Shipment::query()->tab('unprinted')->pluck('id')->all()));
         $this->assertCount(1, array_filter($this->sent(), fn ($b) => str_contains((string) $b, 'Nomor resi: JNE0001234')), 'The buyer gets the number.');
@@ -1780,7 +1989,7 @@ class EverproShippingTest extends TestCase
         $this->noAwb = true;
         $shipment = $this->book($this->order('cod'));
 
-        $this->assertSame(FetchShipmentAwb::TRIES + 1, count(array_filter($this->calls, fn ($c) => str_ends_with($c['path'], '/awb'))), 'Asked every 2 minutes, 15 times, then stopped.');
+        $this->assertSame(FetchShipmentAwb::TRIES + 1, count($this->callsTo('/shipment/v1/orders')), 'Looked up every 2 minutes, 15 times, then stopped.');
         $shipment = $this->shipment();
         $this->assertSame(Shipment::ORDERED, $shipment->state);
         $this->assertStringContainsString('Nomor resi belum terbit setelah 30 menit', $shipment->error);

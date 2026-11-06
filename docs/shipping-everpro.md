@@ -95,9 +95,17 @@ tidak), juga untuk resi yang tidak dikenal. URL satu agensi tidak bisa menyentuh
 - Nomor HP pengirim dan penerima dikirim ke Everpro sebagai `62…` tanpa "+" atau spasi (08…, +62… dan 8… diubah).
   Everpro menolak format lain walau dokumentasinya menyebut 08 boleh. Nomor yang bukan 10–15 angka ditolak di modal
   tanpa memanggil Everpro.
-- Setelah order v2 diterima (jawabannya boleh `"data": null`), JITU LEAD memanggil `/generate` sekali dengan body `{}`.
-  Body kosong ke Everpro selalu dikirim sebagai objek, bukan `[]`. Nomor resi lalu diminta lewat `GET …/awb` tiap 2
-  menit sampai 30 menit, kecuali callback lebih dulu membawanya. Selama menunggu, kiriman ada di tab **Menunggu resi**
+- Everpro mengabaikan `client_order_no` kita (JL-…) dan mencatat order dengan nomornya sendiri (`TRD…`); jawaban order
+  v2 bisa `"data": null`. Karena itu, setelah order v2 JITU LEAD mencari order baru di `GET /shipment/v1/orders` (2
+  halaman terbaru): nomor HP penerima (62…), COD/bukan, total COD, tanggal order sejak kiriman dibuat, lalu isi paket
+  dan kurir. Order yang sudah dipakai kiriman lain tidak pernah diambil. `shipment_order_no` disimpan sebagai nomor
+  order Everpro (`provider_order_no`, terlihat dan bisa dicari di menu Pengiriman), dan `awb_number` sebagai resi.
+  Generate, batal dan cek order memakai nomor TRD itu; label dan lacak memakai nomor resi. Ongkir, biaya COD, dana cair
+  (`total_cod_disbursement`) dan cashback ikut disimpan dan tampil di kolom **Biaya**. `label_url` di daftar itu
+  kosong, jadi label diambil lewat `GET /shipment/v1/orders/{awb}/label`.
+- Bila resi belum ada di daftar, `/generate` dipanggil sekali per nomor TRD dengan body `{}` (body kosong ke Everpro
+  selalu objek, bukan `[]`). Daftar order lalu dicek lagi tiap 2 menit sampai 30 menit, kecuali callback lebih dulu
+  membawa nomornya. Selama menunggu, kiriman ada di tab **Menunggu resi**
   dengan status "Menunggu nomor resi". Bila setelah 30 menit nomor resi belum ada, kiriman pindah ke **Perlu tindakan**
   dan agen diberi tahu. **Coba lagi** pada kiriman yang sudah dipesan hanya meminta nomor resi lagi, tanpa membuat
   order baru di Everpro.
@@ -215,6 +223,15 @@ Resi yang dibuat manual (mis. di aplikasi atau dashboard Everpro) bisa dihubungk
   tanpa status maupun riwayat), percobaan dihitung. Setelah 3 kali, resi ditandai "tidak bisa dilacak" di lead dan
   pelacakan otomatis berhenti.
 - **Validasi**: satu resi hanya untuk satu lead per agensi, dan formatnya 8–30 huruf/angka dengan minimal 4 angka.
+- **Nomor TRD…** adalah nomor order Everpro, bukan resi. Bila diketik atau diimpor, JITU LEAD mencarinya di daftar
+  order Everpro dan menyimpan nomor resi aslinya (kurir dari Everpro), dengan TRD sebagai nomor order Everpro. Bila
+  order itu tidak ada atau resinya belum terbit, baris ditolak dengan alasannya.
+- **Perbaikan data lama**: `php artisan shipping:fix-everpro-orders` (uji coba; tambahkan `--apply` untuk menyimpan,
+  `--tenant=<id>` untuk satu agensi). Resi impor yang berisi TRD… diganti nomor resi asli di kiriman dan lead tanpa
+  pesan ke pembeli, dan pelacakannya dimulai lagi. Kiriman otomatis yang belum punya resi dicocokkan dengan daftar
+  order Everpro, lalu lewat alur resi biasa (satu pesan resi ke pembeli, label disimpan, masuk Belum dicetak). Log
+  hanya berisi jumlah. **Coba lagi** di Perlu tindakan melakukan pencocokan yang sama untuk satu kiriman; kiriman gagal
+  yang ternyata sudah tercatat di Everpro tidak dipesan dua kali.
 
 ## Alamat dari chat
 

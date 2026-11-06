@@ -25,7 +25,7 @@ use Illuminate\Support\Facades\Log;
  *
  * Nothing logged here holds the credentials, a token or the buyer's details.
  */
-class EverproCarrier implements CarrierProvider, ValidatesPhones
+class EverproCarrier implements CarrierProvider, ListsOrders, ValidatesPhones
 {
     private const TOKEN_MARGIN = 300;
 
@@ -499,6 +499,38 @@ class EverproCarrier implements CarrierProvider, ValidatesPhones
         $awb = $data['awb_number'] ?? null;
 
         return new CarrierOrder($clientOrderNo, isset($data['order_reference_id']) ? (string) $data['order_reference_id'] : null, filled($awb) ? (string) $awb : null);
+    }
+
+    public function recentOrders(int $pages = 2): array
+    {
+        $orders = [];
+
+        for ($page = 1; $page <= max(1, $pages); $page++) {
+            $data = $this->call('get', '/shipment/v1/orders', ['page' => $page, 'limit' => 50]);
+            $rows = Arr::isList((array) $data) ? (array) $data : (array) data_get($data, 'orders', []);
+
+            foreach ($rows as $row) {
+                if (is_array($row) && ($order = RemoteOrder::fromEverpro($row)) !== null) {
+                    $orders[$order->orderNo] = $order;
+                }
+            }
+
+            $last = data_get($data, 'pagination.total_page') ?? data_get($data, 'pagination.last_page') ?? data_get($data, 'pagination.total_pages');
+
+            if (count($rows) < 50 || ($last !== null && $page >= (int) $last)) {
+                break;
+            }
+        }
+
+        $orders = array_values($orders);
+        usort($orders, fn (RemoteOrder $a, RemoteOrder $b) => ($b->orderedAt?->getTimestamp() ?? 0) <=> ($a->orderedAt?->getTimestamp() ?? 0));
+
+        return $orders;
+    }
+
+    public function findOrder(string $orderNo, int $pages = 5): ?RemoteOrder
+    {
+        return collect($this->recentOrders($pages))->first(fn (RemoteOrder $o) => strcasecmp($o->orderNo, $orderNo) === 0);
     }
 
     public function label(string $awb): string
