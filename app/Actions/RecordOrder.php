@@ -118,7 +118,7 @@ class RecordOrder
     }
 
     /**
-     * The buyer has given everything an order needs (name, full address with RT/RW and house number or landmark,
+     * The buyer has given everything an order needs (name, full address with RT/RW, or a house number or landmark without one,
      * product, colour or size, quantity) but has not confirmed it yet: the details go on the lead and it moves to
      * "Order masuk". Nothing is priced into the lead yet; the courier may not be chosen.
      */

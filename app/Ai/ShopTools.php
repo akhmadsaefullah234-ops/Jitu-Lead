@@ -2,6 +2,7 @@
 
 namespace App\Ai;
 
+use App\Leads\AddressCheck;
 use App\Models\Property;
 use App\Models\Tenant;
 use App\Shipping\Shipping;
@@ -69,7 +70,7 @@ class ShopTools
             ],
             [
                 'name' => self::RECORD,
-                'description' => 'Catat pesanan ke data lead. status "draft": data pesanan sudah lengkap (nama, alamat dengan RT/RW dan nomor rumah atau patokan, '
+                'description' => 'Catat pesanan ke data lead. status "draft": data pesanan sudah lengkap (nama, alamat dengan RT/RW, atau nomor rumah/patokan bila tanpa RT/RW, '
                     .'produk, warna/varian, jumlah) tapi pembeli belum konfirmasi; lead pindah ke Order masuk. status "konfirmasi": pembeli sudah memastikan pesanan, '
                     .'kurir, dan cara bayar; ongkir dan total dihitung dari tabel tarif, lalu lead pindah ke Menunggu pembayaran (transfer) atau Dikemas & dikirim (cod).',
                 'input_schema' => [
@@ -77,7 +78,7 @@ class ShopTools
                     'properties' => ['items' => $items] + $destination + [
                         'status' => ['type' => 'string', 'enum' => ['draft', 'konfirmasi'], 'description' => 'draft bila belum dikonfirmasi pembeli, konfirmasi bila sudah.'],
                         'nama' => ['type' => 'string', 'description' => 'Nama penerima.'],
-                        'alamat' => ['type' => 'string', 'description' => 'Alamat kirim lengkap: nama jalan, nomor rumah atau patokan, RT/RW, kelurahan.'],
+                        'alamat' => ['type' => 'string', 'description' => 'Alamat kirim lengkap: nama jalan, nomor rumah atau patokan, RT/RW (atau dusun), kelurahan.'],
                         'kurir' => ['type' => 'string', 'description' => 'Kurir yang dipilih pembeli, persis seperti di hasil cek_ongkir. Wajib untuk konfirmasi.'],
                         'pembayaran' => ['type' => 'string', 'enum' => self::PAYMENTS, 'description' => 'Cara bayar yang dipilih pembeli: transfer atau cod (bayar di tempat). Bawaan transfer.'],
                     ],
@@ -150,7 +151,7 @@ class ShopTools
 
     /**
      * What is still missing before a draft order may be written: the buyer's name, the colour or
-     * size and quantity of every item, and an address with RT/RW plus a house number or landmark.
+     * size and quantity of every item, and an address with RT/RW (or, without one, a house number or landmark).
      */
     public static function orderProblem(array $input): ?string
     {
@@ -167,19 +168,22 @@ class ShopTools
         return self::addressProblem((string) ($input['alamat'] ?? ''));
     }
 
-    /** An address needs its RT/RW and a house number or a landmark ("dekat masjid") to reach the door. */
+    /**
+     * An address with RT/RW is enough (house number and landmark are optional). A dusun address without one (or with
+     * RT/RW 0/000) needs a house number or a landmark ("dekat masjid") to reach the door; any other address is asked
+     * for its RT/RW. See App\Leads\AddressCheck.
+     */
     public static function addressProblem(string $address): ?string
     {
-        $rtRw = '/\bRT\.?\s*\d{1,3}\s*(?:\/|,)?\s*(?:RW\.?\s*)?\d{1,3}\b|\bRT\s*\/\s*RW\s*\d{1,3}\s*\/\s*\d{1,3}\b/iu';
-
-        if (! preg_match($rtRw, $address)) {
-            return 'Tanyakan RT/RW alamat kirim.';
+        if (AddressCheck::textHasRtRw($address)) {
+            return null;
         }
 
-        $rest = preg_replace($rtRw, ' ', $address);
-        $house = '/\b(?:no|nomor|nmr)\.?\s*\d+|\bblok\s*\w+|\b(?:dekat|depan|samping|sebelah|belakang|seberang|patokan|gang|gg)\b|\b\d{1,4}[a-z]?\b(?!\s*\d)/iu';
+        if (AddressCheck::textHasDusun($address) || preg_match(AddressCheck::RT_RW_PATTERN, $address)) {
+            return AddressCheck::textHasLandmark($address) ? null : 'Tanyakan nomor rumah atau patokan alamat kirim (alamat tanpa RT/RW).';
+        }
 
-        return preg_match($house, preg_replace('/\b\d{5}\b/', ' ', $rest)) ? null : 'Tanyakan nomor rumah atau patokan alamat kirim.';
+        return 'Tanyakan RT/RW alamat kirim. Bila tidak ada RT/RW, tanyakan dusun/kampung dan nomor rumah atau patokan.';
     }
 
     /** Drops the orders of an answer that was not used, before the model is asked again. */
@@ -210,7 +214,7 @@ class ShopTools
             'Bila kota/kabupaten tujuan belum jelas, tanyakan kota atau kecamatannya dulu, jangan memanggil tool.',
             'Bila pembeli menulis singkatan atau nama tidak resmi (mis. Jaksel, Tangsel, Kab Bdg, Jogja), sebut tujuannya dengan nama resmi persis seperti kolom "tujuan" di hasil '.self::CHECK.', dan pakai nama resmi itu di alamat pesanan.',
             'Bila hasil tool berstatus '.ShippingQuote::NEEDS_ADMIN.' atau '.ShippingQuote::NOT_AVAILABLE.', panggil tool '.ReplySignals::HANDOFF_TOOL.'.',
-            'Begitu data pesanan lengkap (nama penerima, alamat dengan RT/RW dan nomor rumah atau patokan, kota, produk, warna/ukuran, jumlah) tapi pembeli belum konfirmasi, panggil '.self::RECORD.' dengan status draft, lalu rangkum pesanannya dan minta pembeli konfirmasi, pilih kurir, dan cara bayar (transfer atau COD).',
+            'Begitu data pesanan lengkap (nama penerima, alamat dengan RT/RW, atau nomor rumah/patokan bila tanpa RT/RW, kota, produk, warna/ukuran, jumlah) tapi pembeli belum konfirmasi, panggil '.self::RECORD.' dengan status draft, lalu rangkum pesanannya dan minta pembeli konfirmasi, pilih kurir, dan cara bayar (transfer atau COD).',
             'Setelah pembeli memastikan pesanan, kurir, dan cara bayar, panggil '.self::RECORD.' dengan status konfirmasi dan pembayaran transfer atau cod, lalu sampaikan total dari hasil tool. Untuk transfer minta pembeli membayar; untuk COD sampaikan pesanan segera dikemas.',
             'Jangan pernah menyatakan pembayaran sudah diterima, sudah masuk, atau lunas. Bila pembeli mengirim atau menyebut bukti transfer, katakan admin akan mengeceknya dulu.',
             'Saat memakai tool, kamu boleh menulis satu kalimat singkat dulu. Bila tidak ada tool yang cocok untuk permintaan pembeli, katakan begitu, jangan menebak. Jangan menulis tag XML atau tag sistem apa pun di jawaban.',

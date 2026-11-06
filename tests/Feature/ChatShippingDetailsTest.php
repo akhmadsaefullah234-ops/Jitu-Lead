@@ -9,6 +9,7 @@ use App\Automation\RetailStages;
 use App\Enums\AiMode;
 use App\Enums\WaChannelStatus;
 use App\Enums\WaChannelType;
+use App\Leads\AddressCheck;
 use App\Leads\ChatOrderParser;
 use App\Leads\ChatShippingDetails;
 use App\Models\Lead;
@@ -152,6 +153,37 @@ class ChatShippingDetailsTest extends TestCase
         $this->assertSame('Karadenan', $lead->shipping_address_parts['kelurahan']);
         $this->assertSame('16913', $lead->shipping_address_parts['kode_pos']);
         $this->assertCount(2, array_filter($this->activities(), fn ($b) => str_starts_with($b, ChatShippingDetails::ACTIVITY)), '"ok kak" changes nothing.');
+    }
+
+    public function test_a_dusun_address_without_rt_rw_or_landmark_is_marked_incomplete_until_the_landmark_comes(): void
+    {
+        $this->inbound('Halo kak, mau order');
+        $this->outbound('Silakan isi format order ya kak: Nama, Alamat, Warna, Jumlah, Pembayaran');
+        $this->inbound("Nama : Siti Aminah\nAlamat : Dusun Krajan, Kel. Karadenan, Kec. Cibinong, Kab. Bogor\nWarna : Hitam\nJumlah : 1\nPembayaran : COD");
+
+        $lead = $this->lead();
+        $this->assertSame('Krajan', $lead->shipping_address_parts['dusun'] ?? null, json_encode($lead->shipping_address_parts));
+        $this->assertArrayNotHasKey('rt_rw', $lead->shipping_address_parts);
+        $this->assertFalse(ChatShippingDetails::complete($lead), 'dusun without RT/RW and without landmark: belum lengkap');
+        $this->assertStringContainsString('Alamat belum lengkap: '.AddressCheck::MESSAGE, (string) collect($this->activities())->last());
+
+        $this->outbound('Patokan rumahnya apa kak?');
+        $this->inbound('Depan masjid Al Ikhlas');
+
+        $lead = $this->lead();
+        $this->assertSame('Depan masjid Al Ikhlas', $lead->shipping_address_parts['landmark'] ?? null);
+        $this->assertTrue(ChatShippingDetails::complete($lead), 'dusun with a landmark: lengkap');
+        $this->assertStringNotContainsString('belum lengkap', (string) collect($this->activities())->last());
+    }
+
+    public function test_an_address_with_rt_rw_and_no_landmark_is_complete(): void
+    {
+        $this->inbound('Halo kak, mau order');
+        $this->inbound("Nama : Siti Aminah\nAlamat : Jl. Raya Karadenan RT 02 RW 05, Kel. Karadenan, Kec. Cibinong, Kab. Bogor\nWarna : Hitam\nJumlah : 1");
+
+        $lead = $this->lead();
+        $this->assertTrue(ChatShippingDetails::complete($lead));
+        $this->assertStringNotContainsString('belum lengkap', implode(' ', $this->activities()));
     }
 
     public function test_a_different_address_replaces_the_old_one_which_stays_in_the_activity(): void

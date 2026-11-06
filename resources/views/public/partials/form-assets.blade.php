@@ -35,6 +35,7 @@
     .lf-ok { text-align: center; padding: 1.1rem; border-radius: .75rem; background: #f0fdf4; color: #166534; display: grid; gap: .6rem; justify-items: center; }
     .lf-ok p { margin: 0; white-space: pre-line; }
     .lf [aria-invalid=true] { border-color: #dc2626; }
+    .lf-if { font-weight: inherit; }
 </style>
 <script>
 (function () {
@@ -47,9 +48,24 @@
     if (!store.referrer && document.referrer) store.referrer = document.referrer.slice(0, 300);
     try { sessionStorage.setItem('jl_campaign', JSON.stringify(store)); } catch (e) {}
     var PHONE = /^(?:0|62)8\d{7,12}$/;
+    // An address without a real RT/RW: empty, 0, 000 or 000/000 (App\Leads\AddressCheck::hasRtRw).
+    function noRt(box) { var rt = box.querySelector('input[name$="[rt_rw]"]'); return !rt || !/[1-9]/.test(rt.value); }
 
     document.querySelectorAll('form.lf[data-form]').forEach(function (form) {
         var err = form.querySelector('.lf-err'), ok = form.querySelector('.lf-ok'), btn = form.querySelector('.lf-btn');
+
+        // "landmark_if_no_rt": house number / landmark marked as required while the RT/RW is empty or 0.
+        form.querySelectorAll('fieldset.lf-addr').forEach(function (box) {
+            if (!box.querySelector('[data-oneof-if]')) return;
+            var sync = function () {
+                var on = noRt(box);
+                box.querySelectorAll('[data-if-star], [data-if-note]').forEach(function (el) { el.hidden = !on; });
+                box.querySelectorAll('input[data-oneof-if]').forEach(function (el) { if (on) el.setAttribute('aria-required', 'true'); else el.removeAttribute('aria-required'); });
+            };
+            var rt = box.querySelector('input[name$="[rt_rw]"]');
+            if (rt) rt.addEventListener('input', sync);
+            sync();
+        });
 
         // Hidden fields: UTM and ad click ids, where the visitor came from, or another URL parameter.
         form.querySelectorAll('input[type=hidden][data-src]').forEach(function (h) {
@@ -162,12 +178,14 @@
             for (var g = 0; g < groups.length; g++) {
                 if (groups[g].querySelector('input[type=checkbox]') && !groups[g].querySelector('input:checked')) return [groups[g].querySelector('input'), 'Pilih minimal satu: ' + groups[g].querySelector('legend').textContent.replace(' *', '') + '.'];
             }
-            // "Salah satu wajib": at least one box of each group filled (RT/RW or dusun, house number or landmark).
+            // "Salah satu wajib": at least one box of each group filled (RT/RW or dusun, house number or landmark;
+            // "landmark_if_no_rt" only while the RT/RW is empty or 0).
             var seen = {}, ones = form.querySelectorAll('input[data-oneof]');
             for (var o = 0; o < ones.length; o++) {
                 var box = ones[o].closest('fieldset'), rule = ones[o].dataset.oneof;
                 if (seen[rule + box.querySelector('legend').textContent]) continue;
                 seen[rule + box.querySelector('legend').textContent] = 1;
+                if (ones[o].dataset.oneofIf === 'no_rt' && !noRt(box)) continue;
                 var group = box.querySelectorAll('input[data-oneof="' + rule + '"]'), filled = false;
                 for (var gi = 0; gi < group.length; gi++) { if (String(group[gi].value).trim() !== '') filled = true; }
                 var note = box.querySelector('[data-oneof-note="' + rule + '"]');

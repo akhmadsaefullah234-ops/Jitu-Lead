@@ -3,6 +3,7 @@
 namespace App\Filament\Support;
 
 use App\Automation\RetailStages;
+use App\Leads\AddressCheck;
 use App\Leads\ChatShippingDetails;
 use App\Models\Lead;
 use App\Models\Shipment;
@@ -54,7 +55,7 @@ class ShipmentActions
 
     /** Address fields of the "Buat resi" form => the lead's address part they edit (null: the address text, the name). */
     private const ADDRESS_FIELDS = [
-        'addr_name' => 'name', 'addr_text' => 'shipping_address', 'addr_rt_rw' => 'rt_rw', 'addr_landmark' => 'landmark',
+        'addr_name' => 'name', 'addr_text' => 'shipping_address', 'addr_rt_rw' => 'rt_rw', 'addr_house' => 'house', 'addr_landmark' => 'landmark',
         'addr_kelurahan' => 'kelurahan', 'addr_kecamatan' => 'kecamatan', 'addr_kota' => 'kota', 'addr_kode_pos' => 'kode_pos',
     ];
 
@@ -230,7 +231,7 @@ class ShipmentActions
     private static function needsAddress(Lead $lead): bool
     {
         return ! ChatShippingDetails::complete($lead) || array_intersect(app(Shipments::class)->leadProblems($lead), [
-            'Nama penerima belum diisi.', 'Alamat kirim lengkap belum diisi.', 'Kecamatan atau kode pos tujuan belum diisi di alamat lead.',
+            'Nama penerima belum diisi.', 'Alamat kirim lengkap belum diisi.', 'Kecamatan atau kode pos tujuan belum diisi di alamat lead.', AddressCheck::MESSAGE,
         ]) !== [];
     }
 
@@ -298,13 +299,16 @@ class ShipmentActions
                                     }
 
                                     $set('location_id', null);
+                                    $missing = ChatShippingDetails::missing($copy->shipping_address, (array) $copy->shipping_address_parts);
                                     Notification::make()->title(($found['labels'] ?? []) === [] ? 'Tidak ada data alamat baru di chat.' : 'Dari chat: '.implode(', ', $found['labels']).'. Periksa lalu buat resi.')
-                                        ->{($found['labels'] ?? []) === [] ? 'warning' : 'success'}()->send();
+                                        ->body($missing !== [] ? 'Alamat belum lengkap: '.implode(' ', $missing) : null)
+                                        ->{($found['labels'] ?? []) === [] || $missing !== [] ? 'warning' : 'success'}()->send();
                                 }),
                         ])->key('addressActions')->columnSpanFull(),
                         $field('addr_name', 'Nama penerima'),
                         $field('addr_rt_rw', 'RT/RW'),
                         Textarea::make('addr_text')->label('Alamat lengkap')->rows(2)->live(onBlur: true)->maxLength(1000)->columnSpanFull()->default(fn () => self::addressState($lead())['addr_text'] ?? null),
+                        $field('addr_house', 'Nomor rumah')->helperText(fn (Get $get) => AddressCheck::hasRtRw($get('addr_rt_rw')) ? null : 'Alamat tanpa RT/RW: isi nomor rumah atau patokan.'),
                         $field('addr_landmark', 'Patokan'),
                         $field('addr_kelurahan', 'Kelurahan / desa'),
                         $field('addr_kecamatan', 'Kecamatan'),

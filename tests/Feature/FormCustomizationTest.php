@@ -230,7 +230,7 @@ class FormCustomizationTest extends TestCase
     {
         $address = collect(FormTemplates::attributes(FormTemplates::ORDER)['fields'])->firstWhere('key', 'alamat');
         $this->assertSame(array_keys(FormFields::ADDRESS_PARTS), $address['parts']);
-        $this->assertSame(['rt_or_dusun', 'house_or_landmark'], $address['rules']);
+        $this->assertSame(['rt_or_dusun', 'landmark_if_no_rt'], $address['rules']);
 
         $this->actingInTenant($this->adminOf($this->shop), $this->shop);
         $form = $this->in(fn () => LeadForm::create(['name' => 'Order', 'slug' => 'order', 'status' => 'active'] + FormTemplates::attributes(FormTemplates::ORDER)));
