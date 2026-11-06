@@ -5,6 +5,7 @@ namespace App\Shipping\Shipments;
 use App\Automation\StageAutomation;
 use App\Enums\StageType;
 use App\Jobs\CreateShipment;
+use App\Jobs\FetchShipmentAwb;
 use App\Jobs\SaveShipmentLabel;
 use App\Leads\ChatShippingDetails;
 use App\Models\CarrierAccount;
@@ -452,7 +453,8 @@ class Shipments
                 throw new CarrierException('Lead ini sudah punya kiriman lain yang aktif.');
             }
 
-            $fresh->forceFill(['state' => Shipment::PENDING, 'error' => null])->save();
+            // Refused before booking: booked again under the same number. Booked but no tracking number: only asked for it again.
+            $fresh->forceFill($fresh->state === Shipment::FAILED ? ['state' => Shipment::PENDING, 'error' => null] : ['error' => null, 'request' => array_diff_key((array) $fresh->request, ['awb_tries' => 1])])->save();
 
             return $fresh;
         });
@@ -504,11 +506,33 @@ class Shipments
             }
         }
 
-        $awb = $provider->generateAwb($shipment->client_order_no);
+        // Generated once; after that only asked for (it can take a few minutes), by App\Jobs\FetchShipmentAwb.
+        if (data_get($shipment->request, 'awb_requested_at') === null) {
+            $awb = $provider->generateAwb($shipment->client_order_no);
+            $shipment->forceFill(['request' => ['awb_requested_at' => now()->toIso8601String()] + (array) $shipment->request, 'error' => null])->save();
+        } else {
+            $found = $provider->awb($shipment->client_order_no);
+            $awb = $found->awb;
+
+            if ($found->orderId !== null && $shipment->order_id === null) {
+                $shipment->forceFill(['order_id' => $found->orderId])->save();
+            }
+        }
 
         if ($awb !== null) {
             $this->awbIssued($shipment, $awb);
+
+            return;
         }
+
+        FetchShipmentAwb::dispatch($shipment->getKey(), $this->current->id())->delay(now()->addMinutes(FetchShipmentAwb::EVERY_MINUTES));
+    }
+
+    /** No tracking number half an hour after asking: the agent is told, and "Coba lagi" asks again (never a new order). */
+    public function awbLate(Shipment $shipment): void
+    {
+        $shipment->forceFill(['error' => 'Nomor resi belum terbit setelah '.(FetchShipmentAwb::TRIES * FetchShipmentAwb::EVERY_MINUTES).' menit. Cek di dashboard '.config('carriers.labels.'.$shipment->provider, 'penyedia').' atau tekan Coba lagi.'])->save();
+        $this->notices->alertStaff($shipment, 'Nomor resi belum terbit', (string) $shipment->error);
     }
 
     /** A tracking number came (from placing the order or from the provider's callback). Runs once per parcel. */

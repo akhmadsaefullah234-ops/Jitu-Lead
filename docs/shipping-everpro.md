@@ -95,6 +95,12 @@ tidak), juga untuk resi yang tidak dikenal. URL satu agensi tidak bisa menyentuh
 - Nomor HP pengirim dan penerima dikirim ke Everpro sebagai `62…` tanpa "+" atau spasi (08…, +62… dan 8… diubah).
   Everpro menolak format lain walau dokumentasinya menyebut 08 boleh. Nomor yang bukan 10–15 angka ditolak di modal
   tanpa memanggil Everpro.
+- Setelah order v2 diterima (jawabannya boleh `"data": null`), JITU LEAD memanggil `/generate` sekali dengan body `{}`.
+  Body kosong ke Everpro selalu dikirim sebagai objek, bukan `[]`. Nomor resi lalu diminta lewat `GET …/awb` tiap 2
+  menit sampai 30 menit, kecuali callback lebih dulu membawanya. Selama menunggu, kiriman ada di tab **Menunggu resi**
+  dengan status "Menunggu nomor resi". Bila setelah 30 menit nomor resi belum ada, kiriman pindah ke **Perlu tindakan**
+  dan agen diberi tahu. **Coba lagi** pada kiriman yang sudah dipesan hanya meminta nomor resi lagi, tanpa membuat
+  order baru di Everpro.
 - Kiriman yang ditolak penyedia (status gagal, belum ada order) bisa dikirim ulang lewat **Coba lagi** di lead, Inbox,
   atau tab Perlu tindakan. Pengiriman ulang memakai rincian yang tersimpan (ongkir, COD, isi, berat, catatan) dan
   nomor order yang sama, dan tidak pernah membuat kiriman aktif kedua.
