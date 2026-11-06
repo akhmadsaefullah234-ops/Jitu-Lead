@@ -81,6 +81,19 @@ class ShipmentResource extends Resource
         return 'warning';
     }
 
+    /** Ongkir, biaya COD, dana cair and cashback as the provider reports them (only what is known). */
+    public static function fees(Shipment $r): array
+    {
+        $rp = fn (?int $v) => 'Rp'.number_format((int) $v, 0, ',', '.');
+
+        return array_values(array_filter([
+            $r->price !== null ? 'Ongkir '.$rp($r->price) : null,
+            $r->cod_fee !== null && $r->is_cod ? 'Biaya COD '.$rp($r->cod_fee) : null,
+            $r->cod_disbursement !== null && $r->is_cod ? 'Cair '.$rp($r->cod_disbursement) : null,
+            $r->cashback ? 'Cashback '.$rp($r->cashback) : null,
+        ]));
+    }
+
     public static function table(Table $table): Table
     {
         $rp = fn (?int $v) => 'Rp'.number_format((int) $v, 0, ',', '.');
@@ -95,9 +108,12 @@ class ShipmentResource extends Resource
                     ->description(fn (Shipment $r) => $r->lead ? new HtmlString('<a href="'.e(LeadResource::getUrl('edit', ['record' => $r->lead_id])).'" style="text-decoration:underline">Buka lead</a>') : null),
                 TextColumn::make('items')->label('Produk')->state(fn (Shipment $r) => self::items($r))->wrap(),
                 TextColumn::make('courier')->label('Kurir')->toggleable(),
-                TextColumn::make('awb')->label('Nomor resi')->searchable()->copyable()->copyMessage('Nomor resi disalin')->placeholder('-'),
+                TextColumn::make('awb')->label('Nomor resi')->searchable(['awb', 'provider_order_no'])->copyable()->copyMessage('Nomor resi disalin')->placeholder('-')
+                    ->description(fn (Shipment $r) => filled($r->provider_order_no) ? 'No. order Everpro: '.$r->provider_order_no : null),
                 TextColumn::make('is_cod')->label('Bayar')->state(fn (Shipment $r) => $r->is_cod ? 'COD '.$rp($r->cod_amount) : 'Transfer')
                     ->badge()->color(fn (Shipment $r) => $r->is_cod ? 'warning' : 'gray'),
+                TextColumn::make('fees')->label('Biaya')->toggleable()
+                    ->state(fn (Shipment $r) => self::fees($r))->placeholder('-')->listWithLineBreaks(),
                 TextColumn::make('status')->label('Status')->badge()
                     ->state(fn (Shipment $r) => self::status($r))
                     ->color(fn (Shipment $r) => match (true) {

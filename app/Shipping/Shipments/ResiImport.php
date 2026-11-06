@@ -128,7 +128,8 @@ class ResiImport
                 : ['note' => 'Tidak ada lead dengan nomor HP ini. Pilih lead atau lewati.']) + ['options' => self::options($candidates)] + $row;
         }
 
-        return $out;
+        return array_map(fn (array $r) => Shipments::isProviderOrderNo($r['awb']) && ! in_array($r['status'], [self::INVALID, self::LINKED], true)
+            ? ['note' => trim($r['note'].' Ini nomor order Everpro: diganti nomor resi asli saat disimpan.')] + $r : $r, $out);
     }
 
     /** @return array<int, string> lead id => "name · phone · stage" */

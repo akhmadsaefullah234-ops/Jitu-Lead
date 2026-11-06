@@ -17,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 #[Fillable(['lead_id', 'provider', 'client_order_no', 'sequence', 'order_id', 'awb', 'courier', 'rate_code', 'state', 'status', 'raw_status', 'status_reason',
     'is_cod', 'cod_amount', 'price', 'charged', 'weight_grams', 'label_url', 'request', 'events', 'error', 'attempts', 'awb_notified_at', 'tracked_at', 'final_at', 'cancelled_at',
-    'source', 'track_failures', 'untrackable_at', 'linked_at', 'label_path', 'label_saved_at', 'label_attempts', 'label_failed_at', 'printed_at', 'printed_by',
+    'provider_order_no', 'cod_fee', 'cod_disbursement', 'cashback', 'source', 'track_failures', 'untrackable_at', 'linked_at', 'label_path', 'label_saved_at', 'label_attempts', 'label_failed_at', 'printed_at', 'printed_by',
     'print_count', 'automatic'])]
 class Shipment extends Model
 {
@@ -52,6 +52,7 @@ class Shipment extends Model
             'awb_notified_at' => 'datetime', 'tracked_at' => 'datetime', 'final_at' => 'datetime', 'cancelled_at' => 'datetime',
             'untrackable_at' => 'datetime', 'linked_at' => 'datetime', 'label_saved_at' => 'datetime', 'label_failed_at' => 'datetime',
             'printed_at' => 'datetime', 'automatic' => 'boolean',
+            'cod_fee' => 'integer', 'cod_disbursement' => 'integer', 'cashback' => 'integer',
         ];
     }
 
