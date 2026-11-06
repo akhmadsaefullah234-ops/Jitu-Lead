@@ -13,7 +13,7 @@ class StageAutomationSettings
     /** Rule => [label, help, day settings (key => [label, default])] */
     public const RULES = [
         'order_draft' => ['Format order lengkap → Order masuk',
-            'Saat AI mendapati data pesanan lengkap (nama, alamat dengan RT/RW dan nomor rumah/patokan, warna/varian, jumlah) sebelum pembeli konfirmasi.', []],
+            'Saat AI mendapati data pesanan lengkap (nama, alamat dengan RT/RW, atau nomor rumah/patokan bila tanpa RT/RW, warna/varian, jumlah) sebelum pembeli konfirmasi.', []],
         'order_confirmed' => ['Pembeli konfirmasi → Menunggu pembayaran (transfer) atau Dikemas & dikirim (COD)',
             'Saat AI atau agen mencatat pesanan yang sudah dikonfirmasi pembeli.', []],
         'payment_proof' => ['Gambar saat Menunggu pembayaran → tandai "Bukti transfer masuk"',

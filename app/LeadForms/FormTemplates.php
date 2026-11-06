@@ -134,7 +134,7 @@ class FormTemplates
                     $name, $phone,
                     self::f('alamat', 'address', 'Alamat lengkap', ['required' => true, 'maps_to' => 'shipping_address', 'mode' => 'region',
                         'parts' => array_keys(FormFields::ADDRESS_PARTS), 'required_parts' => FormFields::ADDRESS_REQUIRED,
-                        'rules' => array_keys(FormFields::ADDRESS_RULES)]),
+                        'rules' => FormFields::RETAIL_RULES]),
                     self::f('varian', 'select', 'Varian / warna', ['required' => true, 'options' => ['Hitam', 'Putih'], 'maps_to' => 'variant']),
                     self::f('jumlah', 'number', 'Jumlah', ['required' => true, 'maps_to' => 'quantity', 'placeholder' => '1']),
                     self::f('pembayaran', 'radio', 'Pembayaran', ['required' => true, 'maps_to' => 'payment_type', 'payment_choices' => [

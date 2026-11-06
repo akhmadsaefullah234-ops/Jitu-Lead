@@ -45,8 +45,9 @@
                     $must = \App\LeadForms\FormFields::requiredParts($f);
                     $star = fn ($part) => in_array($part, $must, true) ? ' *' : '';
                     $oneOf = [];
-                    foreach (\App\LeadForms\FormFields::addressRules($f) as $rule => [$pair, $message]) {
-                        foreach ($pair as $p) { $oneOf[$p] = $rule; }
+                    $ifNoRt = [];
+                    foreach (\App\LeadForms\FormFields::addressRules($f) as $rule => [$pair, $message, $withoutRt]) {
+                        foreach ($pair as $p) { $oneOf[$p] = $rule; $ifNoRt[$p] = $withoutRt; }
                     }
                     $pickerHints = ['provinsi' => ['Cari provinsi', 'Cari provinsi'], 'kota' => ['Pilih provinsi dulu', 'Cari kota/kabupaten'], 'kecamatan' => ['Pilih kota/kabupaten dulu', 'Cari kecamatan'], 'kelurahan' => ['Pilih kecamatan dulu', 'Cari kelurahan/desa']];
                 @endphp
@@ -55,7 +56,7 @@
                         @php
                             $partLabel = \App\LeadForms\FormFields::partLabel($f, $part);
                             $ph = \App\LeadForms\FormFields::partPlaceholder($f, $part);
-                            $rule = isset($oneOf[$part]) ? 'data-oneof='.$oneOf[$part] : '';
+                            $rule = isset($oneOf[$part]) ? 'data-oneof='.$oneOf[$part].(! empty($ifNoRt[$part]) ? ' data-oneof-if=no_rt' : '') : '';
                         @endphp
                         @if ($region && isset($pickerHints[$part]))
                             <label class="lf-f"><span>{{ $partLabel }}{{ $star($part) }}</span>
@@ -69,13 +70,13 @@
                             <label class="lf-f"><span>{{ $partLabel }}{{ $star($part) }}</span>
                                 <select name="{{ $name }}[provinsi]" @if ($star($part)) required @endif><option value="">{{ $ph ?: 'Pilih provinsi' }}</option>@foreach (\App\Shipping\Regions::options() as $p)<option value="{{ $p }}">{{ $p }}</option>@endforeach</select></label>
                         @else
-                            <label class="lf-f {{ in_array($part, ['street', 'landmark'], true) ? 'wide' : '' }}"><span>{{ $partLabel }}{{ $star($part) }}</span>
+                            <label class="lf-f {{ in_array($part, ['street', 'landmark'], true) ? 'wide' : '' }}"><span>{{ $partLabel }}{{ $star($part) }}@if (! empty($ifNoRt[$part]) && ! $star($part))<b class="lf-if" data-if-star> *</b>@endif</span>
                                 <input type="text" name="{{ $name }}[{{ $part }}]" placeholder="{{ $part === 'kode_pos' && $region ? ($ph === '12345' ? 'Terisi otomatis' : $ph) : $ph }}" {{ $rule }} @if ($star($part)) required @endif
                                     @if ($part === 'kode_pos') inputmode="numeric" maxlength="5" pattern="\d{5}" autocomplete="postal-code" @if ($region) data-postal @endif @elseif ($part === 'street') maxlength="250" autocomplete="address-line1" @else maxlength="100" @endif></label>
                         @endif
                     @endforeach
-                    @foreach (\App\LeadForms\FormFields::addressRules($f) as $rule => [$pair, $message])
-                        @if (count($pair) > 1)<small class="lf-note wide" data-oneof-note="{{ $rule }}">{{ $message }}</small>@endif
+                    @foreach (\App\LeadForms\FormFields::addressRules($f) as $rule => [$pair, $message, $withoutRt])
+                        @if (count($pair) > 1 || $withoutRt)<small class="lf-note wide" data-oneof-note="{{ $rule }}" @if ($withoutRt) data-if-note @endif>{{ $message }}</small>@endif
                     @endforeach
                 </fieldset>
         @elseif ($f['type'] === 'photo')

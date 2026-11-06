@@ -7,6 +7,7 @@ use App\Enums\StageType;
 use App\Jobs\CreateShipment;
 use App\Jobs\FetchShipmentAwb;
 use App\Jobs\SaveShipmentLabel;
+use App\Leads\AddressCheck;
 use App\Leads\ChatShippingDetails;
 use App\Models\CarrierAccount;
 use App\Models\Lead;
@@ -135,7 +136,7 @@ class Shipments
         $draft->description = Str::limit(implode(', ', array_map(fn ($i) => $i['name'].' x'.$i['quantity'], $draft->items)), 150, '');
         $draft->weightGrams = $this->weight($lead);
         $draft->dimensions = $this->dimensions($lead);
-        $draft->note = ((array) $lead->shipping_address_parts)['landmark'] ?? null;
+        $draft->note = self::addressNote($lead);
         $draft->insurance = (bool) $account->setting('insurance', false);
 
         // What the agent changed in the form, each against what was calculated
@@ -278,6 +279,22 @@ class Shipments
         return filled($name) ? trim((string) $name) : null;
     }
 
+    /**
+     * The courier's address note: the landmark, and the house number when the address text does not have it (one
+     * typed in "Buat resi" or in its own form box).
+     */
+    public static function addressNote(Lead $lead): ?string
+    {
+        $parts = (array) $lead->shipping_address_parts;
+        $house = trim((string) ($parts['house'] ?? ''));
+        $text = (string) $lead->shipping_address;
+        $house = $house !== '' && ! preg_match('/\b(?:no|nomor|nmr)\b\.?\s*'.preg_quote(preg_replace('/^(?:no|nomor|nmr)\.?\s*/iu', '', $house), '/').'(?![\p{L}\p{N}])/iu', $text)
+            ? (preg_match('/^\d/', $house) ? 'No. '.$house : $house) : '';
+        $note = implode(', ', array_filter([$house, trim((string) ($parts['landmark'] ?? ''))], fn ($v) => $v !== ''));
+
+        return $note !== '' ? $note : null;
+    }
+
     /** @return list<string> */
     public function leadProblems(Lead $lead): array
     {
@@ -296,6 +313,11 @@ class Shipments
             $problems[] = 'Alamat kirim lengkap belum diisi.';
         } elseif (blank($parts['kode_pos'] ?? null) && blank($parts['kecamatan'] ?? null)) {
             $problems[] = 'Kecamatan atau kode pos tujuan belum diisi di alamat lead.';
+        }
+
+        // Without RT/RW (a dusun address, RT/RW 0/000) the courier needs a house number or a landmark.
+        if (mb_strlen(trim((string) $lead->shipping_address)) >= 10 && ($missing = AddressCheck::problem($parts, $lead->shipping_address)) !== null) {
+            $problems[] = $missing;
         }
 
         return $problems;
@@ -509,7 +531,7 @@ class Shipments
                 [
                     'name' => trim($lead->name), 'phone' => LocalPhone::number($lead->phone), 'address' => trim((string) $lead->shipping_address),
                     'location_id' => (string) data_get($request, 'destination.id'), 'postal_code' => data_get($request, 'destination.postalCode') ?: ($parts['kode_pos'] ?? null),
-                    'sub_district' => data_get($request, 'destination.subDistrict') ?: null, 'note' => array_key_exists('note', $request) ? $request['note'] : ($parts['landmark'] ?? null),
+                    'sub_district' => data_get($request, 'destination.subDistrict') ?: null, 'note' => array_key_exists('note', $request) ? $request['note'] : self::addressNote($lead),
                 ],
                 (int) $shipment->weight_grams, (string) ($request['description'] ?? ''), (int) ($request['item_value'] ?? 0),
                 $shipment->is_cod, (int) $shipment->cod_amount, (int) $shipment->price, (bool) ($request['insurance'] ?? $account->setting('insurance', false)),

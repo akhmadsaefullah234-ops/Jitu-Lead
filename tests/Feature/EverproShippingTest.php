@@ -19,6 +19,7 @@ use App\Filament\Resources\Shipments\Pages\ListShipments;
 use App\Filament\Resources\Shipments\ShipmentResource;
 use App\Filament\Support\ShipmentTimeline;
 use App\Jobs\FetchShipmentAwb;
+use App\Leads\AddressCheck;
 use App\Leads\ChatShippingDetails;
 use App\Mail\ShipmentNeedsAction;
 use App\Models\AiDraft;
@@ -1552,17 +1553,43 @@ class EverproShippingTest extends TestCase
         $this->assertSame(AutoShipments::CANCELLED, $this->inShop(fn () => $lead->fresh()->auto_shipment_state));
     }
 
+    public function test_resi_otomatis_refuses_a_dusun_address_without_rt_rw_or_landmark_but_never_holds_one_with_rt_rw(): void
+    {
+        $this->autoOn();
+        $dusun = $this->readyOrder('cod', '6281234567811', ['name' => 'Dusun Tanpa Patokan', 'shipping_address' => 'Dusun Krajan, Sekeloa, Coblong, Kota Bandung 40134'],
+            ['rt_rw' => null, 'house' => null, 'dusun' => 'Krajan']);
+        $zero = $this->readyOrder('cod', '6281234567812', ['name' => 'RT Nol', 'shipping_address' => 'Dusun Krajan RT 000/000, Sekeloa, Coblong, Kota Bandung 40134'],
+            ['rt_rw' => '000/000', 'house' => null, 'dusun' => 'Krajan']);
+        $landmark = $this->readyOrder('cod', '6281234567813', ['name' => 'Dusun Patokan'], ['rt_rw' => null, 'house' => null, 'dusun' => 'Krajan', 'landmark' => 'Depan masjid']);
+        $rtRw = $this->readyOrder('cod', '6281234567814', ['name' => 'RT Tanpa Patokan'], ['rt_rw' => '001/002', 'house' => null]);
+
+        // Dusun without RT/RW and without landmark: belum lengkap, refused with the reason
+        foreach ([$dusun, $zero] as $lead) {
+            $this->assertSame(AutoShipments::SKIPPED, $lead->auto_shipment_state);
+            $this->assertStringContainsString(AddressCheck::PROBLEM, $lead->auto_shipment_note);
+        }
+
+        // Dusun with a landmark, and RT/RW without one: lengkap
+        $this->assertSame(AutoShipments::SCHEDULED, $landmark->auto_shipment_state, (string) $landmark->auto_shipment_note);
+        $this->assertSame(AutoShipments::SCHEDULED, $rtRw->auto_shipment_state, (string) $rtRw->auto_shipment_note);
+        $this->assertSame([$landmark->id, $rtRw->id], $this->inShop(fn () => AutoShipments::scopeReady(Lead::query())->orderBy('id')->pluck('id')->all()), 'the "Siap resi" filter agrees');
+
+        // Buat resi asks the agent to complete it
+        $this->assertContains(AddressCheck::MESSAGE, $this->inShop(fn () => app(Shipments::class)->draft($dusun)->problems));
+        $this->assertNotContains(AddressCheck::MESSAGE, $this->inShop(fn () => app(Shipments::class)->draft($rtRw)->problems));
+    }
+
     public function test_an_unpaid_transfer_or_a_doubtful_address_is_left_to_the_agent_with_the_reason(): void
     {
         $this->autoOn();
         $unpaid = $this->readyOrder('transfer', '6281234567801', ['name' => 'Belum Bayar']);
-        $noRt = $this->readyOrder('cod', '6281234567802', ['name' => 'Tanpa RT'], ['rt_rw' => null]);
+        $noRt = $this->readyOrder('cod', '6281234567802', ['name' => 'Tanpa RT'], ['rt_rw' => null, 'house' => null, 'dusun' => 'Krajan']);
         $chat = $this->readyOrder('cod', '6281234567803', ['name' => 'Dari Chat', 'payment_type_source' => 'chat']);
         $unsure = $this->readyOrder('cod', '6281234567804', ['name' => 'Kelurahan Lain'], ['kelurahan' => 'Sukamaju']);
 
         $this->assertSame(AutoShipments::SKIPPED, $unpaid->auto_shipment_state);
         $this->assertStringContainsString('transfer belum dikonfirmasi lunas', $unpaid->auto_shipment_note);
-        $this->assertStringContainsString('alamat belum ada RT/RW atau patokan', $noRt->auto_shipment_note);
+        $this->assertStringContainsString(AddressCheck::PROBLEM, $noRt->auto_shipment_note);
         $this->assertStringContainsString('cara bayar belum dipastikan agen', $chat->auto_shipment_note);
 
         // The provider does not know the kelurahan under that postal code: not guessed

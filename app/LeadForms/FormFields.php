@@ -3,6 +3,7 @@
 namespace App\LeadForms;
 
 use App\LandingPages\Buttons;
+use App\Leads\AddressCheck;
 use App\Regions\RegionDirectory;
 use App\Shipping\Regions;
 use App\Support\PhoneNumber;
@@ -91,11 +92,21 @@ class FormFields
         'dusun' => 'Dusun Krajan', 'kode_pos' => '12345',
     ];
 
-    /** "Salah satu wajib" rules of an address: name => [the two sub-fields, what is said when both are empty]. */
+    /**
+     * "Salah satu wajib" rules of an address: name => [the sub-fields, the editor's label, what is said when all are
+     * empty]. A rule in CONDITIONAL_RULES only holds when the address has no RT/RW (empty, 0, 000 or 000/000).
+     */
     public const ADDRESS_RULES = [
         'rt_or_dusun' => [['rt_rw', 'dusun'], 'RT/RW atau dusun/kampung (salah satu wajib)', 'Isi RT/RW atau dusun/kampung.'],
         'house_or_landmark' => [['house', 'landmark'], 'Nomor rumah atau patokan (salah satu wajib)', 'Isi nomor rumah atau patokan.'],
+        'landmark_if_no_rt' => [['house', 'landmark'], 'Nomor rumah atau patokan wajib bila RT/RW kosong atau 0/000', AddressCheck::MESSAGE],
     ];
+
+    /** Rules that only hold when the address has no RT/RW (see App\Leads\AddressCheck). */
+    public const CONDITIONAL_RULES = ['landmark_if_no_rt'];
+
+    /** The rules a shop's order form starts with: RT/RW or dusun, and without RT/RW a house number or landmark. */
+    public const RETAIL_RULES = ['rt_or_dusun', 'landmark_if_no_rt'];
 
     public const ADDRESS_MODES = ['free' => 'Ketik bebas', 'region' => 'Dropdown wilayah (provinsi > kota > kecamatan > kelurahan)'];
 
@@ -203,8 +214,9 @@ class FormFields
 
     /**
      * The "salah satu wajib" rules in force: only on a required address, and only over the sub-fields it shows.
+     * "landmark_if_no_rt" gives way to "house_or_landmark", which asks the same always.
      *
-     * @return array<string, array{0: list<string>, 1: string}> rule => [shown sub-fields, message]
+     * @return array<string, array{0: list<string>, 1: string, 2: bool}> rule => [shown sub-fields, message, only without RT/RW]
      */
     public static function addressRules(array $field): array
     {
@@ -215,11 +227,14 @@ class FormFields
         $shown = self::addressParts($field);
         $out = [];
 
-        foreach ((array) ($field['rules'] ?? []) as $rule) {
-            $pair = array_values(array_intersect(self::ADDRESS_RULES[$rule][0] ?? [], $shown));
+        $rules = (array) ($field['rules'] ?? []);
 
-            if ($pair !== []) {
-                $out[$rule] = [$pair, self::ADDRESS_RULES[$rule][2]];
+        foreach ($rules as $rule) {
+            $pair = array_values(array_intersect(self::ADDRESS_RULES[$rule][0] ?? [], $shown));
+            $conditional = in_array($rule, self::CONDITIONAL_RULES, true);
+
+            if ($pair !== [] && ! ($rule === 'landmark_if_no_rt' && in_array('house_or_landmark', $rules, true))) {
+                $out[$rule] = [$pair, self::ADDRESS_RULES[$rule][2], $conditional];
             }
         }
 
@@ -341,7 +356,8 @@ class FormFields
                             ]),
                         ]),
                     CheckboxList::make('rules')->label('Aturan "salah satu wajib" (bila alamat wajib diisi)')->columnSpanFull()->visible($has(['address']))
-                        ->options(array_map(fn ($r) => $r[1], self::ADDRESS_RULES)),
+                        ->options(array_map(fn ($r) => $r[1], self::ADDRESS_RULES))
+                        ->helperText('Untuk alamat dusun tanpa RT/RW, pilih "bila RT/RW kosong atau 0/000": alamat dengan RT/RW tetap boleh tanpa nomor rumah/patokan.'),
                     Select::make('source')->label('Isi otomatis dari')->options(self::HIDDEN_SOURCES)->default('utm_source')->native(false)->live()->visible($has(['hidden'])),
                     TextInput::make('value')->label(fn (Get $get) => $get('source') === 'query' ? 'Nama parameter URL' : 'Nilai')->maxLength(100)
                         ->visible(fn (Get $get) => $get('type') === 'hidden' && in_array($get('source'), ['query', 'static'], true)),
@@ -573,7 +589,11 @@ class FormFields
                     }
                     if ($oneOf = self::addressRules($f)) {
                         $rules[$name][] = function (string $attribute, mixed $value, Closure $fail) use ($oneOf) {
-                            foreach ($oneOf as [$pair, $message]) {
+                            foreach ($oneOf as [$pair, $message, $withoutRt]) {
+                                // "landmark_if_no_rt": only an address without a real RT/RW (empty, 0, 000/000).
+                                if ($withoutRt && is_array($value) && AddressCheck::hasRtRw($value['rt_rw'] ?? null)) {
+                                    continue;
+                                }
                                 if (! array_filter($pair, fn ($p) => is_array($value) && is_scalar($value[$p] ?? null) && trim((string) $value[$p]) !== '')) {
                                     $fail($message);
                                 }

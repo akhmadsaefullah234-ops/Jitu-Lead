@@ -151,7 +151,7 @@ class ShippingSettingsPage extends Page
             ]),
             Section::make('Resi otomatis')->columns(2)->visible(fn (Get $get) => filled($get('provider')))
                 ->description('Bila aktif, resi dibuat sendiri untuk lead yang masuk tahap pemicu dan datanya lengkap: cara bayar COD, atau transfer yang sudah dicek lunas; '
-                    .'alamat dengan RT/RW atau patokan, kelurahan, kecamatan, kota, provinsi dan kode pos yang cocok dengan lokasi penyedia; produk, varian, jumlah dan berat; '
+                    .'alamat dengan RT/RW (tanpa RT/RW: nomor rumah atau patokan), kelurahan, kecamatan, kota, provinsi dan kode pos yang cocok dengan lokasi penyedia; produk, varian, jumlah dan berat; '
                     .'kurir pilihan pembeli (atau kurir bawaan) tersedia; tidak dicurigai spam. Selain itu tetap manual, dengan alasannya di lead.')
                 ->schema([
                     Toggle::make('auto.enabled')->label('Aktifkan resi otomatis')->columnSpanFull()->live(),

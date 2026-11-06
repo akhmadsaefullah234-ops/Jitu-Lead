@@ -282,7 +282,7 @@ class LandingNavigationRetailTest extends TestCase
         $address = collect($attrs['fields'])->firstWhere('key', 'alamat');
         $this->assertSame(array_keys(FormFields::ADDRESS_PARTS), $address['parts'], 'every sub-field is shown');
         $this->assertSame(['street', 'kecamatan', 'kota'], $address['required_parts']);
-        $this->assertSame(['rt_or_dusun', 'house_or_landmark'], $address['rules']);
+        $this->assertSame(['rt_or_dusun', 'landmark_if_no_rt'], $address['rules']);
         $this->assertSame(['Transfer' => 'transfer', 'COD (bayar di tempat)' => 'cod'], collect($attrs['fields'])->firstWhere('key', 'pembayaran')['payment_map']);
         $this->assertSame('region', $address['mode']);
         $this->assertSame('whatsapp', $attrs['after_submit']['type']);
@@ -300,7 +300,7 @@ class LandingNavigationRetailTest extends TestCase
             'alamat' => ['street' => 'Jl. Melati 3', 'landmark' => 'pagar hijau', 'rt_rw' => '002/005', 'kecamatan' => 'Coblong', 'kota' => 'Kota Bandung', 'provinsi' => 'Jawa Barat']];
 
         $this->postJson('/f/toko-uji/order-kaos', ['f' => ['alamat' => ['rt_rw' => '', 'landmark' => ''] + $answers['alamat']] + $answers])
-            ->assertStatus(422)->assertJsonPath('errors', fn ($e) => $e['f.alamat'] === ['Isi RT/RW atau dusun/kampung.', 'Isi nomor rumah atau patokan.']);
+            ->assertStatus(422)->assertJsonPath('errors', fn ($e) => $e['f.alamat'] === ['Isi RT/RW atau dusun/kampung.', 'Isi nomor rumah atau patokan karena alamat tanpa RT/RW.']);
 
         $response = $this->postJson('/f/toko-uji/order-kaos', ['f' => $answers])->assertOk()->assertJsonPath('action.type', 'whatsapp');
         $text = urldecode(explode('?text=', $response->json('action.url'))[1]);

@@ -69,7 +69,7 @@ class ChatShippingDetails
     /**
      * The whole conversation once, oldest first (moving to Dikemas & dikirim, "Ambil dari chat", the backfill).
      *
-     * @return array{changes: array<string, mixed>, labels: list<string>, previous: list<string>, parts_before: int, parts_after: int}|null
+     * @return array{changes: array<string, mixed>, labels: list<string>, previous: list<string>, parts_before: int, parts_after: int, missing: list<string>}|null
      */
     public function fromConversation(Lead $lead, bool $save = true): ?array
     {
@@ -121,12 +121,26 @@ class ChatShippingDetails
         $this->finish($lead, $this->apply($this->state($lead), $parsed), save: true, activity: false);
     }
 
-    /** What "Buat resi" needs from the address: the text, and a kecamatan or postal code. */
+    /**
+     * What "Buat resi" needs from the address: the text, a kelurahan, a kecamatan or postal code, and (without
+     * RT/RW: a dusun address, RT/RW 0/000) a house number or landmark.
+     */
     public static function complete(Lead $lead): bool
     {
         $parts = (array) $lead->shipping_address_parts;
 
-        return mb_strlen(trim((string) $lead->shipping_address)) >= 10 && (filled($parts['kode_pos'] ?? null) || filled($parts['kecamatan'] ?? null)) && filled($parts['kelurahan'] ?? null);
+        return mb_strlen(trim((string) $lead->shipping_address)) >= 10 && (filled($parts['kode_pos'] ?? null) || filled($parts['kecamatan'] ?? null)) && filled($parts['kelurahan'] ?? null)
+            && ! AddressCheck::leadNeedsLandmark($lead->shipping_address, $parts);
+    }
+
+    /** @return list<string> what an address read from the chat still lacks, in words ("belum lengkap") */
+    public static function missing(?string $address, array $parts): array
+    {
+        if (mb_strlen(trim((string) $address)) < 10) {
+            return [];
+        }
+
+        return array_values(array_filter([AddressCheck::problem($parts, $address)]));
     }
 
     /** Moving into Dikemas & dikirim with the address incomplete: read the chat once. */
@@ -260,7 +274,7 @@ class ChatShippingDetails
     /**
      * Places the address with the regions, writes what changed, and notes it on the lead.
      *
-     * @return array{changes: array<string, mixed>, labels: list<string>, previous: list<string>, parts_before: int, parts_after: int}
+     * @return array{changes: array<string, mixed>, labels: list<string>, previous: list<string>, parts_before: int, parts_after: int, missing: list<string>}
      */
     private function finish(Lead $lead, array $state, bool $save, bool $activity = true): array
     {
@@ -324,6 +338,7 @@ class ChatShippingDetails
         }
 
         $labels = $this->labels($changes, $original, $parts);
+        $missing = self::missing($changes['shipping_address'] ?? $lead->shipping_address, $parts);
 
         if ($save && $changes !== []) {
             $lead->paymentFromChat = isset($changes['payment_type']);
@@ -334,13 +349,15 @@ class ChatShippingDetails
                     'type' => 'note',
                     'body' => (array_intersect(array_keys($changes), ['shipping_address', 'shipping_address_parts']) !== [] ? self::ACTIVITY : 'Data pesanan diperbarui dari chat')
                         .': '.implode(', ', $labels).'.'
+                        .($missing !== [] ? ' Alamat belum lengkap: '.implode(' ', $missing) : '')
                         .($state['previous'] !== [] ? ' Alamat sebelumnya: '.mb_substr(end($state['previous']), 0, 500) : ''),
-                    'meta' => ['from_chat' => array_keys($changes)] + ($state['previous'] !== [] ? ['previous_address' => end($state['previous'])] : []),
+                    'meta' => ['from_chat' => array_keys($changes)] + ($missing !== [] ? ['incomplete' => $missing] : [])
+                        + ($state['previous'] !== [] ? ['previous_address' => end($state['previous'])] : []),
                 ]);
             }
         }
 
-        return ['changes' => $changes, 'labels' => $labels, 'previous' => $state['previous'], 'parts_before' => $partsBefore, 'parts_after' => self::count($parts)];
+        return ['changes' => $changes, 'labels' => $labels, 'previous' => $state['previous'], 'parts_before' => $partsBefore, 'parts_after' => self::count($parts), 'missing' => $missing];
     }
 
     /** @return list<string> what changed, in words */

@@ -3,6 +3,7 @@
 namespace App\Shipping\Shipments;
 
 use App\Automation\RetailStages;
+use App\Leads\AddressCheck;
 use App\Models\CarrierAccount;
 use App\Models\Lead;
 use App\Models\Property;
@@ -19,7 +20,8 @@ use Throwable;
 /**
  * "Resi otomatis" (Pengaturan > Pengiriman, off by default): a lead entering the trigger stage (Dikemas & dikirim)
  * that has everything a parcel needs is booked with the provider after a wait the agent can cancel in. Never
- * guessed: an unknown or unpaid way of paying, an address without RT/RW or landmark, kelurahan, kecamatan, city,
+ * guessed: an unknown or unpaid way of paying, an address without RT/RW and without a house number or landmark
+ * (App\Leads\AddressCheck), an address without kelurahan, kecamatan, city,
  * province and postal code, a destination the provider does not match with certainty, an unknown product weight,
  * a buyer's courier that is not offered, a lead marked as spam, the day's limit or a COD above the limit leave it
  * to the agent, with the reason on the lead. A provider error is not retried: the lead shows "Resi gagal dibuat"
@@ -228,8 +230,9 @@ class AutoShipments
             $problems[] = 'transfer belum dikonfirmasi lunas';
         }
 
-        if (blank($parts['rt_rw'] ?? null) && blank($parts['landmark'] ?? null)) {
-            $problems[] = 'alamat belum ada RT/RW atau patokan';
+        // With RT/RW the house number and landmark are optional; without one (dusun, RT/RW 0/000) one of them is needed.
+        if (AddressCheck::needsLandmark($parts)) {
+            $problems[] = AddressCheck::PROBLEM;
         }
 
         foreach (['kelurahan' => 'kelurahan', 'kecamatan' => 'kecamatan', 'kota' => 'kota', 'provinsi' => 'provinsi', 'kode_pos' => 'kode pos'] as $key => $label) {
@@ -304,7 +307,7 @@ class AutoShipments
         $part = fn (string $key) => "coalesce(leads.shipping_address_parts->>'{$key}', '') <> ''";
         $sql = '('.implode(' and ', [
             "((leads.payment_type = 'cod' and leads.payment_type_source is null) or (leads.payment_type in ('transfer', 'other') and leads.payment_type_source is null and (leads.paid_at is not null or leads.payment_proof_at is not null)))",
-            '('.$part('rt_rw').' or '.$part('landmark').')',
+            "(coalesce(leads.shipping_address_parts->>'rt_rw', '') ~ '[1-9]' or ".$part('house').' or '.$part('landmark').')',
             $part('kelurahan'), $part('kecamatan'), $part('kota'), $part('provinsi'), $part('kode_pos'),
             '(leads.property_id is not null or leads.order_items is not null)',
             "(leads.custom_fields->'spam') is null",

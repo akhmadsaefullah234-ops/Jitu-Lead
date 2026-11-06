@@ -218,7 +218,11 @@ class StageAutomationTest extends TestCase
 
         $this->assertSame('data_belum_lengkap', $this->inShop(fn () => $shop->run('catat_pesanan', $this->order(['status' => 'draft', 'alamat' => 'Jl. Melati, Tembalang'])))['status']);
         $this->assertStringContainsString('RT/RW', ShopTools::addressProblem('Jl. Melati No. 3, Tembalang'));
-        $this->assertStringContainsString('nomor rumah atau patokan', ShopTools::addressProblem('Jl. Melati, RT 02/RW 05'));
+        // With RT/RW the house number and landmark are optional; a dusun address without RT/RW needs one of them.
+        $this->assertNull(ShopTools::addressProblem('Jl. Melati, RT 02/RW 05, Tembalang'));
+        $this->assertStringContainsString('nomor rumah atau patokan', ShopTools::addressProblem('Dusun Krajan, Desa Sukamaju, Kec. Pakis'));
+        $this->assertStringContainsString('nomor rumah atau patokan', ShopTools::addressProblem('Dusun Krajan RT 000/000, Desa Sukamaju'));
+        $this->assertNull(ShopTools::addressProblem('Dusun Krajan, dekat masjid Al Ikhlas, Desa Sukamaju'));
         $this->assertNull(ShopTools::addressProblem('Jl. Melati RT 2 RW 5, depan masjid'));
         $this->assertNull(ShopTools::addressProblem('Perum Griya blok C RT03/RW05'));
         $this->assertSame('Tanyakan warna/ukuran dan jumlah setiap produk.', ShopTools::orderProblem($this->order(['items' => [['product_id' => 1, 'jumlah' => 1]]])));
