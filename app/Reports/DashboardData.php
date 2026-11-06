@@ -333,6 +333,16 @@ class DashboardData
                 'ai_replies' => $activities('ai_reply')->count(),
                 'drafts_waiting' => DB::table('ai_drafts')->where('tenant_id', $this->tenant()->getKey())->where('status', 'pending')->whereIn('conversation_id', clone $conversations)->count(),
                 'handoffs' => $activities('ai_handoff')->count(),
+                // Why the AI handed over (most frequent first), and the handovers nobody answered within 3 minutes.
+                'handoff_reasons' => $activities('ai_handoff')->selectRaw('body, count(*) as n')->groupBy('body')->orderByDesc('n')->limit(6)->pluck('n', 'body')
+                    ->mapWithKeys(fn ($n, $body) => [trim(preg_replace('/^AI menyerahkan chat ke agen:\s*/', '', (string) $body)) => (int) $n])->all(),
+                'handoff_unanswered' => $period->apply(DB::table('ai_drafts as d'), 'd.created_at')->where('d.tenant_id', $this->tenant()->getKey())
+                    ->where('d.status', 'handoff')->whereIn('d.conversation_id', clone $conversations)->where('d.created_at', '<=', now()->subMinutes(3))
+                    ->join('wa_messages as m', 'm.id', '=', 'd.message_id')
+                    ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('wa_messages as r')->whereColumn('r.conversation_id', 'm.conversation_id')
+                        ->where('r.direction', 'out')->where('r.status', '!=', MessageStatus::Failed->value)
+                        ->whereColumn('r.sent_at', '>=', 'm.sent_at')->whereRaw("r.sent_at <= m.sent_at + interval '3 minutes'"))
+                    ->count(),
                 'voice_unanswered' => $period->apply(DB::table('wa_messages as v'), 'v.sent_at')->where('v.tenant_id', $this->tenant()->getKey())
                     ->whereIn('v.conversation_id', clone $conversations)->where('v.direction', 'in')->where('v.type', 'audio')
                     ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('wa_messages as r')->whereColumn('r.conversation_id', 'v.conversation_id')

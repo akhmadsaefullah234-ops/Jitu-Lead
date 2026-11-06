@@ -4,6 +4,7 @@ namespace App\Filament\Widgets\Dashboard;
 
 use App\Filament\Widgets\Concerns\UsesPagePeriod;
 use Filament\Widgets\Widget;
+use Illuminate\Support\Str;
 
 /** What the AI, the follow-ups, the form welcomes and the ad conversions did in the period. */
 class AutomationActivity extends Widget
@@ -20,11 +21,15 @@ class AutomationActivity extends Widget
     {
         $a = $this->data()->automation($this->period());
 
+        $reasons = collect($a['handoff_reasons'])->mapWithKeys(fn ($n, $reason) => ['↳ '.Str::limit($reason, 70) => $n])->all();
+
         return ['groups' => [
             'AI' => [
                 'Balasan AI terkirim' => $a['ai_replies'],
                 'Draf menunggu persetujuan (sekarang)' => $a['drafts_waiting'],
                 'Diserahkan ke admin' => $a['handoffs'],
+                'Diserahkan tanpa balasan dalam 3 menit' => $a['handoff_unanswered'],
+                ...$reasons,
                 'Voice note belum dibalas' => $a['voice_unanswered'],
             ],
             'Pesan otomatis' => [

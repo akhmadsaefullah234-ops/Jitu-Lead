@@ -138,6 +138,7 @@ class DailyReport
         $block = [];
         $this->line($block, 'Balasan AI', $a['ai_replies']);
         $this->line($block, 'Diserahkan ke tim (handoff)', $a['handoffs']);
+        $this->line($block, 'Handoff tanpa balasan dalam 3 menit', $a['handoff_unanswered']);
         $this->line($block, 'Follow-up terkirim', $a['follow_ups_sent']);
         $this->line($block, '"Tanya produk" terkirim', $a['ask_sent']);
         $this->line($block, 'Sambutan formulir terkirim', $a['welcome_sent']);
