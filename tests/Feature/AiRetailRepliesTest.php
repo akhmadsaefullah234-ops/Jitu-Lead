@@ -152,8 +152,8 @@ class AiRetailRepliesTest extends TestCase
     public function test_a_form_lead_asking_the_cost_gets_the_breakdown_without_being_asked_the_address(): void
     {
         $this->buyer($this->manado());
-        // 2 x 300 g = 1 kg to the Sulawesi zone: JNE REG Rp 62.000, SiCepat REG Rp 80.000; 2 x Rp 89.000 = Rp 178.000.
-        $this->ai = [$this->text('Kaos Lari 2 x Rp 89.000 = Rp 178.000. Ongkir ke Kota Manado: JNE REG Rp 62.000 (total Rp 240.000), SiCepat REG Rp 80.000 (total Rp 258.000). Bisa COD juga, Kak.')];
+        // 2 x 300 g = 1 kg to the Sulawesi zone: JNE REG (the primary courier) Rp 62.000; 2 x Rp 89.000 = Rp 178.000.
+        $this->ai = [$this->text('Kaos Lari 2 x Rp 89.000 = Rp 178.000. Ongkir ke Kota Manado dengan JNE REG Rp 62.000, total Rp 240.000. Bisa COD juga, Kak.')];
 
         $message = $this->says('Berapa biayanya');
 
@@ -164,6 +164,7 @@ class AiRetailRepliesTest extends TestCase
         $this->assertStringContainsString('"ongkir":62000', $system);
         $this->assertStringContainsString('"total":240000', $system);
         $this->assertStringContainsString('tanpa menanyakan alamat lagi', $system);
+        $this->assertStringNotContainsString('"kurir":"SiCepat', $system, 'Only the primary courier is quoted when the buyer asks for no other.');
         $this->assertSame(0, $this->handoffs());
     }
 
@@ -172,8 +173,8 @@ class AiRetailRepliesTest extends TestCase
         // #418: a form order to Pontianak; "COD" and then "Berapa harganya?".
         $this->buyer(['shipping_address' => 'Jl. Gajah Mada No. 8 RT 01/RW 02, Kota Pontianak', 'shipping_province' => 'Kalimantan Barat']);
         $this->ai = [
-            $this->text('Siap kak, COD bisa. Kaos Lari 2 x Rp 89.000 = Rp 178.000, ongkir SiCepat REG Rp 58.000, total Rp 236.000 dibayar saat paket diterima.'),
-            $this->text('Harganya Rp 89.000 per kaos, jadi Rp 178.000 untuk 2. Ongkir JNE REG Rp 68.000 (total Rp 246.000) atau SiCepat REG Rp 58.000 (total Rp 236.000), Kak.'),
+            $this->text('Siap kak, COD bisa. Kaos Lari 2 x Rp 89.000 = Rp 178.000, ongkir JNE REG Rp 68.000, total Rp 246.000 dibayar saat paket diterima.'),
+            $this->text('Harganya Rp 89.000 per kaos, jadi Rp 178.000 untuk 2. Ongkir JNE REG Rp 68.000, total Rp 246.000, Kak.'),
         ];
 
         $cod = $this->says('COD');
@@ -182,7 +183,7 @@ class AiRetailRepliesTest extends TestCase
         $this->assertSame(AiDraft::SENT, $this->draftFor($cod)->status);
         $this->assertSame(AiDraft::SENT, $this->draftFor($price)->status);
         $this->assertStringContainsString('(tujuan: Kota Pontianak, Kalimantan Barat)', $this->asked()[0]['system'], 'The city is read from the typed address.');
-        $this->assertStringContainsString('"ongkir":58000', $this->asked()[1]['system']);
+        $this->assertStringContainsString('"ongkir":68000', $this->asked()[1]['system']);
         $this->assertSame(0, $this->handoffs());
     }
 
@@ -195,7 +196,7 @@ class AiRetailRepliesTest extends TestCase
         $this->assertSame(AiDraft::SENT, $this->draftFor($palembang)->status);
         $system = $this->asked()[0]['system'];
         $this->assertStringContainsString('kota yang tampaknya baru disebut pembeli sebagai tujuan (tujuan: Palembang, Sumatera Selatan)', $system);
-        $this->assertStringContainsString('"ongkir":45000', $system, 'Sumatera zone, SiCepat REG, 1 kg.');
+        $this->assertStringContainsString('"ongkir":52000', $system, 'Sumatera zone, JNE REG (the primary courier), 1 kg.');
 
         // With the regions imported, a name found in two provinces makes the AI ask which one.
         Cache::flush();
@@ -362,7 +363,7 @@ class AiRetailRepliesTest extends TestCase
         $lead = $this->buyer($this->manado());
         $this->ai = [
             $this->tool(ReplySignals::HANDOFF_TOOL, ['alasan' => 'garansi tidak ada di pengetahuan']),
-            $this->text('Ongkir ke Kota Manado: JNE REG Rp 62.000 (total Rp 240.000), SiCepat REG Rp 80.000 (total Rp 258.000), Kak.'),
+            $this->text('Ongkir ke Kota Manado dengan JNE REG Rp 62.000, total Rp 240.000, Kak.'),
         ];
 
         $warranty = $this->says('Garansinya berapa lama?');

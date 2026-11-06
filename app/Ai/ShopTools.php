@@ -3,8 +3,10 @@
 namespace App\Ai;
 
 use App\Leads\AddressCheck;
+use App\Models\Lead;
 use App\Models\Property;
 use App\Models\Tenant;
+use App\Shipping\CourierChoice;
 use App\Shipping\Shipping;
 use App\Shipping\ShippingQuote;
 use App\Shipping\ShippingSettings;
@@ -31,11 +33,21 @@ class ShopTools
     /** @var list<array{name: string, input: array, result: array}> */
     private array $orders = [];
 
-    public function __construct(private Tenant $tenant) {}
+    /** What the buyer wrote in this chat, when known: a courier is priced only when the buyer asked for it. */
+    private ?string $buyerText = null;
 
-    public static function for(Tenant $tenant): ?self
+    /** @param  ?Lead  $lead  the chat's lead: a check for its own city uses its postal code and kelurahan */
+    public function __construct(private Tenant $tenant, private ?Lead $lead = null) {}
+
+    public static function for(Tenant $tenant, ?Lead $lead = null): ?self
     {
-        return Shipping::available($tenant) ? new self($tenant) : null;
+        return Shipping::available($tenant) ? new self($tenant, $lead) : null;
+    }
+
+    /** The buyer's messages so far. A cek_ongkir for another courier is then priced only when the buyer named one or asked for others. */
+    public function buyerSaid(string $text): void
+    {
+        $this->buyerText = $text;
     }
 
     /** @return list<array{name: string, description: string, input_schema: array}> */
@@ -59,27 +71,33 @@ class ShopTools
             'kota' => ['type' => 'string', 'description' => 'Kota atau kabupaten tujuan, mis. Kab. Bekasi.'],
             'provinsi' => ['type' => 'string', 'description' => 'Provinsi tujuan bila diketahui.'],
             'kecamatan' => ['type' => 'string', 'description' => 'Kecamatan tujuan bila diketahui.'],
+            'kelurahan' => ['type' => 'string', 'description' => 'Kelurahan/desa tujuan bila diketahui.'],
+            'kode_pos' => ['type' => 'string', 'description' => 'Kode pos tujuan bila diketahui.'],
         ];
+        $primary = ShippingSettings::of($this->tenant)->primaryCourier();
 
         return [
             [
                 'name' => self::CHECK,
-                'description' => 'Hitung ongkir dari tabel tarif toko untuk produk dan tujuan tertentu. Mengembalikan ongkir, estimasi, dan total per kurir, '
-                    .'atau status tujuan_belum_jelas / perlu_konfirmasi_admin. Satu-satunya sumber angka ongkir dan total.',
-                'input_schema' => ['type' => 'object', 'properties' => ['items' => $items] + $destination, 'required' => ['items', 'kota']],
+                'description' => 'Hitung ongkir toko untuk produk dan tujuan tertentu, dengan kurir utama toko ('.$primary.') kecuali pembeli meminta kurir lain. '
+                    .'Mengembalikan ongkir, estimasi, dan total, atau status tujuan_belum_jelas / perlu_konfirmasi_admin. Satu-satunya sumber angka ongkir dan total.',
+                'input_schema' => ['type' => 'object', 'properties' => ['items' => $items] + $destination + [
+                    'kurir' => ['type' => 'string', 'description' => 'Isi HANYA bila pembeli sendiri menyebut ekspedisi tertentu (mis. SiCepat, J&T) atau bertanya kurir lain (isi "'.CourierChoice::ALL.'"). '
+                        .'Kosongkan untuk kurir utama toko.'],
+                ], 'required' => ['items', 'kota']],
             ],
             [
                 'name' => self::RECORD,
                 'description' => 'Catat pesanan ke data lead. status "draft": data pesanan sudah lengkap (nama, alamat dengan RT/RW, atau nomor rumah/patokan bila tanpa RT/RW, '
-                    .'produk, warna/varian, jumlah) tapi pembeli belum konfirmasi; lead pindah ke Order masuk. status "konfirmasi": pembeli sudah memastikan pesanan, '
-                    .'kurir, dan cara bayar; ongkir dan total dihitung dari tabel tarif, lalu lead pindah ke Menunggu pembayaran (transfer) atau Dikemas & dikirim (cod).',
+                    .'produk, warna/varian, jumlah) tapi pembeli belum konfirmasi; lead pindah ke Order masuk. status "konfirmasi": pembeli sudah memastikan pesanan '
+                    .'dan cara bayar; ongkir dan total dihitung ulang oleh sistem, lalu lead pindah ke Menunggu pembayaran (transfer) atau Dikemas & dikirim (cod).',
                 'input_schema' => [
                     'type' => 'object',
                     'properties' => ['items' => $items] + $destination + [
                         'status' => ['type' => 'string', 'enum' => ['draft', 'konfirmasi'], 'description' => 'draft bila belum dikonfirmasi pembeli, konfirmasi bila sudah.'],
                         'nama' => ['type' => 'string', 'description' => 'Nama penerima.'],
                         'alamat' => ['type' => 'string', 'description' => 'Alamat kirim lengkap: nama jalan, nomor rumah atau patokan, RT/RW (atau dusun), kelurahan.'],
-                        'kurir' => ['type' => 'string', 'description' => 'Kurir yang dipilih pembeli, persis seperti di hasil cek_ongkir. Wajib untuk konfirmasi.'],
+                        'kurir' => ['type' => 'string', 'description' => 'Kurir yang diminta pembeli, persis seperti di hasil cek_ongkir. Kosongkan bila pembeli tidak menyebut kurir: kurir utama toko ('.$primary.') dipakai.'],
                         'pembayaran' => ['type' => 'string', 'enum' => self::PAYMENTS, 'description' => 'Cara bayar yang dipilih pembeli: transfer atau cod (bayar di tempat). Bawaan transfer.'],
                     ],
                     'required' => ['items', 'kota', 'alamat', 'status'],
@@ -94,7 +112,16 @@ class ShopTools
      */
     public function run(string $name, array $input): array
     {
-        $quote = Shipping::quote($this->tenant, $input['kota'] ?? null, $input['provinsi'] ?? null, (array) ($input['items'] ?? []), $input['kecamatan'] ?? null);
+        $courier = filled($input['kurir'] ?? null) ? trim((string) $input['kurir']) : null;
+
+        // Another courier is priced only when the buyer asked for one; the AI never offers a choice on its own.
+        if ($name === self::CHECK && $courier !== null && $this->buyerText !== null && CourierChoice::fromText($this->buyerText) === null) {
+            $courier = null;
+        }
+
+        $place = LeadQuote::exactPlace($this->lead, $input['kota'] ?? null);
+        $quote = Shipping::quote($this->tenant, $input['kota'] ?? null, $input['provinsi'] ?? null, (array) ($input['items'] ?? []), $input['kecamatan'] ?? null,
+            $courier, $input['kode_pos'] ?? $place['kode_pos'] ?? null, $input['kelurahan'] ?? $place['kelurahan'] ?? null);
 
         if ($name === self::CHECK) {
             return $quote->toArray();
@@ -113,13 +140,15 @@ class ShopTools
                 return ['status' => 'data_belum_lengkap', 'pesan' => $problem];
             }
 
-            $result = ['status' => 'draft_tercatat', 'pesan' => 'Data pesanan dicatat. Rangkum pesanannya lalu minta pembeli konfirmasi, pilih kurir, dan cara bayar (transfer atau COD).'];
+            $result = ['status' => 'draft_tercatat', 'pesan' => 'Data pesanan dicatat. Rangkum pesanannya dengan kurir '.($quote->options[0]->courier ?? 'utama toko')
+                .' lalu minta pembeli konfirmasi dan pilih cara bayar (transfer atau COD). Jangan menanyakan kurir.'];
             $this->orders[] = ['name' => $name, 'input' => $input, 'result' => $result];
 
             return $result;
         }
 
-        $option = $quote->option((string) ($input['kurir'] ?? ''));
+        // No courier named: the shop's primary courier, the only one priced.
+        $option = $courier === null ? ($quote->options[0] ?? null) : $quote->option($courier);
 
         if ($option === null) {
             return ['status' => 'kurir_belum_dipilih', 'pesan' => 'Tanyakan kurir: '.implode(', ', array_map(fn ($o) => $o->courier, $quote->options)).'.'];
@@ -214,8 +243,10 @@ class ShopTools
             'Bila kota/kabupaten tujuan belum jelas, tanyakan kota atau kecamatannya dulu, jangan memanggil tool.',
             'Bila pembeli menulis singkatan atau nama tidak resmi (mis. Jaksel, Tangsel, Kab Bdg, Jogja), sebut tujuannya dengan nama resmi persis seperti kolom "tujuan" di hasil '.self::CHECK.', dan pakai nama resmi itu di alamat pesanan.',
             'Bila hasil tool berstatus '.ShippingQuote::NEEDS_ADMIN.' atau '.ShippingQuote::NOT_AVAILABLE.', panggil tool '.ReplySignals::HANDOFF_TOOL.'.',
-            'Begitu data pesanan lengkap (nama penerima, alamat dengan RT/RW, atau nomor rumah/patokan bila tanpa RT/RW, kota, produk, warna/ukuran, jumlah) tapi pembeli belum konfirmasi, panggil '.self::RECORD.' dengan status draft, lalu rangkum pesanannya dan minta pembeli konfirmasi, pilih kurir, dan cara bayar (transfer atau COD).',
-            'Setelah pembeli memastikan pesanan, kurir, dan cara bayar, panggil '.self::RECORD.' dengan status konfirmasi dan pembayaran transfer atau cod, lalu sampaikan total dari hasil tool. Untuk transfer minta pembeli membayar; untuk COD sampaikan pesanan segera dikemas.',
+            'KURIR: pakai kurir utama toko'.($settings->primaryCourier() ? ' ('.$settings->primaryCourier().')' : '').'. Jangan menawarkan pilihan kurir, jangan menyebut kurir lain, dan jangan menanyakan kurir. '
+                .'Hanya bila pembeli sendiri menyebut ekspedisi tertentu (mis. SiCepat, J&T) atau bertanya kurir lain, panggil '.self::CHECK.' dengan kurir itu (atau "'.CourierChoice::ALL.'" untuk kurir lain).',
+            'Begitu data pesanan lengkap (nama penerima, alamat dengan RT/RW, atau nomor rumah/patokan bila tanpa RT/RW, kota, produk, warna/ukuran, jumlah) tapi pembeli belum konfirmasi, panggil '.self::RECORD.' dengan status draft, lalu rangkum pesanannya dan minta pembeli konfirmasi dan pilih cara bayar (transfer atau COD).',
+            'Setelah pembeli memastikan pesanan dan cara bayar, panggil '.self::RECORD.' dengan status konfirmasi dan pembayaran transfer atau cod, lalu sampaikan total dari hasil tool. Untuk transfer minta pembeli membayar; untuk COD sampaikan pesanan segera dikemas.',
             'Jangan pernah menyatakan pembayaran sudah diterima, sudah masuk, atau lunas. Bila pembeli mengirim atau menyebut bukti transfer, katakan admin akan mengeceknya dulu.',
             'Saat memakai tool, kamu boleh menulis satu kalimat singkat dulu. Bila tidak ada tool yang cocok untuk permintaan pembeli, katakan begitu, jangan menebak. Jangan menulis tag XML atau tag sistem apa pun di jawaban.',
             $settings->origin() ? 'Barang dikirim dari '.$settings->origin().'.' : null,

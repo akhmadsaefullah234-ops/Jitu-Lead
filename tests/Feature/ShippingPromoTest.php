@@ -10,6 +10,7 @@ use App\Models\Property;
 use App\Models\Stage;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Shipping\CourierChoice;
 use App\Shipping\Shipments\Shipments;
 use App\Shipping\Shipping;
 use App\Shipping\ShippingPromos;
@@ -50,7 +51,7 @@ class ShippingPromoTest extends TestCase
 
     private function quote(string $city, array $items, ?string $province = null): ShippingQuote
     {
-        return $this->inShop(fn () => Shipping::quote($this->shop->fresh(), $city, $province, $items));
+        return $this->inShop(fn () => Shipping::quote($this->shop->fresh(), $city, $province, $items, courier: CourierChoice::ALL));
     }
 
     private function prices(ShippingQuote $quote): array

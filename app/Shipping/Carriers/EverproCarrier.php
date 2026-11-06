@@ -32,7 +32,18 @@ class EverproCarrier implements CarrierProvider, ListsOrders, ValidatesPhones
     /** Postal codes looked up at most for one search by name. */
     private const MAX_POSTAL_LOOKUPS = 8;
 
+    /** Seconds per call when set (the buyer's shipping quote waits at most this long); else config carriers.timeout. */
+    private ?int $timeout = null;
+
     public function __construct(private CarrierAccount $account) {}
+
+    /** Every call of this instance (token, places, rates) gives up after $seconds. */
+    public function withTimeout(int $seconds): static
+    {
+        $this->timeout = max(1, $seconds);
+
+        return $this;
+    }
 
     public function key(): string
     {
@@ -710,7 +721,7 @@ class EverproCarrier implements CarrierProvider, ListsOrders, ValidatesPhones
 
     private function http(): PendingRequest
     {
-        return Http::baseUrl($this->baseUrl())->acceptJson()->asJson()->timeout((int) config('carriers.timeout', 20))->connectTimeout(10);
+        return Http::baseUrl($this->baseUrl())->acceptJson()->asJson()->timeout($this->timeout ?? (int) config('carriers.timeout', 20))->connectTimeout(min(10, $this->timeout ?? 10));
     }
 
     private function tokenKey(): string

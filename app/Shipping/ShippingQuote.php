@@ -31,7 +31,27 @@ final class ShippingQuote
         public readonly int $volumeGrams = 0,
         public readonly int $billableKg = 0,
         public readonly array $items = [],
+        /** Where the prices come from: ShippingSettings::ZONE or ShippingSettings::EVERPRO. */
+        public readonly string $source = ShippingSettings::ZONE,
+        /** Why the zone table was used for a shop that prices with Everpro ("kode pos tujuan belum diketahui"). */
+        public readonly ?string $sourceNote = null,
+        /** Set when only the shop's primary courier was priced because the buyer asked for no other. */
+        public readonly ?string $primaryCourier = null,
     ) {}
+
+    /** The same quote with some values changed (named as in the constructor). */
+    public function copy(array $changes): self
+    {
+        return new self(...array_merge(get_object_vars($this), $changes));
+    }
+
+    /** "Everpro" or "tabel zona Jabodetabek", with why the zone table was used when the shop prices with Everpro. */
+    public function sourceLabel(): string
+    {
+        return $this->source === ShippingSettings::EVERPRO
+            ? 'Everpro'
+            : trim('tabel zona '.$this->zone).($this->sourceNote ? ' ('.$this->sourceNote.')' : '');
+    }
 
     public function ok(): bool
     {
@@ -104,6 +124,9 @@ final class ShippingQuote
             'zona' => $this->zone,
             'berat_tertagih_kg' => $this->ok() ? $this->billableKg : null,
             'subtotal_produk' => $this->ok() ? $subtotal : null,
+            'kurir_utama' => $this->ok() && $this->primaryCourier !== null ? $this->primaryCourier : null,
+            'catatan_kurir' => $this->ok() && $this->primaryCourier !== null
+                ? 'Hanya kurir utama toko. Pakai kurir ini tanpa menawarkan atau menanyakan kurir lain; kurir lain dihitung hanya bila pembeli memintanya.' : null,
             'opsi' => $this->ok() ? array_map(fn (ShippingOption $o) => array_filter([
                 'kurir' => $o->courier,
                 'ongkir' => $o->price,

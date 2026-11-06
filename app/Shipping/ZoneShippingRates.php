@@ -45,7 +45,7 @@ class ZoneShippingRates implements ShippingProvider
         }
 
         $options = [];
-        foreach ($this->settings->couriers() as $courier) {
+        foreach ($request->couriers ?? $this->settings->couriers() as $courier) {
             $rate = collect($zone['rates'])->first(fn (array $r) => mb_strtolower(trim($r['courier'])) === mb_strtolower($courier));
 
             if ($rate !== null) {
@@ -83,6 +83,12 @@ class ZoneShippingRates implements ShippingProvider
         $kg = max(1, intdiv(max($grams, $volumeGrams) + 999, 1000));
 
         return [$grams, $volumeGrams, $kg];
+    }
+
+    /** True when the destination's zone is marked "konfirmasi admin" by the shop. */
+    public function confirmsAdmin(?string $zoneName): bool
+    {
+        return $zoneName !== null && (bool) (collect($this->settings->zones())->firstWhere('name', $zoneName)['confirm_admin'] ?? false);
     }
 
     private function zoneFor(string $city, string $province): ?array

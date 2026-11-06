@@ -10,6 +10,13 @@ use App\Models\Tenant;
  */
 final class ShippingSettings
 {
+    /** Where buyers' shipping prices come from: the zone table, or Everpro's live rates with the zone table as fallback. */
+    public const ZONE = 'zone';
+
+    public const EVERPRO = 'everpro';
+
+    public const SOURCES = [self::ZONE => 'Tabel zona', self::EVERPRO => 'Everpro (cadangan tabel zona)'];
+
     /** @param  array<string, mixed>  $data */
     public function __construct(private array $data) {}
 
@@ -22,7 +29,7 @@ final class ShippingSettings
     public static function blank(): array
     {
         return [
-            'enabled' => false, 'provider' => 'zone', 'origin' => null, 'couriers' => [],
+            'enabled' => false, 'provider' => self::ZONE, 'origin' => null, 'couriers' => [], 'primary_courier' => null,
             'default_weight_grams' => config('shipping.default_weight_grams'), 'volumetric_divisor' => config('shipping.volumetric_divisor'),
             'zones' => [],
         ];
@@ -35,7 +42,7 @@ final class ShippingSettings
 
     public function provider(): string
     {
-        return (string) ($this->data['provider'] ?? 'zone');
+        return (string) ($this->data['provider'] ?? self::ZONE);
     }
 
     public function origin(): ?string
@@ -47,6 +54,24 @@ final class ShippingSettings
     public function couriers(): array
     {
         return array_values(array_filter(array_map(fn ($c) => trim((string) $c), $this->data['couriers'] ?? [])));
+    }
+
+    /**
+     * The courier quoted to buyers unless they ask for another (Kurir utama): the one chosen, else the first listed.
+     * A chosen courier that is no longer in the list falls back to the first.
+     */
+    public function primaryCourier(): ?string
+    {
+        $couriers = $this->couriers();
+        $chosen = mb_strtolower(trim((string) ($this->data['primary_courier'] ?? '')));
+
+        foreach ($couriers as $courier) {
+            if ($chosen !== '' && mb_strtolower($courier) === $chosen) {
+                return $courier;
+            }
+        }
+
+        return $couriers[0] ?? null;
     }
 
     public function defaultWeightGrams(): int
