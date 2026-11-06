@@ -5,11 +5,13 @@ namespace App\Reports;
 use App\Enums\WaChannelStatus;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Resources\Leads\LeadResource;
+use App\Models\CarrierAccount;
 use App\Models\Lead;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Models\WaChannel;
 use App\Shipping\Carriers\Carriers;
+use App\Shipping\Shipments\Shipments;
 use App\Shipping\Shipments\ShippingSummary;
 use App\Support\CurrentTenant;
 use App\Support\Period;
@@ -120,6 +122,10 @@ class DailyReport
                 $this->line($block, 'Perlu dilengkapi untuk resi', $n['skipped']);
                 $this->line($block, 'Resi belum dicetak (saat ini)', $n['unprinted']);
                 $this->line($block, 'Kiriman perlu tindakan (saat ini)', $n['action']);
+                $this->line($block, 'Menunggu saldo Everpro (saat ini)', $n['balance']);
+                if (Shipments::lowBalance($account = CarrierAccount::query()->first())) {
+                    $block[] = '• ⚠ Saldo '.config('carriers.labels.'.$account->provider, 'penyedia').' rendah: *'.$this->money((int) $account->balance).'*. Isi saldo agar resi tidak tertahan.';
+                }
                 $this->block($out, '📦 *Pengiriman*', $block);
             }
         } else {

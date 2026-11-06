@@ -17,7 +17,7 @@ class CarrierException extends RuntimeException
 
     public const UNAVAILABLE = 'unavailable';
 
-    public function __construct(string $message, public readonly string $kind = self::REJECTED, public readonly ?int $httpStatus = null)
+    public function __construct(string $message, public readonly string $kind = self::REJECTED, public readonly ?int $httpStatus = null, public readonly ?string $providerMessage = null)
     {
         parent::__construct($message);
     }

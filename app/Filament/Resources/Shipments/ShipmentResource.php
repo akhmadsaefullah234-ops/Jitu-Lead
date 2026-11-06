@@ -6,11 +6,13 @@ use App\Filament\Pages\Inbox;
 use App\Filament\Resources\Leads\LeadResource;
 use App\Filament\Resources\Shipments\Pages\ListShipments;
 use App\Filament\Support\ShipmentActions;
+use App\Models\CarrierAccount;
 use App\Models\Property;
 use App\Models\Shipment;
 use App\Shipping\Carriers\ShipmentStatus;
 use App\Shipping\Shipments\LabelSheet;
 use App\Shipping\Shipments\LabelStore;
+use App\Shipping\Shipments\Shipments;
 use App\Support\CurrentTenant;
 use BackedEnum;
 use Carbon\CarbonImmutable;
@@ -82,6 +84,37 @@ class ShipmentResource extends Resource
         return 'warning';
     }
 
+    /**
+     * "Saldo Everpro rendah" (below Pengaturan > Pengiriman > Peringatan saldo, Rp100.000 by default) and how many
+     * parcels wait for balance; null when neither. Shown in the Pengiriman menu and the settings.
+     */
+    public static function balanceWarning(): ?HtmlString
+    {
+        $account = CarrierAccount::query()->first();
+
+        if ($account === null || ! $account->hasCredentials()) {
+            return null;
+        }
+
+        $rp = fn (int $v) => 'Rp'.number_format($v, 0, ',', '.');
+        $waiting = Shipment::query()->tab('balance')->count();
+        $low = Shipments::lowBalance($account);
+
+        if (! $low && $waiting === 0) {
+            return null;
+        }
+
+        $label = config('carriers.labels.'.$account->provider, 'penyedia');
+        $tz = app(CurrentTenant::class)->get()?->timezone ?: 'Asia/Jakarta';
+        $parts = array_filter([
+            $low ? 'Saldo '.$label.' rendah: <strong>'.e($rp((int) $account->balance)).'</strong> (dicek '.e($account->balance_at?->timezone($tz)->format('d M H:i') ?? '-').', batas peringatan '.e($rp(Shipments::lowBalanceLevel($account))).').' : null,
+            $waiting > 0 ? '<strong>'.$waiting.' kiriman menunggu saldo</strong>; dicoba lagi otomatis setelah saldo cukup (dicek tiap 10 menit).' : null,
+        ]);
+
+        return new HtmlString('<span style="display:inline-block;padding:.4rem .7rem;border-radius:.5rem;background:#fef3c7;color:#92400e;font-size:.875rem">⚠ '
+            .implode(' ', $parts).' Isi saldo di dashboard '.e($label).'.</span>');
+    }
+
     /** Ongkir, biaya COD, dana cair and cashback as the provider reports them (only what is known). */
     public static function fees(Shipment $r): array
     {
@@ -118,12 +151,13 @@ class ShipmentResource extends Resource
                 TextColumn::make('status')->label('Status')->badge()
                     ->state(fn (Shipment $r) => self::status($r))
                     ->color(fn (Shipment $r) => match (true) {
+                        $r->waitingBalance() => 'warning',
                         $r->state === Shipment::FAILED, in_array($r->status, [ShipmentStatus::DELIVERY_FAILED, ShipmentStatus::RETURNING, ShipmentStatus::RETURNED], true) => 'danger',
                         $r->status === ShipmentStatus::DELIVERED => 'success',
                         $r->state === Shipment::CANCELLED => 'gray',
                         default => 'info',
                     })
-                    ->description(fn (Shipment $r) => ($t = self::statusTime($r)) ? $t->timezone($tz())->format('d M H:i') : null),
+                    ->description(fn (Shipment $r) => $r->waitingBalance() ? $r->error : (($t = self::statusTime($r)) ? $t->timezone($tz())->format('d M H:i') : null)),
                 TextColumn::make('pickup')->label('Jadwal jemput')->toggleable()
                     ->state(fn (Shipment $r) => ($at = data_get($r->request, 'pickup_time')) ? Carbon::parse($at)->timezone($tz())->format('d M H:i')
                         : (data_get($r->request, 'shipment_type') === 'DROP' ? 'Antar ke agen' : null))->placeholder('-'),
@@ -150,7 +184,7 @@ class ShipmentResource extends Resource
                     ->action(fn (Shipment $record, $livewire) => self::printNow(collect([$record]), $livewire, false)),
                 Action::make('retry')->label('Coba lagi')->icon(Heroicon::OutlinedArrowPath)->color('warning')
                     ->visible(fn (Shipment $r) => $r->retryable())
-                    ->requiresConfirmation()->modalHeading('Coba lagi kiriman yang gagal?')
+                    ->requiresConfirmation()->modalHeading(fn (Shipment $r) => $r->waitingBalance() ? 'Coba lagi setelah isi saldo?' : 'Coba lagi kiriman yang gagal?')
                     ->modalDescription(fn (Shipment $r) => ShipmentActions::retryDescription($r))->modalSubmitActionLabel('Coba lagi')
                     ->schema(fn (Shipment $r) => data_get($r->request, 'order_candidates') ? [
                         Select::make('order')->label('Order Everpro yang benar')->options((array) data_get($r->request, 'order_candidates'))->required()
@@ -249,6 +283,7 @@ class ShipmentResource extends Resource
     {
         return match (true) {
             $shipment->state === Shipment::FAILED => 'Resi gagal dibuat',
+            $shipment->waitingBalance() => 'Menunggu saldo',
             $shipment->state === Shipment::PENDING => filled($shipment->error) ? 'Belum berhasil dibuat' : 'Sedang dibuat',
             $shipment->state === Shipment::ORDERED => filled($shipment->error) ? 'Nomor resi belum terbit' : 'Menunggu nomor resi',
             $shipment->state === Shipment::CANCELLED => 'Dibatalkan',

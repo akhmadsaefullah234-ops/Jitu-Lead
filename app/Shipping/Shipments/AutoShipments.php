@@ -25,7 +25,10 @@ use Throwable;
  * to the agent, with the reason on the lead. A provider error is not retried: the lead shows "Resi gagal dibuat"
  * and its owner (else the admins) is told.
  *
- * Lead columns: auto_shipment_state (scheduled, cancelled, skipped, failed, done), auto_shipment_at (when it is
+ * A shortage of balance is no failure: the parcel waits ("Menunggu saldo", no order made for a prepaid parcel) and is
+ * sent again by itself once the balance covers it; the admins are told once.
+ *
+ * Lead columns: auto_shipment_state (scheduled, cancelled, skipped, failed, balance, done), auto_shipment_at (when it is
  * made), auto_shipment_note (why not, or what was made).
  */
 class AutoShipments
@@ -39,6 +42,9 @@ class AutoShipments
     public const FAILED = 'failed';
 
     public const DONE = 'done';
+
+    /** Booked, but held until the provider's balance covers it (App\Shipping\Shipments\Shipments::waitForBalance). */
+    public const WAITING_BALANCE = 'balance';
 
     public function __construct(private Shipments $shipments, private CurrentTenant $current, private StatusNotices $notices) {}
 
@@ -200,7 +206,7 @@ class AutoShipments
 
         $lead->refresh();
 
-        if ($lead->auto_shipment_state !== self::FAILED) {
+        if (! in_array($lead->auto_shipment_state, [self::FAILED, self::WAITING_BALANCE], true)) {
             $lead->forceFill(['auto_shipment_state' => self::DONE, 'auto_shipment_note' => $detail])->save();
         }
 

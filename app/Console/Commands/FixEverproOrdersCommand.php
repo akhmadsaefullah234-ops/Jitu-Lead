@@ -47,8 +47,9 @@ class FixEverproOrdersCommand extends Command
                 // Booked here, no tracking number: found in the order list, then the usual flow (message once, label).
                 $waiting = Shipment::query()->whereIn('state', $states)->whereNull('awb')->where('source', '!=', Shipment::MANUAL)
                     ->where(fn ($q) => $q->where('state', Shipment::ORDERED)->orWhereNotNull('error'))->orderBy('id')->get()
-                    // On the schedule, those waiting for a person to choose among several orders are left alone.
-                    ->reject(fn (Shipment $s) => $waitingOnly && data_get($s->request, 'order_candidates') !== null);
+                    // On the schedule, those waiting for a person to choose among several orders are left alone, and those
+                    // waiting for balance wait for shipping:balance-wait (asking again would only be refused again).
+                    ->reject(fn (Shipment $s) => $waitingOnly && (data_get($s->request, 'order_candidates') !== null || $s->balance_wait_at !== null));
 
                 foreach ($waiting as $shipment) {
                     [$remote, $choices] = $shipments->remoteMatch($provider, $shipment);
@@ -76,7 +77,12 @@ class FixEverproOrdersCommand extends Command
                         $shipments->keepRemote($shipment, $remote);
                         $shipments->place($shipment->refresh());
                     } catch (CarrierException $e) {
-                        $shipment->forceFill(['error' => $e->getMessage()])->save();
+                        if ($e->kind === CarrierException::BALANCE) {
+                            $shipments->waitForBalance($shipment->refresh(), null, $e);
+                        } else {
+                            $shipment->forceFill(['error' => $e->getMessage()])->save();
+                        }
+
                         $this->warn("#{$shipment->id}: ".$e->getMessage());
                     }
                 }

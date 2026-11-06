@@ -42,6 +42,9 @@ return [
         'cod_max' => 1000000,
     ],
 
+    // Below this balance (rupiah) the Pengiriman menu and settings warn; each agency can change it (Pengaturan > Pengiriman).
+    'low_balance' => 100000,
+
     // Parcels not yet delivered or returned are tracked again this often (hours) when no callback came.
     'track_every_hours' => 2,
 

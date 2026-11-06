@@ -26,11 +26,19 @@ class ListShipments extends ListRecords
         foreach (Shipment::TABS as $key => $label) {
             $count = ShipmentResource::getEloquentQuery()->tab($key)->count();
             // Unprinted: oldest first, the order they are printed in; the others newest first.
-            $tabs[$key] = Tab::make($label)->badge($count ?: null)->badgeColor($key === 'action' ? 'danger' : ($key === 'unprinted' ? 'warning' : 'gray'))
+            $tabs[$key] = Tab::make($label)->badge($count ?: null)->badgeColor(match ($key) {
+                'action' => 'danger', 'unprinted', 'balance' => 'warning', default => 'gray'
+            })
                 ->modifyQueryUsing(fn (Builder $query) => $query->tab($key)->orderBy('created_at', $key === 'unprinted' ? 'asc' : 'desc'));
         }
 
         return $tabs;
+    }
+
+    /** The provider's balance when it is below the agency's warning level, or parcels are waiting for it. */
+    public function getSubheading(): ?HtmlString
+    {
+        return ShipmentResource::balanceWarning();
     }
 
     public function getDefaultActiveTab(): string|int|null

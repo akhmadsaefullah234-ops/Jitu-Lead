@@ -387,8 +387,9 @@ class ShipmentActions
                     ! $new => 'Kiriman ini sudah dibuat sebelumnya ('.($shipment->awb ?: $shipment->client_order_no).').',
                     $shipment->state === Shipment::SHIPPED => 'Resi '.$shipment->awb.' terbit.',
                     $shipment->state === Shipment::FAILED => 'Kiriman gagal dibuat: '.$shipment->error,
+                    $shipment->waitingBalance() => 'Kiriman menunggu saldo: '.$shipment->error,
                     default => 'Kiriman sedang dibuat. Resi muncul di lead begitu terbit.',
-                })->{$shipment->state === Shipment::FAILED ? 'danger' : 'success'}()->send();
+                })->{$shipment->state === Shipment::FAILED ? 'danger' : ($shipment->waitingBalance() ? 'warning' : 'success')}()->send();
             });
     }
 
@@ -529,8 +530,13 @@ class ShipmentActions
     /** The lead's last parcel, when the provider refused it and nothing else is on its way. */
     public static function failedFor(?Lead $lead): ?Shipment
     {
-        if ($lead === null || Shipment::latestFor($lead) !== null) {
+        if ($lead === null) {
             return null;
+        }
+
+        // A parcel held for balance is still the lead's active one, and "Coba lagi" is how it is sent after a top-up.
+        if (($active = Shipment::latestFor($lead)) !== null) {
+            return $active->waitingBalance() ? $active : null;
         }
 
         $last = Shipment::query()->where('lead_id', $lead->getKey())->latest('id')->first();
@@ -561,11 +567,12 @@ class ShipmentActions
         }
 
         $shipment->refresh();
-        Notification::make()->title(match ($shipment->state) {
-            Shipment::SHIPPED => 'Resi '.$shipment->awb.' terbit.',
-            Shipment::FAILED => 'Kiriman masih gagal: '.$shipment->error,
+        Notification::make()->title(match (true) {
+            $shipment->state === Shipment::SHIPPED => 'Resi '.$shipment->awb.' terbit.',
+            $shipment->state === Shipment::FAILED => 'Kiriman masih gagal: '.$shipment->error,
+            $shipment->waitingBalance() => 'Kiriman masih menunggu saldo: '.$shipment->error,
             default => 'Kiriman dikirim ulang. Resi muncul di lead begitu terbit.',
-        })->{$shipment->state === Shipment::FAILED ? 'danger' : 'success'}()->send();
+        })->{$shipment->state === Shipment::FAILED ? 'danger' : ($shipment->waitingBalance() ? 'warning' : 'success')}()->send();
     }
 
     /** "Coba lagi": the refused parcel sent again with the details it had (App\Shipping\Shipments\Shipments::retry). */
