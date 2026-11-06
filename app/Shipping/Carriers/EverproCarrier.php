@@ -465,6 +465,9 @@ class EverproCarrier implements CarrierProvider, ValidatesPhones
             throw $e;
         }
 
+        // The answer may be "data": null: booked, its reference and tracking number come later.
+        $data = (array) $data;
+
         return new CarrierOrder(
             (string) ($data['client_order_no'] ?? $order->clientOrderNo),
             isset($data['order_reference_id']) ? (string) $data['order_reference_id'] : null,
@@ -476,14 +479,26 @@ class EverproCarrier implements CarrierProvider, ValidatesPhones
 
     public function generateAwb(string $clientOrderNo): ?string
     {
-        $data = $this->call('post', '/shipment/v1/orders/'.rawurlencode($clientOrderNo).'/generate');
-        $awb = data_get($data, 'awb_number');
+        try {
+            $awb = data_get($this->call('post', '/shipment/v1/orders/'.rawurlencode($clientOrderNo).'/generate'), 'awb_number');
+        } catch (CarrierException $e) {
+            // Asked before (a retry): the number may already be there.
+            if ($e->retryable() || ($found = $this->awb($clientOrderNo)->awb) === null) {
+                throw $e;
+            }
 
-        if (blank($awb)) {
-            $awb = data_get($this->call('get', '/shipment/v1/orders/'.rawurlencode($clientOrderNo).'/awb'), 'awb_number');
+            return $found;
         }
 
-        return filled($awb) ? (string) $awb : null;
+        return filled($awb) ? (string) $awb : $this->awb($clientOrderNo)->awb;
+    }
+
+    public function awb(string $clientOrderNo): CarrierOrder
+    {
+        $data = (array) $this->call('get', '/shipment/v1/orders/'.rawurlencode($clientOrderNo).'/awb');
+        $awb = $data['awb_number'] ?? null;
+
+        return new CarrierOrder($clientOrderNo, isset($data['order_reference_id']) ? (string) $data['order_reference_id'] : null, filled($awb) ? (string) $awb : null);
     }
 
     public function label(string $awb): string
@@ -603,7 +618,12 @@ class EverproCarrier implements CarrierProvider, ValidatesPhones
     {
         try {
             $client = $this->http()->withToken($this->token());
-            $response = $method === 'get' ? $client->get($path, $payload) : $client->{$method}($path, $payload);
+            // Everpro reads a POST body as an object: an empty one is {} (a PHP [] would go out as a JSON array and be refused).
+            $response = match (true) {
+                $method === 'get' => $client->get($path, $payload),
+                $payload === [] => $client->withBody('{}', 'application/json')->{$method}($path),
+                default => $client->{$method}($path, $payload),
+            };
         } catch (ConnectionException) {
             Log::warning('Everpro call failed: no connection', ['tenant' => $this->account->tenant_id, 'path' => $this->safePath($path)]);
 

@@ -33,6 +33,9 @@ interface CarrierProvider
     public function generateAwb(string $clientOrderNo): ?string;
 
     /** URL of the parcel label (PDF). */
+    /** The tracking number of a booked order, once the provider has made it (null: not yet), with the order's reference. */
+    public function awb(string $clientOrderNo): CarrierOrder;
+
     public function label(string $awb): string;
 
     public function track(string $awb): TrackResult;

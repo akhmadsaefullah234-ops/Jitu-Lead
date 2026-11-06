@@ -18,6 +18,7 @@ use App\Filament\Resources\Leads\Pages\ListLeads;
 use App\Filament\Resources\Shipments\Pages\ListShipments;
 use App\Filament\Resources\Shipments\ShipmentResource;
 use App\Filament\Support\ShipmentTimeline;
+use App\Jobs\FetchShipmentAwb;
 use App\Leads\ChatShippingDetails;
 use App\Mail\ShipmentNeedsAction;
 use App\Models\AiDraft;
@@ -58,6 +59,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use setasign\Fpdi\Fpdi;
@@ -97,6 +99,12 @@ class EverproShippingTest extends TestCase
     private bool $unauthorizedOnce = false;
 
     private bool $noAwb = false;
+
+    /** Everpro refuses /generate (once per value set). */
+    private ?string $generateError = null;
+
+    /** The /v2/orders answer is "data": null. */
+    private bool $orderDataNull = false;
 
     private ?string $orderError = null;
 
@@ -141,7 +149,7 @@ class EverproShippingTest extends TestCase
     private function everpro(Request $r)
     {
         $path = parse_url($r->url(), PHP_URL_PATH);
-        $this->calls[] = ['method' => $r->method(), 'path' => $path, 'body' => $r->data()];
+        $this->calls[] = ['method' => $r->method(), 'path' => $path, 'body' => $r->data(), 'raw' => $r->body()];
         $ok = fn ($data) => Http::response(['data' => $data, 'status' => 'success', 'status_code' => 200]);
 
         if ($path === '/auth/v1/token') {
@@ -175,9 +183,11 @@ class EverproShippingTest extends TestCase
             $path === '/shipment/v2/rates' => $ok(self::ratesFixture(($r->data()['is_cod'] ?? false) === true)),
             $path === '/shipment/v1/pickup-times' => $ok(['available_pickup_time' => [['rate_code' => 'REG23', 'pickup_time_list' => [['date' => '2026-11-05', 'pickup_times' => [['start_at' => '2026-11-05T07:00:00Z', 'end_at' => '2026-11-05T09:00:00Z']]]]]]]),
             $path === '/shipment/v2/orders' && $this->orderError !== null => Http::response(['message' => $this->orderError], 422),
+            $path === '/shipment/v2/orders' && $this->orderDataNull => $ok(null),
+            str_ends_with($path, '/generate') && $this->generateError !== null => Http::response(['message' => $this->generateError], 422),
             $path === '/shipment/v2/orders' => $ok(['client_order_no' => $r->data()['client_order_no'], 'order_reference_id' => 'ER-'.count($this->callsTo('/shipment/v2/orders')), 'actual_price' => 18000]),
             str_ends_with($path, '/generate') => $ok(['awb_number' => $this->noAwb ? null : 'JNE0001234']),
-            str_ends_with($path, '/awb') => $ok(['awb_number' => $this->noAwb ? null : 'JNE0001234']),
+            str_ends_with($path, '/awb') => $ok(['awb_number' => $this->noAwb ? null : 'JNE0001234', 'order_reference_id' => 'ER-LATER']),
             str_ends_with($path, '/label') => $ok(['url_label_pdf' => 'https://labels.example.com/'.basename(dirname($path)).'.pdf']),
             str_ends_with($path, '/cancel') => $ok(null),
             $path === '/shipment/v1/orders/track' => $ok(array_shift($this->track) ?? []),
@@ -1731,6 +1741,74 @@ class EverproShippingTest extends TestCase
         Livewire::test(EditLead::class, ['record' => $lead->getRouteKey()])->assertActionHidden('retryShipment');
         $this->expectException(CarrierException::class);
         $this->inShop(fn () => app(Shipments::class)->retry($this->shipment()));
+    }
+
+    public function test_generate_sends_an_empty_object_and_a_late_tracking_number_is_waited_for(): void
+    {
+        Storage::fake('local');
+        Queue::fake([FetchShipmentAwb::class]);
+        $this->configure();
+        $this->orderDataNull = true;
+        $this->noAwb = true;
+        $lead = $this->order('cod');
+
+        $shipment = $this->book($lead);
+
+        $generate = array_values(array_filter($this->calls, fn ($c) => str_ends_with($c['path'], '/generate')));
+        $this->assertCount(1, $generate);
+        $this->assertSame('{}', $generate[0]['raw'], 'An object, never [].');
+        $this->assertSame([Shipment::ORDERED, null, null], [$shipment->state, $shipment->order_id, $shipment->error], '"data": null is not an error.');
+        $this->assertSame('Menunggu nomor resi', ShipmentResource::status($shipment));
+        $this->assertSame([$shipment->id], $this->inShop(fn () => Shipment::query()->tab('awaiting')->pluck('id')->all()));
+        Queue::assertPushed(FetchShipmentAwb::class, fn ($job) => $job->shipmentId === $shipment->id && $job->delay !== null);
+
+        // Two minutes later the number is there: only asked for, not generated again
+        $this->noAwb = false;
+        (new FetchShipmentAwb($shipment->id, $this->shop->id))->handle(app(CurrentTenant::class));
+
+        $this->assertCount(1, array_filter($this->calls, fn ($c) => str_ends_with($c['path'], '/generate')));
+        $shipment = $this->shipment();
+        $this->assertSame([Shipment::SHIPPED, 'JNE0001234', 'ER-LATER'], [$shipment->state, $shipment->awb, $shipment->order_id]);
+        $this->assertNotNull($shipment->label_path, 'Label kept.');
+        $this->assertSame([$shipment->id], $this->inShop(fn () => Shipment::query()->tab('unprinted')->pluck('id')->all()));
+        $this->assertCount(1, array_filter($this->sent(), fn ($b) => str_contains((string) $b, 'Nomor resi: JNE0001234')), 'The buyer gets the number.');
+    }
+
+    public function test_a_tracking_number_still_missing_after_half_an_hour_needs_action(): void
+    {
+        $this->configure();
+        $this->noAwb = true;
+        $shipment = $this->book($this->order('cod'));
+
+        $this->assertSame(FetchShipmentAwb::TRIES + 1, count(array_filter($this->calls, fn ($c) => str_ends_with($c['path'], '/awb'))), 'Asked every 2 minutes, 15 times, then stopped.');
+        $shipment = $this->shipment();
+        $this->assertSame(Shipment::ORDERED, $shipment->state);
+        $this->assertStringContainsString('Nomor resi belum terbit setelah 30 menit', $shipment->error);
+        $this->assertSame([$shipment->id], $this->inShop(fn () => Shipment::query()->tab('action')->pluck('id')->all()));
+        $this->assertTrue($shipment->retryable());
+    }
+
+    public function test_coba_lagi_on_a_booked_parcel_without_a_number_never_books_again(): void
+    {
+        Storage::fake('local');
+        $this->configure();
+        $lead = $this->order('cod');
+        $this->generateError = 'code=400, message=Unmarshal type error: expected=request.GenerateAwbRequest, got=array';
+        $this->noAwb = true;
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+
+        $shipment = $this->book($lead);
+        $this->assertSame(Shipment::ORDERED, $shipment->state);
+        $this->assertNotNull($shipment->error);
+        $this->assertSame([$shipment->id], $this->inShop(fn () => Shipment::query()->tab('action')->pluck('id')->all()));
+
+        $this->generateError = null;
+        $this->noAwb = false;
+        Livewire::test(ListShipments::class)->set('activeTab', 'action')->callTableAction('retry', $shipment)->assertNotified('Resi JNE0001234 terbit.');
+
+        $this->assertCount(1, $this->callsTo('/shipment/v2/orders'), 'No second order at Everpro.');
+        $this->assertSame([Shipment::SHIPPED, 'JNE0001234'], [$this->shipment()->state, $this->shipment()->awb]);
+        $this->assertSame(1, $this->inShop(fn () => Shipment::query()->count()));
     }
 
     public function test_buat_resi_never_assumes_transfer_when_the_way_of_paying_is_unknown(): void

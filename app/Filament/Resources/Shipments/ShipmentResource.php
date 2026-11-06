@@ -228,7 +228,8 @@ class ShipmentResource extends Resource
     {
         return match (true) {
             $shipment->state === Shipment::FAILED => 'Resi gagal dibuat',
-            $shipment->state === Shipment::PENDING, $shipment->state === Shipment::ORDERED => 'Sedang dibuat',
+            $shipment->state === Shipment::PENDING => filled($shipment->error) ? 'Belum berhasil dibuat' : 'Sedang dibuat',
+            $shipment->state === Shipment::ORDERED => filled($shipment->error) ? 'Nomor resi belum terbit' : 'Menunggu nomor resi',
             $shipment->state === Shipment::CANCELLED => 'Dibatalkan',
             $shipment->printable() && $shipment->label_path === null && $shipment->label_failed_at !== null && $shipment->printed_at === null => 'Label belum tersedia',
             default => ShipmentStatus::label($shipment->status ?? ShipmentStatus::AWB_CREATED),

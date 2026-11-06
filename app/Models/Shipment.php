@@ -82,10 +82,14 @@ class Shipment extends Model
     }
 
     /** Still open at the courier: not booked yet, or booked and not yet collected. */
-    /** Refused by the provider before it took the order: can be sent again as it is ("Coba lagi"). */
+    /**
+     * "Coba lagi": refused by the provider before it took the order (sent again as it is), or booked without a
+     * tracking number yet and stuck (only the number is asked for again: never a second order).
+     */
     public function retryable(): bool
     {
-        return $this->state === self::FAILED && $this->order_id === null && ! $this->manual();
+        return ! $this->manual() && (($this->state === self::FAILED && $this->order_id === null)
+            || ($this->state === self::ORDERED && blank($this->awb) && filled($this->error)));
     }
 
     public function cancellable(): bool
@@ -111,6 +115,7 @@ class Shipment extends Model
 
     /** Tabs of the Pengiriman menu. */
     public const TABS = [
+        'awaiting' => 'Menunggu resi',
         'unprinted' => 'Belum dicetak',
         'printed' => 'Sudah dicetak, menunggu dijemput',
         'transit' => 'Dalam perjalanan',
@@ -131,7 +136,9 @@ class Shipment extends Model
             'printed' => $waiting($query)->where(fn ($q) => $q->whereNotNull('printed_at')->orWhere('source', self::MANUAL)),
             'transit' => $query->where('state', self::SHIPPED)->whereNull('final_at')
                 ->whereIn('status', [ShipmentStatus::PICKED_UP, ShipmentStatus::IN_TRANSIT, ShipmentStatus::OUT_FOR_DELIVERY]),
+            'awaiting' => $query->whereIn('state', [self::PENDING, self::ORDERED])->whereNull('error'),
             'action' => $query->where(fn ($q) => $q->where('state', self::FAILED)
+                ->orWhere(fn ($q) => $q->whereIn('state', [self::PENDING, self::ORDERED])->whereNotNull('error'))
                 ->orWhereIn('status', [ShipmentStatus::DELIVERY_FAILED, ShipmentStatus::RETURNING, ShipmentStatus::RETURNED])
                 ->orWhere(fn ($q) => $q->where('state', self::SHIPPED)->whereNull('printed_at')->whereNull('label_path')->whereNotNull('label_failed_at'))),
             'done' => $query->where('status', ShipmentStatus::DELIVERED),
