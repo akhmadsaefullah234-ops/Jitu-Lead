@@ -18,6 +18,7 @@ use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
@@ -151,7 +152,11 @@ class ShipmentResource extends Resource
                     ->visible(fn (Shipment $r) => $r->retryable())
                     ->requiresConfirmation()->modalHeading('Coba lagi kiriman yang gagal?')
                     ->modalDescription(fn (Shipment $r) => ShipmentActions::retryDescription($r))->modalSubmitActionLabel('Coba lagi')
-                    ->action(fn (Shipment $record) => ShipmentActions::retryShipment($record)),
+                    ->schema(fn (Shipment $r) => data_get($r->request, 'order_candidates') ? [
+                        Select::make('order')->label('Order Everpro yang benar')->options((array) data_get($r->request, 'order_candidates'))->required()
+                            ->helperText('Beberapa order cocok sama baiknya; pilih yang untuk kiriman ini.'),
+                    ] : [])
+                    ->action(fn (Shipment $record, array $data) => ShipmentActions::retryShipment($record, $data['order'] ?? null)),
                 Action::make('retryLabel')->label('Ambil ulang label')->icon(Heroicon::OutlinedArrowPath)->color('warning')
                     ->visible(fn (Shipment $r) => $r->printable() && $r->label_path === null && $r->label_failed_at !== null)
                     ->action(fn (Shipment $record) => app(LabelStore::class)->save($record)

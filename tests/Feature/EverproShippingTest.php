@@ -1165,6 +1165,81 @@ class EverproShippingTest extends TestCase
         $this->assertSame([Shipment::SHIPPED, 'TRD2026110602264'], [$shipment->fresh()->state, $shipment->fresh()->provider_order_no]);
     }
 
+    /** A booked parcel the order list never gave a number for, as in production (#16). */
+    private function stuck(Lead $lead, array $extra = []): Shipment
+    {
+        return $this->inShop(fn () => Shipment::query()->forceCreate($extra + [
+            'lead_id' => $lead->id, 'provider' => 'everpro', 'sequence' => 1, 'client_order_no' => 'JL-7-'.$lead->id.'-1', 'rate_code' => 'REG',
+            'courier' => 'SiCepat REG', 'state' => Shipment::ORDERED, 'is_cod' => true, 'cod_amount' => 144000, 'weight_grams' => 2000,
+            'request' => ['description' => 'Tas Badminton Hitam x2', 'awb_requested_at' => now()->subMinutes(35)->toIso8601String()],
+            'error' => 'Nomor resi belum terbit setelah 30 menit.', 'created_at' => now()->subMinutes(25),
+        ]));
+    }
+
+    public function test_an_order_date_without_a_time_is_compared_by_day(): void
+    {
+        Storage::fake('local');
+        $this->configure();
+        $lead = $this->order('cod', '6281234567890', ['name' => 'Gustinah']);
+        $shipment = $this->stuck($lead);
+        // Booked 09:35 today; Everpro's list says only "2026-11-05" (midnight): same day matches, the day before does not.
+        $this->remoteOrders = [
+            self::trdOrder(['shipment_order_no' => 'TRD2026110400001', 'awb_number' => '001700000009', 'order_date' => '2026-11-04']),
+            self::trdOrder(['order_date' => '2026-11-05']),
+        ];
+
+        $this->artisan('shipping:fix-everpro-orders', ['--waiting' => true, '--apply' => true])->assertSuccessful();
+
+        $this->assertSame([Shipment::SHIPPED, 'TRD2026110602264', '001798295816'], [$shipment->fresh()->state, $shipment->fresh()->provider_order_no, $shipment->fresh()->awb]);
+        $this->assertCount(1, array_filter($this->sent(), fn ($b) => str_contains((string) $b, 'Nomor resi: 001798295816')));
+    }
+
+    public function test_only_yesterdays_order_is_never_taken(): void
+    {
+        $this->configure();
+        $lead = $this->order('cod', '6281234567890', ['name' => 'Gustinah']);
+        $shipment = $this->stuck($lead);
+        $this->remoteOrders = [self::trdOrder(['order_date' => '2026-11-04'])];
+
+        $this->artisan('shipping:fix-everpro-orders', ['--waiting' => true, '--apply' => true])->assertSuccessful();
+
+        $this->assertSame([Shipment::ORDERED, null], [$shipment->fresh()->state, $shipment->fresh()->provider_order_no]);
+    }
+
+    public function test_two_equal_orders_on_the_same_day_are_not_guessed_and_the_agent_picks_one(): void
+    {
+        Storage::fake('local');
+        $this->configure();
+        $lead = $this->order('cod', '6281234567890', ['name' => 'Gustinah']);
+        $shipment = $this->stuck($lead);
+        $this->remoteOrders = [
+            self::trdOrder(['shipment_order_no' => 'TRD2026110500002', 'awb_number' => '001700000002', 'order_date' => '2026-11-05']),
+            self::trdOrder(['shipment_order_no' => 'TRD2026110500001', 'awb_number' => '001700000001', 'order_date' => '2026-11-05']),
+        ];
+
+        $this->artisan('shipping:fix-everpro-orders', ['--waiting' => true, '--apply' => true])->assertSuccessful();
+
+        $shipment = $shipment->fresh();
+        $this->assertSame([Shipment::ORDERED, null], [$shipment->state, $shipment->provider_order_no], 'Not matched on a guess.');
+        $this->assertEqualsCanonicalizing(['TRD2026110500001', 'TRD2026110500002'], array_keys($shipment->request['order_candidates']));
+        $this->assertStringContainsString('Ada 2 order Everpro yang sama-sama cocok', $shipment->error);
+        $this->assertSame([], array_filter($this->sent(), fn ($b) => str_contains((string) $b, 'Nomor resi')));
+
+        // The schedule leaves it to a person; the agent picks in Coba lagi.
+        $calls = count($this->calls);
+        $this->artisan('shipping:fix-everpro-orders', ['--waiting' => true, '--apply' => true])->assertSuccessful();
+        $this->assertSame($calls, count($this->calls), 'Left alone.');
+
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+        Livewire::test(ListShipments::class)->set('activeTab', 'action')
+            ->callTableAction('retry', $shipment, data: ['order' => 'TRD2026110500002'])->assertNotified('Resi 001700000002 terbit.');
+
+        $shipment = $shipment->fresh();
+        $this->assertSame([Shipment::SHIPPED, 'TRD2026110500002', '001700000002'], [$shipment->state, $shipment->provider_order_no, $shipment->awb]);
+        $this->assertArrayNotHasKey('order_candidates', (array) $shipment->request);
+        $this->assertCount(1, array_filter($this->sent(), fn ($b) => str_contains((string) $b, 'Nomor resi: 001700000002')));
+    }
+
     public function test_the_repair_command_matches_a_parcel_left_without_a_number(): void
     {
         Storage::fake('local');

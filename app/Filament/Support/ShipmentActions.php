@@ -550,10 +550,10 @@ class ShipmentActions
         ])).'. Gagal sebelumnya: '.($shipment->error ?: '-').' Pastikan penyebabnya sudah diperbaiki.';
     }
 
-    public static function retryShipment(Shipment $shipment): void
+    public static function retryShipment(Shipment $shipment, ?string $orderNo = null): void
     {
         try {
-            app(Shipments::class)->retry($shipment, auth()->user());
+            app(Shipments::class)->retry($shipment, auth()->user(), $orderNo);
         } catch (CarrierException $e) {
             Notification::make()->title('Kiriman belum bisa dicoba lagi')->body($e->getMessage())->danger()->send();
 
