@@ -583,7 +583,8 @@ class EverproShippingTest extends TestCase
         $this->assertSame('17540', $order['shipper_postal_code']);
         $this->assertSame('Kedungwaringin', $order['shipper_sub_district_name']);
         $this->assertSame('Sekeloa', $order['receiver_sub_district_name']);
-        $this->assertMatchesRegularExpression('/^08\d{8,13}$/', $order['receiver_phone']);
+        $this->assertMatchesRegularExpression('/^62\d{8,13}$/', $order['receiver_phone']);
+        $this->assertSame('6281300001111', $order['shipper_phone']);
         $this->assertSame('2026-11-05T07:00:00+00:00', $order['pickup_time']);
 
         // Only the field names of the answer are logged, once.
@@ -650,7 +651,7 @@ class EverproShippingTest extends TestCase
         $this->assertSame('JL-'.$this->shop->id.'-'.$lead->id.'-1', $order['client_order_no']);
         $this->assertTrue($order['is_cod']);
         $this->assertSame(310000, $order['cod_price']);
-        $this->assertSame('081234567890', $order['receiver_phone'], 'Local number on the label.');
+        $this->assertSame('6281234567890', $order['receiver_phone'], 'Everpro takes only 62…');
         $this->assertSame('Sekeloa', $order['receiver_sub_district_name']);
         $this->assertSame('40134', $order['receiver_postal_code']);
         $this->assertArrayNotHasKey('receiver_sub_district_id', $order);
@@ -1675,6 +1676,61 @@ class EverproShippingTest extends TestCase
         $this->assertStringContainsString('Total COD Rp313.000 → Rp300.000', $activity->body);
         $this->assertStringContainsString('Berat 2 kg → 2,5 kg', $activity->body);
         $this->assertStringContainsString('Varian Hitam → Merah', $activity->body);
+    }
+
+    public function test_everpro_gets_phone_numbers_starting_with_62_and_a_bad_number_is_stopped_before_calling_it(): void
+    {
+        foreach (['081234567890' => '6281234567890', '+62 812-3456-7890' => '6281234567890', '6281234567890' => '6281234567890', '81234567890' => '6281234567890', '0812345' => null, '12345678901' => null, '' => null] as $in => $out) {
+            $this->assertSame($out, EverproCarrier::phone($in), $in);
+        }
+
+        $this->configure(settings: ['sender_phone' => '+62 813-0000-1111']);
+        $this->book($this->order('cod', '6281234567890'));
+        $order = $this->callsTo('/shipment/v2/orders')[0]['body'];
+        $this->assertSame(['6281300001111', '6281234567890'], [$order['shipper_phone'], $order['receiver_phone']]);
+
+        // Too short: said in the modal, Everpro never called
+        $short = $this->order('cod', '6281234567891');
+        $this->inShop(fn () => $short->forceFill(['phone' => '+620812345'])->save());
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+        $calls = count($this->calls);
+        $page = Livewire::test(EditLead::class, ['record' => $short->getRouteKey()])->mountAction('createShipment');
+        $this->assertTrue($this->submit($page)->isDisabled());
+        $page->callMountedAction();
+        $this->assertStringContainsString('Nomor HP penerima tidak valid', $this->notice('Resi belum bisa dibuat'));
+        $this->assertSame([], array_filter(array_slice($this->calls, $calls), fn ($c) => str_starts_with($c['path'], '/shipment/')), 'No rates, no order.');
+    }
+
+    public function test_a_refused_parcel_is_tried_again_with_its_edited_details_without_a_second_active_one(): void
+    {
+        Storage::fake('local');
+        $this->configure();
+        $lead = $this->order('cod');
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+        $this->orderError = 'phone must starts with 62';
+
+        Livewire::test(EditLead::class, ['record' => $lead->getRouteKey()])->mountAction('createShipment')
+            ->setActionData(['cod_amount' => '144000'])->callMountedAction()->assertHasNoActionErrors();
+        $failed = $this->shipment();
+        $this->assertSame([Shipment::FAILED, 144000], [$failed->state, $failed->cod_amount]);
+
+        // From the lead and from the Pengiriman menu ("Perlu tindakan")
+        Livewire::test(EditLead::class, ['record' => $lead->getRouteKey()])->assertActionVisible('retryShipment');
+        Livewire::test(ListShipments::class)->set('activeTab', 'action')->assertTableActionVisible('retry', $failed);
+
+        $this->orderError = null;
+        Livewire::test(EditLead::class, ['record' => $lead->getRouteKey()])->callAction('retryShipment')->assertNotified('Resi JNE0001234 terbit.');
+
+        $orders = $this->callsTo('/shipment/v2/orders');
+        $this->assertCount(2, $orders);
+        $this->assertSame([$failed->client_order_no, 144000], [$orders[1]['body']['client_order_no'], $orders[1]['body']['cod_price']], 'Same order number, the edited COD.');
+        $this->assertSame(1, $this->inShop(fn () => Shipment::query()->count()));
+        $this->assertSame(Shipment::SHIPPED, $this->shipment()->state);
+
+        // Nothing to try again now; never a second active parcel
+        Livewire::test(EditLead::class, ['record' => $lead->getRouteKey()])->assertActionHidden('retryShipment');
+        $this->expectException(CarrierException::class);
+        $this->inShop(fn () => app(Shipments::class)->retry($this->shipment()));
     }
 
     public function test_buat_resi_never_assumes_transfer_when_the_way_of_paying_is_unknown(): void

@@ -25,7 +25,7 @@ use Illuminate\Support\Facades\Log;
  *
  * Nothing logged here holds the credentials, a token or the buyer's details.
  */
-class EverproCarrier implements CarrierProvider
+class EverproCarrier implements CarrierProvider, ValidatesPhones
 {
     private const TOKEN_MARGIN = 300;
 
@@ -384,8 +384,37 @@ class EverproCarrier implements CarrierProvider
 
     // ---- Orders --------------------------------------------------------------------------------------------
 
+    /**
+     * Everpro accepts only 62xxxxxxxxxx (no "+", no 0 in front), whatever its documentation says: 08…, +62… and 8…
+     * become 62…. Null when the result is not 10 to 15 digits.
+     */
+    public static function phone(?string $phone): ?string
+    {
+        $digits = preg_replace('/\D+/', '', (string) $phone);
+        $digits = match (true) {
+            str_starts_with($digits, '62') => $digits,
+            str_starts_with($digits, '0') => '62'.substr($digits, 1),
+            str_starts_with($digits, '8') => '62'.$digits,
+            default => '',
+        };
+
+        return preg_match('/^62\d{8,13}$/', $digits) ? $digits : null;
+    }
+
+    public function phoneProblems(?string $shipperPhone, ?string $receiverPhone): array
+    {
+        return array_values(array_filter([
+            self::phone($shipperPhone) === null ? 'Nomor HP pengirim tidak valid: isi 10–15 angka (mis. 0812…) di Pengaturan > Pengiriman.' : null,
+            self::phone($receiverPhone) === null ? 'Nomor HP penerima tidak valid: perbaiki nomor HP lead (10–15 angka, mis. 0812…).' : null,
+        ]));
+    }
+
     public function createOrder(OrderRequest $order): CarrierOrder
     {
+        if (($problems = $this->phoneProblems($order->shipper['phone'], $order->receiver['phone'])) !== []) {
+            throw new CarrierException(implode(' ', $problems));
+        }
+
         try {
             $rate = $order->rate;
             $dimensions = array_filter([
@@ -415,13 +444,13 @@ class EverproCarrier implements CarrierProvider
                 'package_type_id' => 1,
                 'weight' => self::kg($order->weightGrams),
                 'shipper_name' => $order->shipper['name'],
-                'shipper_phone' => $order->shipper['phone'],
+                'shipper_phone' => self::phone($order->shipper['phone']),
                 'shipper_email' => $order->shipper['email'] ?? null,
                 'shipper_address' => $order->shipper['address'],
                 'shipper_postal_code' => (string) ($order->shipper['postal_code'] ?? ''),
                 'shipper_sub_district_name' => $order->shipper['sub_district'] ?? null,
                 'receiver_name' => $order->receiver['name'],
-                'receiver_phone' => $order->receiver['phone'],
+                'receiver_phone' => self::phone($order->receiver['phone']),
                 'receiver_address' => $order->receiver['address'],
                 'receiver_address_note' => $order->receiver['note'] ?? null,
                 'receiver_postal_code' => (string) ($order->receiver['postal_code'] ?? ''),

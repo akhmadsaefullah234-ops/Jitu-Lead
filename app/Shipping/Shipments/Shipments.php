@@ -23,6 +23,7 @@ use App\Shipping\Carriers\RateRequest;
 use App\Shipping\Carriers\ShipmentStatus;
 use App\Shipping\Carriers\TrackEvent;
 use App\Shipping\Carriers\TrackResult;
+use App\Shipping\Carriers\ValidatesPhones;
 use App\Shipping\ShippingItem;
 use App\Shipping\ShippingPromos;
 use App\Shipping\ShippingSettings;
@@ -183,6 +184,14 @@ class Shipments
 
         try {
             $provider = $this->provider();
+
+            // A number the provider would refuse is said here, before it is called.
+            if ($provider instanceof ValidatesPhones && ($phones = $provider->phoneProblems((string) $account->setting('sender_phone'), $lead->phone)) !== []) {
+                $draft->problems = $phones;
+
+                return $draft;
+            }
+
             [$draft->destination, $draft->candidates] = $this->destination($provider, $lead, $choice['location_id'] ?? null);
 
             if ($draft->destination === null) {
@@ -276,7 +285,7 @@ class Shipments
         }
 
         if (PhoneNumber::whatsapp($lead->phone) === null) {
-            $problems[] = 'Nomor HP penerima belum valid.';
+            $problems[] = 'Nomor HP penerima tidak valid: perbaiki nomor HP lead (10–15 angka, mis. 0812…).';
         }
 
         if (mb_strlen(trim((string) $lead->shipping_address)) < 10) {
@@ -423,6 +432,33 @@ class Shipments
         }
 
         return $result;
+    }
+
+    /**
+     * "Coba lagi": a parcel the provider refused is sent again as it was (the details the agent checked or changed,
+     * the same order number), once the cause is fixed. Never while the lead has another parcel on its way.
+     */
+    public function retry(Shipment $shipment, ?User $actor = null): void
+    {
+        $retried = DB::transaction(function () use ($shipment) {
+            Lead::query()->whereKey($shipment->lead_id)->lockForUpdate()->first();
+            $fresh = Shipment::query()->whereKey($shipment->getKey())->lockForUpdate()->first();
+
+            if ($fresh === null || ! $fresh->retryable()) {
+                throw new CarrierException('Kiriman ini tidak bisa dicoba ulang.');
+            }
+
+            if (Shipment::query()->where('lead_id', $fresh->lead_id)->whereKeyNot($fresh->getKey())->whereIn('state', [Shipment::PENDING, Shipment::ORDERED, Shipment::SHIPPED])->exists()) {
+                throw new CarrierException('Lead ini sudah punya kiriman lain yang aktif.');
+            }
+
+            $fresh->forceFill(['state' => Shipment::PENDING, 'error' => null])->save();
+
+            return $fresh;
+        });
+
+        $retried->lead->activities()->create(['user_id' => $actor?->getKey(), 'type' => 'note', 'body' => 'Mencoba lagi kiriman '.$retried->client_order_no.' ('.$retried->courier.').']);
+        CreateShipment::dispatch($retried->getKey(), $this->current->id());
     }
 
     /** The provider calls for a booked parcel (runs on the queue). Safe to run again: the order number is the same. */

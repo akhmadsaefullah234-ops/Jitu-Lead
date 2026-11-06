@@ -43,6 +43,7 @@ class EditLead extends EditRecord
             ShipmentActions::cancelAuto(fn () => $this->record),
             ActionGroup::make([
                 ShipmentActions::create(fn () => $this->record),
+                ShipmentActions::retry(fn () => $this->record),
                 ShipmentActions::link(fn () => $this->record),
                 ShipmentActions::track(fn () => $this->record),
                 ShipmentActions::label(fn () => $this->record),
