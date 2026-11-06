@@ -82,6 +82,12 @@ class Shipment extends Model
     }
 
     /** Still open at the courier: not booked yet, or booked and not yet collected. */
+    /** Refused by the provider before it took the order: can be sent again as it is ("Coba lagi"). */
+    public function retryable(): bool
+    {
+        return $this->state === self::FAILED && $this->order_id === null && ! $this->manual();
+    }
+
     public function cancellable(): bool
     {
         return $this->source !== self::MANUAL && in_array($this->state, [self::ORDERED, self::SHIPPED], true) && in_array($this->status, [null, ShipmentStatus::AWB_CREATED], true);

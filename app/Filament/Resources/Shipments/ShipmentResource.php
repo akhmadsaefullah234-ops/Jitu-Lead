@@ -131,6 +131,11 @@ class ShipmentResource extends Resource
                 Action::make('print')->label(fn (Shipment $r) => $r->printed_at ? 'Cetak ulang' : 'Cetak')->icon(Heroicon::OutlinedPrinter)->color('gray')
                     ->visible(fn (Shipment $r) => $r->printable())
                     ->action(fn (Shipment $record, $livewire) => self::printNow(collect([$record]), $livewire, false)),
+                Action::make('retry')->label('Coba lagi')->icon(Heroicon::OutlinedArrowPath)->color('warning')
+                    ->visible(fn (Shipment $r) => $r->retryable())
+                    ->requiresConfirmation()->modalHeading('Coba lagi kiriman yang gagal?')
+                    ->modalDescription(fn (Shipment $r) => ShipmentActions::retryDescription($r))->modalSubmitActionLabel('Coba lagi')
+                    ->action(fn (Shipment $record) => ShipmentActions::retryShipment($record)),
                 Action::make('retryLabel')->label('Ambil ulang label')->icon(Heroicon::OutlinedArrowPath)->color('warning')
                     ->visible(fn (Shipment $r) => $r->printable() && $r->label_path === null && $r->label_failed_at !== null)
                     ->action(fn (Shipment $record) => app(LabelStore::class)->save($record)

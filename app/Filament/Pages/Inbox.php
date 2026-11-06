@@ -434,6 +434,11 @@ class Inbox extends Page
         return ShipmentActions::link(fn () => $this->current()?->lead)->size('sm');
     }
 
+    public function retryShipmentAction(): Action
+    {
+        return ShipmentActions::retry(fn () => $this->current()?->lead)->size('sm');
+    }
+
     public function trackShipmentAction(): Action
     {
         return ShipmentActions::track(fn () => $this->current()?->lead)->size('sm');

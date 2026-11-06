@@ -526,6 +526,60 @@ class ShipmentActions
     }
 
     /** "Resi otomatis dalam 25 menit · Batalkan": the agent stops a scheduled automatic resi. */
+    /** The lead's last parcel, when the provider refused it and nothing else is on its way. */
+    public static function failedFor(?Lead $lead): ?Shipment
+    {
+        if ($lead === null || Shipment::latestFor($lead) !== null) {
+            return null;
+        }
+
+        $last = Shipment::query()->where('lead_id', $lead->getKey())->latest('id')->first();
+
+        return $last?->retryable() ? $last : null;
+    }
+
+    /** What a retried parcel is sent with: as it was checked or changed in "Buat resi". */
+    public static function retryDescription(Shipment $shipment): string
+    {
+        $rp = fn (?int $v) => 'Rp'.number_format((int) $v, 0, ',', '.');
+
+        return implode(' · ', array_filter([
+            $shipment->courier,
+            'ongkir ditagih '.$rp($shipment->charged),
+            $shipment->is_cod ? 'Total COD '.$rp($shipment->cod_amount) : 'transfer',
+        ])).'. Gagal sebelumnya: '.($shipment->error ?: '-').' Pastikan penyebabnya sudah diperbaiki.';
+    }
+
+    public static function retryShipment(Shipment $shipment): void
+    {
+        try {
+            app(Shipments::class)->retry($shipment, auth()->user());
+        } catch (CarrierException $e) {
+            Notification::make()->title('Kiriman belum bisa dicoba lagi')->body($e->getMessage())->danger()->send();
+
+            return;
+        }
+
+        $shipment->refresh();
+        Notification::make()->title(match ($shipment->state) {
+            Shipment::SHIPPED => 'Resi '.$shipment->awb.' terbit.',
+            Shipment::FAILED => 'Kiriman masih gagal: '.$shipment->error,
+            default => 'Kiriman dikirim ulang. Resi muncul di lead begitu terbit.',
+        })->{$shipment->state === Shipment::FAILED ? 'danger' : 'success'}()->send();
+    }
+
+    /** "Coba lagi": the refused parcel sent again with the details it had (App\Shipping\Shipments\Shipments::retry). */
+    public static function retry(Closure $lead, string $name = 'retryShipment'): Action
+    {
+        return Action::make($name)->label('Coba lagi kiriman')->icon(Heroicon::OutlinedArrowPath)->color('warning')
+            ->visible(fn () => self::available() && self::failedFor($lead()) !== null)
+            ->requiresConfirmation()
+            ->modalHeading('Coba lagi kiriman yang gagal?')
+            ->modalDescription(fn () => ($s = self::failedFor($lead())) ? self::retryDescription($s) : null)
+            ->modalSubmitActionLabel('Coba lagi')
+            ->action(fn () => ($s = self::failedFor($lead())) ? self::retryShipment($s) : null);
+    }
+
     public static function cancelAuto(Closure $lead, string $name = 'cancelAutoShipment'): Action
     {
         return Action::make($name)->label(fn () => 'Resi otomatis dalam '.(AutoShipments::minutesLeft($lead()) ?? 0).' menit · Batalkan')

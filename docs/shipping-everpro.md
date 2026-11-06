@@ -92,6 +92,12 @@ tidak), juga untuk resi yang tidak dikenal. URL satu agensi tidak bisa menyentuh
 - Tombol **Buat resi** di modal selalu tombol utama. Bila belum bisa dipakai, alasannya tertulis tepat di atasnya
   (mis. "Pilih cara bayar dulu", "Kode pos harus 5 angka", masalah dari penyedia). Bila tetap ditekan, atau isian
   ditolak, muncul notifikasi berisi daftar kesalahan, dan penghentian dicatat sebagai warning (id lead saja).
+- Nomor HP pengirim dan penerima dikirim ke Everpro sebagai `62…` tanpa "+" atau spasi (08…, +62… dan 8… diubah).
+  Everpro menolak format lain walau dokumentasinya menyebut 08 boleh. Nomor yang bukan 10–15 angka ditolak di modal
+  tanpa memanggil Everpro.
+- Kiriman yang ditolak penyedia (status gagal, belum ada order) bisa dikirim ulang lewat **Coba lagi** di lead, Inbox,
+  atau tab Perlu tindakan. Pengiriman ulang memakai rincian yang tersimpan (ongkir, COD, isi, berat, catatan) dan
+  nomor order yang sama, dan tidak pernah membuat kiriman aktif kedua.
 - **Rincian paket** di modal bisa diubah sebelum resi dibuat. Isian yang kosong memakai hitungan, yang terlihat samar di
   tiap isian. Yang bisa diubah: ongkir ditagih ke pembeli (dengan saran hasil promo dan tombol **Pakai promo**), total
   COD, isi paket, nilai barang, jumlah dan varian (pesanan satu produk), berat, dimensi, catatan untuk kurir, dan
