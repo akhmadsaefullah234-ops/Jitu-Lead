@@ -59,6 +59,11 @@ class GenerateAiReply
     public const HANDED_OFF_TURN = '(Pesan ini sudah diteruskan ke admin.)';
 
     /** The second try after an answer quoted shipping that no check returned. */
+    public const PAYMENT_NOTE = 'PERBAIKI: balasanmu sebelumnya menyebut pembayaran, transfer atau dana sudah diterima. Hanya agen yang bisa memeriksa rekening. Tulis ulang tanpa menyebut pembayaran diterima atau lunas; cukup konfirmasi pesanannya sudah dicatat dan tanyakan cara bayar (COD atau transfer).';
+
+    /** Sent when the answer still claims a payment after one rewrite: the buyer is never left without a reply. */
+    public const SAFE_PAYMENT_REPLY = 'Terima kasih kak, pesanannya sudah kami catat. Mohon pilih cara bayar: COD atau transfer 😊 Admin akan melanjutkan.';
+
     public const INVENTED_NOTE = 'PERBAIKI: balasanmu sebelumnya menyebut angka ongkir atau total yang tidak berasal dari cek ongkir. Tulis ulang balasannya hanya dengan angka dari hasil cek ongkir di atas.';
 
     /** The second try after an answer spoke about its rules or reasoning. */
@@ -284,8 +289,15 @@ class GenerateAiReply
             }
 
             // Only a person who checked the account may tell a buyer the payment arrived (Otomatisasi tahap, rule 3).
+            // It is written again once without that; if it still says so, the buyer gets a short safe reply and an agent is told.
             if ($retail && ShopTools::claimsPaymentReceived($answer)) {
-                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed, 'AI hampir menyatakan pembayaran diterima; pembayaran harus dicek agen');
+                if (! $last) {
+                    $retry = self::PAYMENT_NOTE;
+
+                    continue;
+                }
+
+                return $this->safeReplyAndHandoff($inbound, $mode, $shop, $confirmed, 'AI hampir menyatakan pembayaran diterima; pembayaran harus dicek agen');
             }
 
             // The order a "yes" confirmed is the only one this answer records.
@@ -326,6 +338,23 @@ class GenerateAiReply
         }
 
         return $this->sendAutomatically($inbound, $answer, $assetIds, $actions);
+    }
+
+    /**
+     * The answer cannot be trusted but the buyer must hear something: a fixed short reply goes out (the order the
+     * chat confirmed is still recorded) and the chat is marked as handed to an agent.
+     */
+    private function safeReplyAndHandoff(WaMessage $inbound, AiMode $mode, ?ShopTools $shop, ?array $confirmed, string $reason): AiDraft
+    {
+        $actions = $confirmed !== null ? [self::orderAction($confirmed)] : array_map(self::orderAction(...), $shop?->orders() ?? []);
+        $draft = $mode === AiMode::Draft
+            ? $this->draft($inbound, self::SAFE_PAYMENT_REPLY, AiDraft::PENDING, $reason, true, [], $actions)
+            : $this->sendAutomatically($inbound, self::SAFE_PAYMENT_REPLY, [], $actions);
+        $inbound->conversation->lead->activities()->create(['type' => 'ai_handoff', 'body' => 'AI menyerahkan chat ke agen: '.$reason]);
+
+        $draft->forceFill(['reason' => $draft->reason ?? $reason])->save();
+
+        return $draft;
     }
 
     /**

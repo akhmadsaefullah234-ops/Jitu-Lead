@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Actions\GenerateAiReply;
 use App\Actions\HandleInboundWhatsApp;
 use App\Actions\MoveLeadToStage;
 use App\Actions\ProvisionTenant;
@@ -20,6 +21,7 @@ use App\Models\AiDraft;
 use App\Models\FollowUpLog;
 use App\Models\FollowUpRule;
 use App\Models\Lead;
+use App\Models\LeadActivity;
 use App\Models\Property;
 use App\Models\Stage;
 use App\Models\Tenant;
@@ -304,13 +306,17 @@ class StageAutomationTest extends TestCase
     {
         $this->leadIn(RetailStages::PAYMENT);
         $this->channel()->forceFill(['ai_mode' => AiMode::Auto])->save();
-        $this->ai = [$this->text('Pembayaran Kakak sudah kami terima, pesanan segera dikirim ya.')];
+        // Said twice: written again once, then the buyer gets the fixed safe reply and an agent is told.
+        $this->ai = [$this->text('Pembayaran Kakak sudah kami terima, pesanan segera dikirim ya.'), $this->text('Transfer sudah masuk ya Kak, segera dikirim.')];
 
         $message = $this->inbound('Sudah transfer ya kak');
 
         $draft = $this->inShop(fn () => AiDraft::query()->where('message_id', $message->id)->first());
-        $this->assertSame(AiDraft::HANDOFF, $draft->status);
+        $this->assertSame(AiDraft::SENT, $draft->status);
+        $this->assertStringContainsString('pembayaran harus dicek agen', $draft->reason);
+        $this->assertSame([GenerateAiReply::SAFE_PAYMENT_REPLY], array_slice($this->sent(), -1));
         $this->assertNotContains('Pembayaran Kakak sudah kami terima, pesanan segera dikirim ya.', $this->sent());
+        $this->assertSame(1, $this->inShop(fn () => LeadActivity::query()->where('type', 'ai_handoff')->count()));
         $this->assertFalse(ShopTools::claimsPaymentReceived('Begitu pembayaran diterima, pesanan langsung kami kirim.'));
         $this->assertTrue(ShopTools::claimsPaymentReceived('Transfer sudah masuk ya Kak'));
     }

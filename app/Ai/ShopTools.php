@@ -244,12 +244,17 @@ class ShopTools
     }
 
     /**
-     * True when the answer tells the buyer their payment arrived ("pembayaran sudah kami terima", "sudah lunas").
-     * Only a person who checked the account may say that, so such an answer goes to an agent.
+     * True when the answer tells the buyer their payment arrived ("pembayaran sudah kami terima", "transfer sudah
+     * masuk", "sudah lunas"). Only a person who checked the account may say that, so such an answer is not sent as it is.
+     * A payment word has to sit right next to the claim, in the same clause: "pesanan / data / alamat sudah kami
+     * terima (catat)" is only an order being received, and "belum lunas" is the opposite of a claim.
      */
     public static function claimsPaymentReceived(string $answer): bool
     {
-        return (bool) preg_match('/\b(?:pembayaran|transfer(?:an)?|dana|uang|bayaran)\b[^.!?\n]{0,40}?\b(?:sudah|telah|udah)\s+(?:kami\s+)?(?:terima|diterima|masuk|kami\s+terima|ma?suk)\b|\b(?:sudah|telah)\s+kami\s+terima\b|(?<!belum\s)(?<!tidak\s)\blunas\b/iu', $answer);
+        $pay = '(?:pembayaran|transfer|dana|uang|bayaran|dp|bukti\s+(?:transfer|bayar|pembayaran))\w*';
+        $got = '(?:sudah|telah|udah)\s+(?:kami\s+)?(?:terima|diterima|masuk)';
+
+        return (bool) preg_match('/\b'.$pay.'\b(?:(?!pesanan|order|data|alamat)[^.!?,;\n]){0,30}?\b'.$got.'\b|\b'.$got.'\b\s+(?:ya\s+)?'.$pay.'\b|(?<!belum\s)(?<!tidak\s)\blunas\b/iu', $answer);
     }
 
     /** True when any shipping check in this answer came back "konfirmasi admin" (or not available). */
