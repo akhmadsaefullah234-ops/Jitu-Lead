@@ -7,6 +7,7 @@ use App\Ai\AnthropicClient;
 use App\Ai\DocumentException;
 use App\Ai\DocumentReader;
 use App\Filament\Resources\AiKnowledge\AiKnowledgeResource;
+use App\Privacy\KnowledgeScan;
 use App\Support\CurrentTenant;
 use App\Support\Industry;
 use Closure;
@@ -19,6 +20,8 @@ use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ManageRecords;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Support\HtmlString;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class ManageAiKnowledge extends ManageRecords
@@ -35,13 +38,39 @@ class ManageAiKnowledge extends ManageRecords
         return 'Pengetahuan umum (semua '.Industry::t('catalog_item').')';
     }
 
-    public function getSubheading(): ?string
+    public function getSubheading(): string|Htmlable|null
     {
         $item = Industry::t('catalog_item');
-
-        return app(AnthropicClient::class)->configured()
+        $text = app(AnthropicClient::class)->configured()
             ? "Yang berlaku untuk semua {$item}: alamat, jam buka, cara bayar, aturan umum. Pengetahuan khusus satu {$item} (harga, promo, cara pakai) diatur di halaman {$item} itu, tab Pengetahuan AI. AI hanya menjawab dari catatan ini dan catatan {$item} yang sedang dibahas. Memilih siapa yang membalas chat ada di menu Mode AI."
             : 'Layanan AI belum diaktifkan di server ini, hubungi penyedia aplikasi. Catatan di sini tetap tersimpan.';
+        $warning = self::personalDataWarning();
+
+        return $warning === null ? $text : new HtmlString($warning.'<div>'.e($text).'</div>');
+    }
+
+    /**
+     * Red at the top while any entry the AI uses holds a buyer's personal data: which, what it holds, and where it
+     * is (a product's entries live on that product's page). Null when there is none.
+     */
+    public static function personalDataWarning(): ?string
+    {
+        $flagged = KnowledgeScan::flagged();
+
+        if ($flagged->isEmpty()) {
+            return null;
+        }
+
+        $rows = $flagged->take(10)->map(fn (array $row) => '<li>#'.$row['item']->getKey().' '.e(str($row['item']->title)->limit(60))
+            .($row['item']->property ? ' <em>('.e($row['item']->property->name).')</em>' : '')
+            .': '.e(implode('; ', array_map(fn ($f) => (string) str($f)->limit(60), array_slice($row['findings'], 0, 3)))).'</li>')->implode('');
+
+        return '<div style="color:var(--danger-700);padding:.75rem 1rem;margin-bottom:.75rem;border:1px solid var(--danger-300);border-radius:.5rem;background:var(--danger-50);font-size:.875rem">'
+            .'<strong>'.$flagged->count().' catatan pengetahuan memuat data pribadi pembeli.</strong> AI bisa salah menyapa atau menyebut alamat pembeli lain. '
+            .'Nonaktifkan atau sunting catatan ini (tombol "Nonaktifkan yang memuat data pribadi", atau filter "Hanya yang memuat data pribadi").'
+            .'<ul style="margin:.4rem 0 0 1rem;list-style:disc">'.$rows.'</ul>'
+            .($flagged->count() > 10 ? '<div>dan '.($flagged->count() - 10).' lainnya.</div>' : '')
+            .'</div>';
     }
 
     protected function getHeaderActions(): array
@@ -52,6 +81,7 @@ class ManageAiKnowledge extends ManageRecords
                 ->label($label)->icon(Heroicon::OutlinedArrowDownTray)
                 ->action(fn () => response()->download(resource_path("ai-templates/$file"), $file)))->values()->all())
                 ->label('Unduh template')->icon(Heroicon::OutlinedDocumentText)->color('gray')->button(),
+            $this->deactivatePersonalAction(),
             $this->settingsAction(),
             CreateAction::make()->label('Tulis catatan'),
         ];
@@ -93,6 +123,27 @@ class ManageAiKnowledge extends ManageRecords
                 Notification::make()->title($result['items'].' catatan ditambahkan')
                     ->body($result['truncated'] ? 'Dokumen sangat panjang, hanya bagian awalnya yang dipakai (sekitar 60.000 karakter). Pecah dokumen jika perlu.' : 'Periksa hasilnya di daftar, lalu nonaktifkan bagian yang tidak perlu.')
                     ->success()->send();
+            });
+    }
+
+    /** Every entry the AI still uses that holds a buyer's personal data is switched off at once (general and per product). */
+    private function deactivatePersonalAction(): Action
+    {
+        return Action::make('deactivatePersonal')->label('Nonaktifkan yang memuat data pribadi')->icon(Heroicon::OutlinedShieldExclamation)->color('danger')
+            ->visible(fn () => KnowledgeScan::ids() !== [])
+            ->requiresConfirmation()
+            ->modalHeading('Nonaktifkan catatan berisi data pribadi')
+            ->modalDescription(fn () => count(KnowledgeScan::ids()).' catatan tidak lagi dipakai AI. Catatannya tetap tersimpan; Anda bisa menyunting lalu mengaktifkannya lagi.')
+            ->action(function () {
+                $count = 0;
+
+                foreach (KnowledgeScan::flagged() as ['item' => $item]) {
+                    $item->update(['active' => false]);
+                    $count++;
+                }
+
+                AiKnowledgeResource::forgetFlagged();
+                Notification::make()->title($count.' catatan dinonaktifkan')->success()->send();
             });
     }
 

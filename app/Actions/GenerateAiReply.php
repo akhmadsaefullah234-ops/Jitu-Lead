@@ -3,6 +3,7 @@
 namespace App\Actions;
 
 use App\Ai\AnthropicClient;
+use App\Ai\BuyerFacts;
 use App\Ai\HandoffRules;
 use App\Ai\KnowledgeBase;
 use App\Ai\LeadQuote;
@@ -152,6 +153,7 @@ class GenerateAiReply
         $retail = $tenant->industry()->key === 'retail';
         $lead = $conversation->lead;
         $products = new ProductContext($lead);
+        $buyer = new BuyerFacts($lead);
         // "ok", "siap", "terima kasih", 🙏: answered briefly or not at all, never handed to a person.
         $ack = ReplySignals::acknowledgement($text);
         $handedOff = $this->handedOff($conversation, $inbound);
@@ -218,7 +220,7 @@ class GenerateAiReply
         }
 
         $base = $this->system($tenant->name, $tenant->industry()->term('business'), $tenant->ai_instructions, $text, $library, $shop,
-            $retail ? $lead : null, $products, $package);
+            $retail ? $lead : null, $products, $package, $buyer);
         $given = $base."\n".collect($history)->pluck('content')->implode("\n");
         $tools = [...($shop?->definitions() ?? []), ...ReplySignals::definitions()];
         $retry = null;
@@ -298,6 +300,24 @@ class GenerateAiReply
                 }
 
                 return $this->safeReplyAndHandoff($inbound, $mode, $shop, $confirmed, 'AI hampir menyatakan pembayaran diterima; pembayaran harus dicek agen');
+            }
+
+            // Names, places and orders come only from this buyer: another buyer's (from a learned example) is
+            // written out once; if it is still there, a person answers.
+            $foreign = $buyer->foreign($answer, implode("\n", [$given, $quote?->instructions() ?? '', ...$notes,
+                ...array_map(fn (array $c) => json_encode([$c['input'] ?? [], $c['result'] ?? []], JSON_UNESCAPED_UNICODE), $calls)]));
+            $earlier = $buyer->inventsEarlierOrder($answer);
+
+            if ($foreign !== [] || $earlier) {
+                if (! $last) {
+                    $retry = implode("\n", array_filter([$foreign !== [] ? BuyerFacts::note($foreign) : null, $earlier ? BuyerFacts::EARLIER_ORDER_NOTE : null]));
+
+                    continue;
+                }
+
+                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed, $foreign !== []
+                    ? 'AI hampir menyebut nama atau tempat yang bukan milik pembeli ini: '.implode(', ', $foreign)
+                    : 'AI hampir menyebut pesanan sebelumnya yang tidak ada di data lead');
             }
 
             // The order a "yes" confirmed is the only one this answer records.
@@ -694,8 +714,11 @@ class GenerateAiReply
         return blank($lead->payment_type) && $lead->paid_at === null && (filled($lead->shipping_address) || filled($lead->variant));
     }
 
+    /** The knowledge is notes and other buyers' examples, never this buyer's data. */
+    public const KNOWLEDGE_HEADER = 'PENGETAHUAN (catatan toko dan contoh tanya-jawab dari chat pembeli LAIN; nama, alamat, kota, dan pesanan di contoh bukan milik pembeli ini):';
+
     /** @param  Collection<int, MediaAsset>  $library */
-    private function system(string $agency, string $business, ?string $instructions, string $question, Collection $library, ?ShopTools $shop = null, ?Lead $lead = null, ?ProductContext $products = null, ?string $package = null): string
+    private function system(string $agency, string $business, ?string $instructions, string $question, Collection $library, ?ShopTools $shop = null, ?Lead $lead = null, ?ProductContext $products = null, ?string $package = null, ?BuyerFacts $buyer = null): string
     {
         // Only the knowledge for every product plus the one this chat is about, so products never mix.
         $context = $this->knowledge->context($question, $products?->product()?->getKey());
@@ -711,7 +734,8 @@ class GenerateAiReply
             $products?->instructions(),
             $package,
             $lead && self::paymentNotAsked($lead) ? self::PAYMENT_NOT_ASKED : null,
-            "PENGETAHUAN:\n".($context !== '' ? $context : '(kosong)'),
+            $buyer?->instructions(),
+            self::KNOWLEDGE_HEADER."\n".($context !== '' ? $context : '(kosong)'),
             $files !== '' ? "LAMPIRAN yang boleh dikirim (id | judul | folder | kapan dipakai):\n{$files}\nJika klien jelas membutuhkan salah satunya (misalnya menanyakan harga lalu price list ada), tambahkan di baris terakhir jawabanmu, setelah teks balasan: LAMPIRAN: <id>. Maksimal dua id dipisah koma. Jangan menulis id selain yang ada di daftar. Jika tidak perlu, jangan tulis baris itu. Lampirkan foto hanya untuk varian yang dipesan atau ditanyakan pembeli, dan jangan melampirkan foto saat merangkum atau mengonfirmasi pesanan kecuali pembeli memintanya." : null,
         ]));
     }
