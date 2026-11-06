@@ -130,6 +130,10 @@ class Inbox extends Page
                 ? Shipment::query()->whereIn('lead_id', $conversations->pluck('lead_id')->push($conversation?->lead_id)->filter())
                     ->where('status', ShipmentStatus::DELIVERY_FAILED)->whereNull('final_at')->pluck('lead_id')->flip()->all()
                 : [],
+            // A label still to print (Pengiriman menu): an amber "Belum dicetak" on the chat.
+            'unprinted' => ShipmentActions::available()
+                ? Shipment::query()->tab('unprinted')->whereIn('lead_id', $conversations->pluck('lead_id')->push($conversation?->lead_id)->filter())->pluck('lead_id')->flip()->all()
+                : [],
             'conversation' => $conversation?->load(['lead.stage', 'lead.owner', 'lead.property', 'messages.channel']),
             'decision' => $decision,
             'aiMode' => $conversation?->lastInboundChannel?->ai_mode,
@@ -440,6 +444,11 @@ class Inbox extends Page
     public function cancelShipmentAction(): Action
     {
         return ShipmentActions::cancel(fn () => $this->current()?->lead)->size('sm');
+    }
+
+    public function cancelAutoShipmentAction(): Action
+    {
+        return ShipmentActions::cancelAuto(fn () => $this->current()?->lead)->size('xs')->link();
     }
 
     /** Only reachable when the free windows are closed and no gateway is connected. */

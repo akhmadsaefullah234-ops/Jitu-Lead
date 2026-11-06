@@ -29,6 +29,19 @@ return [
     'label_max' => 100,
     'label_keep_hours' => 24,
 
+    // Each parcel's own label PDF, kept once its tracking number comes (Pengiriman menu): days kept, and how often
+    // the download is tried before the parcel shows "Label belum tersedia". Print runs are kept to download again.
+    'label_store_days' => 90,
+    'label_tries' => 5,
+    'label_batch_keep_days' => 30,
+
+    // Automatic resi (Pengaturan > Pengiriman > Resi otomatis): the defaults of each agency's settings.
+    'auto' => [
+        'delay_minutes' => 30,
+        'daily_limit' => 50,
+        'cod_max' => 1000000,
+    ],
+
     // Parcels not yet delivered or returned are tracked again this often (hours) when no callback came.
     'track_every_hours' => 2,
 

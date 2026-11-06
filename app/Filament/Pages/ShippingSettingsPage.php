@@ -4,12 +4,14 @@ namespace App\Filament\Pages;
 
 use App\Enums\Role;
 use App\Models\CarrierAccount;
+use App\Models\Stage;
 use App\Regions\RegionDirectory;
 use App\Shipping\Carriers\CarrierException;
 use App\Shipping\Carriers\CarrierLocation;
 use App\Shipping\Carriers\Carriers;
 use App\Shipping\Carriers\ShipmentStatus;
 use App\Shipping\Regions;
+use App\Shipping\Shipments\AutoShipments;
 use App\Shipping\Shipments\StatusNotices;
 use App\Shipping\ShippingSettings;
 use App\Support\CurrentTenant;
@@ -100,6 +102,13 @@ class ShippingSettingsPage extends Page
             'service' => $account?->setting('service') ?? 'JNE REG',
             'shipment_type' => $account?->setting('shipment_type') ?? 'PICKUP',
             'insurance' => (bool) $account?->setting('insurance', false),
+            'auto' => [
+                'enabled' => (bool) $account?->setting('auto.enabled', false),
+                'stage_id' => AutoShipments::settings($account)['stage_id'],
+                'delay_minutes' => AutoShipments::settings($account)['delay'],
+                'daily_limit' => AutoShipments::settings($account)['daily'],
+                'cod_max' => AutoShipments::settings($account)['cod_max'],
+            ],
         ]);
 
         $this->noticesForm->fill(StatusNotices::settings($account));
@@ -140,6 +149,22 @@ class ShippingSettingsPage extends Page
                 Select::make('shipment_type')->label('Cara serah paket')->options(['PICKUP' => 'Dijemput kurir (PICKUP)', 'DROP' => 'Antar ke agen (DROP)'])->native(false)->selectablePlaceholder(false),
                 Toggle::make('insurance')->label('Pakai asuransi')->inline(false),
             ]),
+            Section::make('Resi otomatis')->columns(2)->visible(fn (Get $get) => filled($get('provider')))
+                ->description('Bila aktif, resi dibuat sendiri untuk lead yang masuk tahap pemicu dan datanya lengkap: cara bayar COD, atau transfer yang sudah dicek lunas; '
+                    .'alamat dengan RT/RW atau patokan, kelurahan, kecamatan, kota, provinsi dan kode pos yang cocok dengan lokasi penyedia; produk, varian, jumlah dan berat; '
+                    .'kurir pilihan pembeli (atau kurir bawaan) tersedia; tidak dicurigai spam. Selain itu tetap manual, dengan alasannya di lead.')
+                ->schema([
+                    Toggle::make('auto.enabled')->label('Aktifkan resi otomatis')->columnSpanFull()->live(),
+                    Select::make('auto.stage_id')->label('Tahap pemicu')->options(fn () => Stage::query()->orderBy('position')->pluck('name', 'id')->all())
+                        ->visible(fn (Get $get) => (bool) $get('auto.enabled'))->required(fn (Get $get) => (bool) $get('auto.enabled')),
+                    TextInput::make('auto.delay_minutes')->label('Jeda sebelum resi dibuat')->numeric()->integer()->minValue(0)->maxValue(1440)->suffix('menit')
+                        ->helperText('Waktu agen membatalkan atau mengoreksi (tombol "Resi otomatis dalam … menit · Batalkan" di lead dan Inbox).')
+                        ->visible(fn (Get $get) => (bool) $get('auto.enabled')),
+                    TextInput::make('auto.daily_limit')->label('Batas resi otomatis per hari')->numeric()->integer()->minValue(1)->maxValue(1000)
+                        ->helperText('Selebihnya dibuat manual.')->visible(fn (Get $get) => (bool) $get('auto.enabled')),
+                    TextInput::make('auto.cod_max')->label('Batas nilai COD per paket')->numeric()->integer()->minValue(0)->prefix('Rp')
+                        ->helperText('Paket COD di atas nilai ini perlu dibuat manual.')->visible(fn (Get $get) => (bool) $get('auto.enabled')),
+                ]),
         ]);
     }
 
@@ -248,6 +273,13 @@ class ShippingSettingsPage extends Page
                 'sender_address' => trim((string) ($state['sender_address'] ?? '')), 'origin_id' => $state['origin_id'] ?? null,
                 'service' => trim((string) ($state['service'] ?? '')) ?: 'JNE REG', 'shipment_type' => ($state['shipment_type'] ?? 'PICKUP') === 'DROP' ? 'DROP' : 'PICKUP',
                 'insurance' => (bool) ($state['insurance'] ?? false),
+                'auto' => [
+                    'enabled' => (bool) ($state['auto']['enabled'] ?? false),
+                    'stage_id' => filled($state['auto']['stage_id'] ?? null) ? (int) $state['auto']['stage_id'] : null,
+                    'delay_minutes' => (int) ($state['auto']['delay_minutes'] ?? config('carriers.auto.delay_minutes')),
+                    'daily_limit' => (int) ($state['auto']['daily_limit'] ?? config('carriers.auto.daily_limit')),
+                    'cod_max' => (int) ($state['auto']['cod_max'] ?? config('carriers.auto.cod_max')),
+                ],
             ], $place ? ['origin_label' => CarrierLocation::fromArray($place)->label(), 'origin_postal' => $place['postalCode'] ?? null, 'origin_sub_district' => $place['subDistrict'] ?? null] : []),
         ]);
 

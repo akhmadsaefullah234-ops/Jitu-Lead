@@ -7,6 +7,7 @@ use App\Automation\StageAutomation;
 use App\Enums\MessageStatus;
 use App\Enums\Role;
 use App\Filament\Pages\Inbox;
+use App\Filament\Resources\Leads\LeadResource;
 use App\Mail\ShipmentNeedsAction;
 use App\Models\CarrierAccount;
 use App\Models\Lead;
@@ -236,6 +237,21 @@ class StatusNotices
     }
 
     /** Bell notification (and optionally email) to the lead's owner, else the admins. */
+    /** A notice about a lead without a parcel yet (automatic resi): its owner, else the admins, in the bell. */
+    public function alertLead(Lead $lead, string $title, string $body): void
+    {
+        $tenant = $this->current->get();
+        $people = $this->staff($tenant, $lead);
+
+        try {
+            Notification::make()->title($title.': '.$lead->name)->body($body)->warning()
+                ->actions([Action::make('open')->label('Buka lead')->url(LeadResource::getUrl('edit', ['record' => $lead], panel: 'app', tenant: $tenant))])
+                ->sendToDatabase($people);
+        } catch (Throwable $e) {
+            report($e);
+        }
+    }
+
     public function alertStaff(Shipment $shipment, string $title, string $body, bool $mail = false): void
     {
         $tenant = $this->current->get();

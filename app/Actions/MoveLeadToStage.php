@@ -9,6 +9,7 @@ use App\Models\Lead;
 use App\Models\LostReason;
 use App\Models\Stage;
 use App\Models\User;
+use App\Shipping\Shipments\AutoShipments;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -70,6 +71,13 @@ class MoveLeadToStage
         // A shop order going out to be packed: its address is read from the chat when the lead lacks it.
         try {
             app(ChatShippingDetails::class)->enteringShipping($moved);
+        } catch (Throwable $e) {
+            report($e);
+        }
+
+        // "Resi otomatis": scheduled when the lead entered the trigger stage with nothing missing.
+        try {
+            app(AutoShipments::class)->entered($moved);
         } catch (Throwable $e) {
             report($e);
         }

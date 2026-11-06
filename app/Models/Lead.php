@@ -30,7 +30,7 @@ use LogicException;
     'survey_location', 'unit', 'deal_value', 'lost_reason_id', 'custom_fields', 'stage_entered_at',
     'variant', 'quantity', 'shipping_address', 'courier', 'shipping_cost', 'order_items',
     'payment_type', 'payment_type_source', 'payment_proof_at', 'paid_at', 'shipping_province', 'tracking_number', 'shipped_at', 'shipping_address_parts',
-    'ad_id', 'ad_title', 'ad_url', 'product_source',
+    'ad_id', 'ad_title', 'ad_url', 'product_source', 'auto_shipment_at', 'auto_shipment_state', 'auto_shipment_note',
 ])]
 class Lead extends Model
 {
@@ -101,6 +101,7 @@ class Lead extends Model
             'shipping_address_parts' => 'array',
             'payment_proof_at' => 'datetime',
             'paid_at' => 'datetime',
+            'auto_shipment_at' => 'datetime',
             'shipped_at' => 'datetime',
         ];
     }
@@ -160,6 +161,11 @@ class Lead extends Model
     public function conversation(): HasOne
     {
         return $this->hasOne(WaConversation::class);
+    }
+
+    public function shipments(): HasMany
+    {
+        return $this->hasMany(Shipment::class);
     }
 
     public function activities(): HasMany

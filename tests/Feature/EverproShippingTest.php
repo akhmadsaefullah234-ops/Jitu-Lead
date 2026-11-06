@@ -3,9 +3,11 @@
 namespace Tests\Feature;
 
 use App\Actions\HandleInboundWhatsApp;
+use App\Actions\MoveLeadToStage;
 use App\Actions\ProvisionTenant;
 use App\Automation\RetailStages;
 use App\Enums\AiMode;
+use App\Enums\Role;
 use App\Enums\WaChannelStatus;
 use App\Enums\WaChannelType;
 use App\Filament\Pages\ImportResi;
@@ -13,11 +15,14 @@ use App\Filament\Pages\Inbox;
 use App\Filament\Pages\ShippingSettingsPage;
 use App\Filament\Resources\Leads\Pages\EditLead;
 use App\Filament\Resources\Leads\Pages\ListLeads;
+use App\Filament\Resources\Shipments\Pages\ListShipments;
+use App\Filament\Resources\Shipments\ShipmentResource;
 use App\Filament\Support\ShipmentTimeline;
 use App\Leads\ChatShippingDetails;
 use App\Mail\ShipmentNeedsAction;
 use App\Models\AiDraft;
 use App\Models\CarrierAccount;
+use App\Models\LabelBatch;
 use App\Models\Lead;
 use App\Models\Property;
 use App\Models\Shipment;
@@ -26,11 +31,14 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Models\WaChannel;
 use App\Models\WaMessage;
+use App\Reports\DailyReport;
 use App\Shipping\Carriers\CarrierException;
 use App\Shipping\Carriers\Carriers;
 use App\Shipping\Carriers\EverproCarrier;
 use App\Shipping\Carriers\ShipmentStatus;
+use App\Shipping\Shipments\AutoShipments;
 use App\Shipping\Shipments\LabelSheet;
+use App\Shipping\Shipments\LabelStore;
 use App\Shipping\Shipments\ResiImport;
 use App\Shipping\Shipments\Shipments;
 use App\Support\CurrentTenant;
@@ -92,6 +100,9 @@ class EverproShippingTest extends TestCase
     private ?string $orderError = null;
 
     private bool $locationDown = false;
+
+    /** The provider has no label PDF yet. */
+    private bool $labelsDown = false;
 
     /** Tracking numbers Everpro does not know (made outside this account). */
     private array $unknownAwbs = [];
@@ -178,6 +189,10 @@ class EverproShippingTest extends TestCase
     private function labelFile(Request $r)
     {
         $awb = basename((string) parse_url($r->url(), PHP_URL_PATH), '.pdf');
+
+        if ($this->labelsDown) {
+            return Http::response('not ready', 404);
+        }
 
         return match ($awb) {
             'AWB-DOWN' => Http::response('error', 500),
@@ -1138,17 +1153,291 @@ class EverproShippingTest extends TestCase
         $this->get($url)->assertForbidden();
     }
 
-    public function test_merged_label_files_are_deleted_after_a_day(): void
+    public function test_print_runs_and_kept_labels_are_deleted_after_their_keeping_time(): void
     {
         Storage::fake('local');
         $disk = Storage::disk('local');
         $disk->put(LabelSheet::DIR.'/1/old.pdf', '%PDF');
         $disk->put(LabelSheet::DIR.'/1/new.pdf', '%PDF');
-        touch($disk->path(LabelSheet::DIR.'/1/old.pdf'), now()->subHours(25)->getTimestamp());
+        touch($disk->path(LabelSheet::DIR.'/1/old.pdf'), now()->subDays(31)->getTimestamp());
+        $old = LabelStore::DIR.'/1/'.now()->subDays(91)->toDateString().'/AWB1.pdf';
+        $recent = LabelStore::DIR.'/1/'.now()->subDays(10)->toDateString().'/AWB2.pdf';
+        $disk->put($old, '%PDF');
+        $disk->put($recent, '%PDF');
 
         $this->artisan('shipping:labels-prune')->assertSuccessful();
 
         $this->assertSame([LabelSheet::DIR.'/1/new.pdf'], $disk->allFiles(LabelSheet::DIR));
+        $this->assertSame([$recent], $disk->allFiles(LabelStore::DIR), 'Labels are kept 90 days');
+    }
+
+    // ---- Resi otomatis -------------------------------------------------------------------------------------------
+
+    /** A paid-for order with a full address (RT/RW too) that an admin moves into Dikemas & dikirim. */
+    private function readyOrder(string $payment = 'cod', string $phone = '6281234567890', array $extra = [], array $parts = []): Lead
+    {
+        $parts += ['street' => 'Jl. Mawar', 'house' => '5', 'rt_rw' => '001/002', 'kelurahan' => 'Sekeloa', 'kecamatan' => 'Coblong', 'kota' => 'Kota Bandung', 'provinsi' => 'Jawa Barat', 'kode_pos' => '40134'];
+        $lead = $this->order($payment, $phone, $extra + ['shipping_address_parts' => $parts, 'stage_id' => $this->inShop(fn () => (new RetailStages)->stage(RetailStages::PAYMENT)->id)]);
+
+        return $this->inShop(fn () => app(MoveLeadToStage::class)($lead, (new RetailStages)->stage(RetailStages::SHIPPING), $this->adminOf($this->shop))->fresh());
+    }
+
+    private function autoOn(array $auto = []): void
+    {
+        $this->configure(settings: ['auto' => $auto + ['enabled' => true]]);
+    }
+
+    private function runAuto(int $minutes = 31): void
+    {
+        $this->travel($minutes)->minutes();
+        $this->artisan('shipping:auto-resi')->assertSuccessful();
+    }
+
+    public function test_resi_otomatis_is_off_by_default(): void
+    {
+        $this->configure();
+        $lead = $this->readyOrder();
+
+        $this->assertNull($lead->auto_shipment_state);
+        $this->runAuto();
+        $this->assertSame([], $this->callsTo('/shipment/v2/orders'));
+    }
+
+    public function test_an_eligible_lead_gets_its_resi_after_the_wait_once_with_its_label_kept(): void
+    {
+        Storage::fake('local');
+        $this->autoOn();
+        $lead = $this->readyOrder();
+
+        $this->assertSame(AutoShipments::SCHEDULED, $lead->auto_shipment_state);
+        $this->assertSame(30, AutoShipments::minutesLeft($lead));
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+        Livewire::test(EditLead::class, ['record' => $lead->getRouteKey()])->assertActionVisible('cancelAutoShipment');
+        Livewire::test(Inbox::class, ['leadId' => $lead->id])->assertSee('Resi otomatis dalam 30 menit');
+
+        // Not before the wait is over
+        $this->runAuto(10);
+        $this->assertSame([], $this->callsTo('/shipment/v2/orders'));
+
+        $this->runAuto(21);
+        $this->runAuto(5);
+        $this->assertCount(1, $this->callsTo('/shipment/v2/orders'), 'Booked once.');
+
+        $shipment = $this->shipment();
+        $this->assertTrue($shipment->automatic);
+        $this->assertSame('JNE0001234', $shipment->awb);
+        $lead = $this->inShop(fn () => $lead->fresh());
+        $this->assertSame(AutoShipments::DONE, $lead->auto_shipment_state);
+        $this->assertSame('JNE0001234', $lead->tracking_number);
+
+        $activity = $this->inShop(fn () => $lead->activities()->where('type', 'shipment_auto')->sole());
+        $this->assertStringStartsWith('Resi dibuat otomatis: ', $activity->body);
+        $this->assertStringContainsString('COD Rp310.000', $activity->body);
+        $this->assertSame(310000, $activity->meta['cod']);
+
+        // The label is kept and the parcel waits under "Belum dicetak"
+        $this->assertNotNull($shipment->label_path);
+        Storage::disk('local')->assertExists($shipment->label_path);
+        $this->assertStringStartsWith(LabelStore::DIR.'/'.$this->shop->id.'/', $shipment->label_path);
+        $this->assertSame([$shipment->id], $this->inShop(fn () => Shipment::query()->tab('unprinted')->pluck('id')->all()));
+        Livewire::test(Inbox::class, ['leadId' => $lead->id])->assertSee('Belum dicetak')->assertDontSee('Resi otomatis dalam');
+    }
+
+    public function test_cancelled_during_the_wait_no_resi_is_made(): void
+    {
+        $this->autoOn();
+        $lead = $this->readyOrder();
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+
+        Livewire::test(EditLead::class, ['record' => $lead->getRouteKey()])->callAction('cancelAutoShipment');
+        $this->runAuto();
+
+        $this->assertSame([], $this->callsTo('/shipment/v2/orders'));
+        $this->assertSame(AutoShipments::CANCELLED, $this->inShop(fn () => $lead->fresh()->auto_shipment_state));
+    }
+
+    public function test_an_unpaid_transfer_or_a_doubtful_address_is_left_to_the_agent_with_the_reason(): void
+    {
+        $this->autoOn();
+        $unpaid = $this->readyOrder('transfer', '6281234567801', ['name' => 'Belum Bayar']);
+        $noRt = $this->readyOrder('cod', '6281234567802', ['name' => 'Tanpa RT'], ['rt_rw' => null]);
+        $chat = $this->readyOrder('cod', '6281234567803', ['name' => 'Dari Chat', 'payment_type_source' => 'chat']);
+        $unsure = $this->readyOrder('cod', '6281234567804', ['name' => 'Kelurahan Lain'], ['kelurahan' => 'Sukamaju']);
+
+        $this->assertSame(AutoShipments::SKIPPED, $unpaid->auto_shipment_state);
+        $this->assertStringContainsString('transfer belum dikonfirmasi lunas', $unpaid->auto_shipment_note);
+        $this->assertStringContainsString('alamat belum ada RT/RW atau patokan', $noRt->auto_shipment_note);
+        $this->assertStringContainsString('cara bayar belum dipastikan agen', $chat->auto_shipment_note);
+
+        // The provider does not know the kelurahan under that postal code: not guessed
+        $this->assertSame(AutoShipments::SCHEDULED, $unsure->auto_shipment_state);
+        $this->runAuto();
+        $unsure = $this->inShop(fn () => $unsure->fresh());
+        $this->assertSame(AutoShipments::SKIPPED, $unsure->auto_shipment_state);
+        $this->assertStringContainsString('Buat resi manual', $unsure->auto_shipment_note);
+        $this->assertSame([], $this->callsTo('/shipment/v2/orders'));
+
+        // The lead list: "Perlu dilengkapi" and the reason column
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+        Livewire::test(ListLeads::class)->filterTable('resi', 'incomplete')
+            ->assertCanSeeTableRecords([$unpaid, $noRt, $chat])->assertCanNotSeeTableRecords([$unsure])
+            ->assertTableColumnStateSet('resi_check', 'Perlu dilengkapi: transfer belum dikonfirmasi lunas', $unpaid);
+        Livewire::test(ListLeads::class)->filterTable('resi', 'ready')
+            ->assertCanSeeTableRecords([$unsure])->assertCanNotSeeTableRecords([$unpaid, $noRt, $chat]);
+    }
+
+    public function test_the_daily_limit_and_the_cod_cap_leave_the_rest_to_a_manual_click(): void
+    {
+        $this->autoOn(['daily_limit' => 2, 'cod_max' => 200000]);
+        $a = $this->readyOrder('transfer', '6281234567811', ['paid_at' => now()]);
+        $this->travel(1)->minutes();
+        $cod = $this->readyOrder('cod', '6281234567812');
+        $this->travel(1)->minutes();
+        $b = $this->readyOrder('transfer', '6281234567813', ['payment_proof_at' => now()]);
+        $this->travel(1)->minutes();
+        $c = $this->readyOrder('transfer', '6281234567814', ['paid_at' => now()]);
+
+        $this->runAuto();
+
+        $this->assertCount(2, $this->callsTo('/shipment/v2/orders'));
+        $state = fn (Lead $l) => $this->inShop(fn () => $l->fresh());
+        $this->assertSame([AutoShipments::DONE, AutoShipments::DONE], [$state($a)->auto_shipment_state, $state($b)->auto_shipment_state]);
+        $this->assertStringContainsString('nilai COD Rp310.000 di atas batas Rp200.000', $state($cod)->auto_shipment_note);
+        $this->assertStringContainsString('batas harian 2 resi otomatis tercapai', $state($c)->auto_shipment_note);
+        $this->assertSame(AutoShipments::SKIPPED, $state($c)->auto_shipment_state);
+    }
+
+    public function test_a_provider_error_is_told_and_not_retried_endlessly(): void
+    {
+        $this->autoOn();
+        $lead = $this->readyOrder();
+        $this->orderError = 'Saldo tidak mencukupi';
+
+        $this->runAuto();
+        $this->runAuto(60);
+        $this->runAuto(60);
+
+        $this->assertCount(1, $this->callsTo('/shipment/v2/orders'), 'Tried once.');
+        $lead = $this->inShop(fn () => $lead->fresh());
+        $this->assertSame(AutoShipments::FAILED, $lead->auto_shipment_state);
+        $this->assertStringContainsString('Saldo Everpro tidak cukup', $lead->auto_shipment_note);
+        $admin = $this->adminOf($this->shop);
+        $this->assertTrue($admin->notifications()->where('data->title', 'Resi gagal dibuat: Rina Kartika')->exists());
+
+        $this->actingInTenant($admin, $this->shop);
+        Livewire::test(ListShipments::class)->set('activeTab', 'action')->assertCanSeeTableRecords([$this->shipment()]);
+    }
+
+    public function test_the_morning_summary_and_the_daily_report_count_the_automatic_resi(): void
+    {
+        Storage::fake('local');
+        $this->autoOn();
+        $this->readyOrder();
+        $this->runAuto();
+        $admin = $this->adminOf($this->shop);
+
+        // The next morning (today's went out already)
+        $admin->notifications()->delete();
+        $this->travelTo(Carbon::parse('2026-11-06 07:05', 'Asia/Jakarta'));
+        $this->artisan('shipping:auto-resi')->assertSuccessful();
+        $this->artisan('shipping:auto-resi')->assertSuccessful();
+
+        $summary = $admin->notifications()->where('data->title', 'Ringkasan pengiriman')->get();
+        $this->assertCount(1, $summary, 'Once a day.');
+        $this->assertSame('1 resi otomatis kemarin, total COD Rp310.000 · 1 resi belum dicetak', $summary->first()->data['body']);
+
+        $text = app(DailyReport::class)->build($this->shop, $admin)['text'];
+        $this->assertStringContainsString("📦 *Pengiriman*\n• Resi otomatis: 1\n• Total COD resi otomatis: Rp", $text);
+        $this->assertStringContainsString('• Resi belum dicetak (saat ini): 1', $text);
+        $this->assertStringNotContainsString('Rina', $text);
+    }
+
+    // ---- Pengiriman menu -----------------------------------------------------------------------------------------
+
+    public function test_print_all_makes_one_pdf_and_moves_the_parcels_to_printed_and_a_reprint_is_counted(): void
+    {
+        Storage::fake('local');
+        $this->configure();
+        $first = $this->book($this->order('cod', '6281234567821'));
+        $this->travel(1)->minutes();
+        $second = $this->book($this->order('cod', '6281234567822'));
+        $admin = $this->adminOf($this->shop);
+        $this->actingInTenant($admin, $this->shop);
+
+        $this->assertNotNull($first->label_path, 'Kept when the resi came.');
+        $labelCalls = collect(Http::recorded())->filter(fn ($pair) => str_contains($pair[0]->url(), 'labels.example.com'))->count();
+
+        Livewire::test(ListShipments::class)
+            ->assertCanSeeTableRecords([$first, $second], inOrder: true)
+            ->callAction('printAll', data: ['packing_list' => true])
+            ->assertNotified('2 label dicetak');
+
+        $this->assertSame($labelCalls, collect(Http::recorded())->filter(fn ($pair) => str_contains($pair[0]->url(), 'labels.example.com'))->count(), 'Printed from the kept files.');
+        $batch = $this->inShop(fn () => LabelBatch::query()->sole());
+        $this->assertSame([2, true, $admin->id], [$batch->count, $batch->packing_list, $batch->user_id]);
+        $this->assertCount(3, self::pages(Storage::disk('local')->get($batch->path())), 'The packing list, then one page per label.');
+
+        $printed = $this->inShop(fn () => Shipment::query()->orderBy('id')->get());
+        $this->assertSame([1, 1], $printed->pluck('print_count')->all());
+        $this->assertSame([$admin->id, $admin->id], $printed->pluck('printed_by')->all());
+        Livewire::test(ListShipments::class)->assertCanNotSeeTableRecords([$first, $second])
+            ->set('activeTab', 'printed')->assertCanSeeTableRecords([$first, $second])
+            ->callTableAction('print', $first);
+        $this->assertSame(2, $this->inShop(fn () => $first->fresh()->print_count), 'A reprint is counted.');
+        $this->assertSame(2, $this->inShop(fn () => LabelBatch::query()->count()), 'Each print is in the history.');
+
+        // By hand, back to Belum dicetak
+        Livewire::test(ListShipments::class)->set('activeTab', 'printed')->callTableAction('markUnprinted', $second);
+        $this->assertSame([$second->id], $this->inShop(fn () => Shipment::query()->tab('unprinted')->pluck('id')->all()));
+    }
+
+    public function test_a_label_that_does_not_come_needs_action_and_can_be_fetched_again(): void
+    {
+        Storage::fake('local');
+        config(['carriers.label_tries' => 1]);
+        $this->configure();
+        $this->labelsDown = true;
+        $shipment = $this->book($this->order());
+
+        $this->assertNull($shipment->label_path);
+        $this->assertNotNull($shipment->label_failed_at);
+        $this->assertSame('Label belum tersedia', ShipmentResource::status($shipment));
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+        Livewire::test(ListShipments::class)->assertCanNotSeeTableRecords([$shipment])
+            ->set('activeTab', 'action')->assertCanSeeTableRecords([$shipment]);
+
+        $this->labelsDown = false;
+        Livewire::test(ListShipments::class)->set('activeTab', 'action')->callTableAction('retryLabel', $shipment)->assertNotified('Label tersimpan');
+        $this->assertSame([$shipment->id], $this->inShop(fn () => Shipment::query()->tab('unprinted')->pluck('id')->all()));
+    }
+
+    public function test_a_status_callback_moves_the_parcel_between_tabs(): void
+    {
+        Storage::fake('local');
+        $this->configure();
+        $shipment = $this->book($this->order());
+        $ids = fn (string $tab) => $this->inShop(fn () => Shipment::query()->tab($tab)->pluck('id')->all());
+
+        $this->assertSame([$shipment->id], $ids('unprinted'));
+        $this->courierSays('PICKED_UP');
+        $this->assertSame([[], [$shipment->id]], [$ids('unprinted'), $ids('transit')]);
+        $this->courierSays('DELIVERY_FAILED');
+        $this->assertSame([$shipment->id], $ids('action'));
+        $this->courierSays('DELIVERED');
+        $this->assertSame([[], [$shipment->id]], [$ids('action'), $ids('done')]);
+    }
+
+    public function test_an_agent_sees_only_the_parcels_of_their_own_leads(): void
+    {
+        Storage::fake('local');
+        $this->configure();
+        $agent = $this->member($this->shop, Role::Agent);
+        $mine = $this->book($this->order('cod', '6281234567831', ['owner_id' => $agent->id]));
+        $other = $this->book($this->order('cod', '6281234567832', ['owner_id' => $this->adminOf($this->shop)->id]));
+        $this->actingInTenant($agent, $this->shop);
+
+        Livewire::test(ListShipments::class)->assertCanSeeTableRecords([$mine])->assertCanNotSeeTableRecords([$other]);
+        $this->assertSame('1', ShipmentResource::getNavigationBadge());
     }
 
     // ---- AI ------------------------------------------------------------------------------------------------------

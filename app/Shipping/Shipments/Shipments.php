@@ -5,6 +5,7 @@ namespace App\Shipping\Shipments;
 use App\Automation\StageAutomation;
 use App\Enums\StageType;
 use App\Jobs\CreateShipment;
+use App\Jobs\SaveShipmentLabel;
 use App\Leads\ChatShippingDetails;
 use App\Models\CarrierAccount;
 use App\Models\Lead;
@@ -332,7 +333,7 @@ class Shipments
      *
      * @return array{0: Shipment, 1: bool} the parcel, and whether it is new
      */
-    public function book(Lead $lead, ShipmentDraft $draft, ?User $actor = null): array
+    public function book(Lead $lead, ShipmentDraft $draft, ?User $actor = null, bool $automatic = false): array
     {
         if (! $draft->ok()) {
             throw new CarrierException(implode(' ', $draft->problems) ?: 'Data kiriman belum lengkap.');
@@ -340,7 +341,7 @@ class Shipments
 
         $account = $this->account();
 
-        $result = DB::transaction(function () use ($lead, $draft, $account, $actor) {
+        $result = DB::transaction(function () use ($lead, $draft, $account, $actor, $automatic) {
             Lead::query()->whereKey($lead->getKey())->lockForUpdate()->first();
             $open = Shipment::query()->where('lead_id', $lead->getKey())->whereIn('state', [Shipment::PENDING, Shipment::ORDERED, Shipment::SHIPPED])->latest('id')->first();
 
@@ -353,7 +354,7 @@ class Shipments
             $attributes = [
                 'provider' => $account->provider, 'courier' => $draft->rate->name(), 'rate_code' => $draft->rate->code, 'state' => Shipment::PENDING, 'error' => null,
                 'is_cod' => $draft->cod, 'cod_amount' => $draft->cod ? $draft->codAmount : null, 'price' => $draft->rate->price, 'charged' => $draft->charged,
-                'weight_grams' => $draft->weightGrams,
+                'weight_grams' => $draft->weightGrams, 'automatic' => $automatic,
                 'request' => [
                     'destination' => $draft->destination->toArray(), 'item_value' => $draft->itemValue, 'description' => $draft->description,
                     'pickup_time' => $draft->pickupTimes[0] ?? null, 'shipment_type' => $draft->shipmentType, 'by' => $actor?->getKey(), 'rate' => $draft->rate->meta,
@@ -375,7 +376,7 @@ class Shipments
         });
 
         if ($result[1]) {
-            $lead->activities()->create(['user_id' => $actor?->getKey(), 'type' => 'note', 'body' => 'Membuat kiriman '.$result[0]->courier.' lewat '.config('carriers.labels.'.$result[0]->provider, $result[0]->provider).' ('.$result[0]->client_order_no.').']);
+            $lead->activities()->create(['user_id' => $actor?->getKey(), 'type' => 'note', 'body' => ($automatic ? 'Otomatis membuat' : 'Membuat').' kiriman '.$result[0]->courier.' lewat '.config('carriers.labels.'.$result[0]->provider, $result[0]->provider).' ('.$result[0]->client_order_no.').']);
             CreateShipment::dispatch($result[0]->getKey(), $this->current->id());
         }
 
@@ -465,6 +466,11 @@ class Shipments
             // The label is fetched again when someone presses "Cetak label".
         }
 
+        // Kept for the Pengiriman menu; tried again on the queue when the provider has no label yet.
+        if ($shipment->printable()) {
+            SaveShipmentLabel::dispatch($shipment->getKey(), (int) $shipment->tenant_id)->afterCommit();
+        }
+
         // The existing tracking flow: number on the lead, WhatsApp to the buyer (once), lead to Dikemas & dikirim.
         $note = app(StageAutomation::class)->shipped($lead, $shipment->courier, $awb, $this->actor($shipment));
         $lead->activities()->create(['type' => 'note', 'body' => 'Resi '.$awb.' ('.$shipment->courier.') terbit otomatis. '.$note]);
@@ -474,7 +480,12 @@ class Shipments
     {
         $shipment->forceFill(['state' => $shipment->order_id === null && $shipment->state === Shipment::PENDING ? Shipment::FAILED : $shipment->state, 'error' => Str::limit($e->getMessage(), 250, '')])->save();
         $shipment->lead->activities()->create(['type' => 'note', 'body' => 'Kiriman '.$shipment->client_order_no.' belum berhasil dibuat: '.$e->getMessage()]);
-        $this->notices->alertStaff($shipment, 'Kiriman belum berhasil dibuat', $e->getMessage());
+
+        if ($shipment->automatic) {
+            $shipment->lead->forceFill(['auto_shipment_state' => AutoShipments::FAILED, 'auto_shipment_note' => Str::limit('Resi gagal dibuat otomatis: '.$e->getMessage(), 490, '')])->save();
+        }
+
+        $this->notices->alertStaff($shipment, $shipment->automatic ? 'Resi gagal dibuat' : 'Kiriman belum berhasil dibuat', $e->getMessage().($shipment->automatic ? ' Tidak dicoba ulang otomatis.' : ''));
     }
 
     // ---- Labels and cancelling -----------------------------------------------------------------------------

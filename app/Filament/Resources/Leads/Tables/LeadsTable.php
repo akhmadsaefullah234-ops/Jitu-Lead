@@ -11,6 +11,7 @@ use App\Models\Property;
 use App\Models\Stage;
 use App\Reports\DashboardData;
 use App\Reports\LeadOrigin;
+use App\Shipping\Shipments\AutoShipments;
 use App\Support\CurrentTenant;
 use App\Support\Industry;
 use App\Support\Period;
@@ -91,6 +92,13 @@ class LeadsTable
                 TextColumn::make('source.name')
                     ->label('Sumber')
                     ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('resi_check')
+                    ->label('Resi')
+                    ->state(fn (Lead $record) => self::resiCheck($record))
+                    ->color(fn (?string $state) => $state === 'Siap resi' ? 'success' : 'warning')
+                    ->wrap()
+                    ->visible(fn () => ShipmentActions::available())
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('created_at')
                     ->label('Masuk')
                     ->since()
@@ -154,6 +162,15 @@ class LeadsTable
                     ->label('Belum ditanggapi')
                     ->query(fn (Builder $query) => $query->unattended(self::waitMinutes()))
                     ->visible(fn () => self::canMove()),
+                SelectFilter::make('resi')
+                    ->label('Kesiapan resi')
+                    ->options(['ready' => 'Siap resi', 'incomplete' => 'Perlu dilengkapi'])
+                    ->visible(fn () => ShipmentActions::available())
+                    ->query(fn (Builder $query, array $data) => match ($data['value'] ?? null) {
+                        'ready' => AutoShipments::scopeReady($query),
+                        'incomplete' => AutoShipments::scopeReady($query, false),
+                        default => $query,
+                    }),
                 TrashedFilter::make(),
             ])
             ->recordActions([
@@ -185,6 +202,22 @@ class LeadsTable
                     RestoreBulkAction::make(),
                 ]),
             ]);
+    }
+
+    /** "Siap resi", what is missing for one, or nothing for a lead without an order or with a resi already. */
+    private static function resiCheck(Lead $lead): ?string
+    {
+        if (filled($lead->tracking_number) || ($lead->property_id === null && blank($lead->order_items))) {
+            return null;
+        }
+
+        if ($lead->auto_shipment_state === AutoShipments::FAILED) {
+            return $lead->auto_shipment_note;
+        }
+
+        $problems = app(AutoShipments::class)->problems($lead);
+
+        return $problems === [] ? 'Siap resi' : 'Perlu dilengkapi: '.implode(', ', $problems);
     }
 
     private static function waitMinutes(): int
