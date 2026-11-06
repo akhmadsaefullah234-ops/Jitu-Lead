@@ -10,6 +10,7 @@ use App\Automation\StageAutomation;
 use App\Automation\StageAutomationSettings;
 use App\Catalog\ProductMatcher;
 use App\Enums\MessageStatus;
+use App\Filament\Concerns\NotifiesShipmentFormErrors;
 use App\Filament\Resources\Leads\LeadResource;
 use App\Filament\Resources\MediaAssets\MediaAssetResource;
 use App\Filament\Support\ShipmentActions;
@@ -52,6 +53,8 @@ use Livewire\Attributes\Url;
  */
 class Inbox extends Page
 {
+    use NotifiesShipmentFormErrors;
+
     protected string $view = 'filament.pages.inbox';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChatBubbleLeftRight;

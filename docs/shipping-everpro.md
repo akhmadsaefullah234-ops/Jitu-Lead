@@ -89,6 +89,16 @@ tidak), juga untuk resi yang tidak dikenal. URL satu agensi tidak bisa menyentuh
   sudah memastikan transfer pembeli masuk". Aksi massal melewati lead yang cara bayarnya belum dipastikan atau
   transfernya belum dikonfirmasi, dan menyebut namanya. Membaca ulang chat lama tidak mengubah cara bayar yang sudah
   dipastikan agen; pesan baru yang menyebut cara bayar lain membuatnya ditanyakan lagi.
+- Tombol **Buat resi** di modal selalu tombol utama. Bila belum bisa dipakai, alasannya tertulis tepat di atasnya
+  (mis. "Pilih cara bayar dulu", "Kode pos harus 5 angka", masalah dari penyedia). Bila tetap ditekan, atau isian
+  ditolak, muncul notifikasi berisi daftar kesalahan, dan penghentian dicatat sebagai warning (id lead saja).
+- **Rincian paket** di modal bisa diubah sebelum resi dibuat. Isian yang kosong memakai hitungan, yang terlihat samar di
+  tiap isian. Yang bisa diubah: ongkir ditagih ke pembeli (dengan saran hasil promo dan tombol **Pakai promo**), total
+  COD, isi paket, nilai barang, jumlah dan varian (pesanan satu produk), berat, dimensi, catatan untuk kurir, dan
+  asuransi. Pratinjau, subsidi penjual dan peringatan dihitung ulang saat isian berubah. Ada peringatan bila ongkir
+  tercatat di lead berbeda dari hitungan promo, dan bila total COD berbeda dari harga × jumlah + ongkir. Nilai yang
+  dipakai disimpan ke lead (ongkir, total, jumlah, varian) dan ke kiriman, dengan aktivitas
+  "Rincian resi diubah agen: …".
 - Promo ongkir: `shipment_price` ke Everpro selalu ongkir asli tarif terpilih; `cod_price` = harga x jumlah + ongkir yang
   ditagih ke pembeli setelah promo ongkir produk (ongkir yang tercatat di lead, atau ongkir Everpro dikurangi promo bila
   belum pernah dihitung). Pratinjau menampilkan ongkir asli, potongan/subsidi penjual, cashback Everpro dan total COD.

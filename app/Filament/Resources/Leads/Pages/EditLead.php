@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Leads\Pages;
 
 use App\Automation\StageAutomation;
+use App\Filament\Concerns\NotifiesShipmentFormErrors;
 use App\Filament\Pages\Inbox;
 use App\Filament\Resources\Leads\LeadResource;
 use App\Filament\Support\ShipmentActions;
@@ -18,6 +19,8 @@ use Filament\Support\Icons\Heroicon;
 
 class EditLead extends EditRecord
 {
+    use NotifiesShipmentFormErrors;
+
     protected static string $resource = LeadResource::class;
 
     protected function getHeaderActions(): array

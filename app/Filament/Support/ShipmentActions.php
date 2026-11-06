@@ -31,6 +31,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\HtmlString;
 
 /**
@@ -40,6 +41,9 @@ use Illuminate\Support\HtmlString;
  */
 class ShipmentActions
 {
+    /** Form fields the reasons above the button look at. */
+    private const STATE = ['payment', 'transfer_checked', 'addr_kode_pos', 'weight_kg', 'length', 'width', 'height'];
+
     /** @var array<string, ShipmentDraft> one preview per lead and choice for one request */
     private static array $drafts = [];
 
@@ -54,13 +58,119 @@ class ShipmentActions
         'addr_kelurahan' => 'kelurahan', 'addr_kecamatan' => 'kecamatan', 'addr_kota' => 'kota', 'addr_kode_pos' => 'kode_pos',
     ];
 
-    /** @param  array<string, mixed>  $address  the address fields of the form, when shown */
-    private static function draft(Lead $lead, ?string $location, ?string $rate, array $address = [], ?string $payment = null): ShipmentDraft
+    /**
+     * @param  array<string, mixed>  $address  the address fields of the form, when shown
+     * @param  array<string, mixed>  $edit  the package details the agent changed (see self::edits())
+     */
+    private static function draft(Lead $lead, ?string $location, ?string $rate, array $address = [], ?string $payment = null, array $edit = []): ShipmentDraft
     {
-        $lead = self::withAddress($lead, $address);
-        $key = $lead->getKey().'|'.$location.'|'.$rate.'|'.$payment.'|'.md5(json_encode([$lead->name, $lead->shipping_address, $lead->shipping_address_parts]));
+        $lead = self::withItem(self::withAddress($lead, $address), $edit);
+        $key = $lead->getKey().'|'.$location.'|'.$rate.'|'.$payment.'|'.md5(json_encode([$lead->name, $lead->shipping_address, $lead->shipping_address_parts, $lead->order_items, $lead->quantity, $lead->variant, $edit]));
 
-        return self::$drafts[$key] ??= app(Shipments::class)->draft($lead, ['location_id' => $location, 'rate_code' => $rate, 'payment' => $payment]);
+        return self::$drafts[$key] ??= app(Shipments::class)->draft($lead, ['location_id' => $location, 'rate_code' => $rate, 'payment' => $payment, 'edit' => $edit]);
+    }
+
+    /** The order has one product: its quantity and variant can be changed in "Buat resi". */
+    private static function singleItem(Lead $lead): bool
+    {
+        return count(app(Shipments::class)->items($lead)) === 1;
+    }
+
+    /** The lead with the quantity and variant changed in the form (not saved). */
+    private static function withItem(Lead $lead, array $edit): Lead
+    {
+        $quantity = isset($edit['quantity']) ? max(1, (int) $edit['quantity']) : null;
+        $variant = isset($edit['variant']) ? trim((string) $edit['variant']) : null;
+
+        if (($quantity === null && $variant === null) || ! self::singleItem($lead)) {
+            return $lead;
+        }
+
+        $copy = clone $lead;
+        $items = (array) $lead->order_items;
+
+        if ($items !== []) {
+            $key = array_key_first($items);
+            $items[$key] = array_merge($items[$key], array_filter(['quantity' => $quantity, 'variant' => $variant], fn ($v) => $v !== null));
+            $copy->order_items = $items;
+        }
+
+        $copy->quantity = $quantity ?? $lead->quantity;
+        $copy->variant = $variant ?? $lead->variant;
+
+        return $copy;
+    }
+
+    /** The current quantity and variant of a one-product order, for the form's placeholders. */
+    private static function item(Lead $lead): array
+    {
+        $first = collect((array) $lead->order_items)->first();
+
+        return ['quantity' => (int) ($first['quantity'] ?? $first['jumlah'] ?? $lead->quantity ?? 1), 'variant' => $first['variant'] ?? $lead->variant];
+    }
+
+    /** @return array<string, mixed> the package details filled in the form (empty: as calculated) */
+    private static function edits(Get|Closure $get): array
+    {
+        $money = fn ($v) => filled($v) ? max(0, (int) preg_replace('/\D/', '', (string) $v)) : null;
+        $number = fn ($v) => filled($v) && is_numeric(str_replace(',', '.', (string) $v)) ? (float) str_replace(',', '.', (string) $v) : null;
+        $kg = $number($get('weight_kg'));
+
+        return array_filter([
+            'charged' => $money($get('charged')),
+            'cod_amount' => $money($get('cod_amount')),
+            'description' => filled($get('description')) ? trim((string) $get('description')) : null,
+            'item_value' => $money($get('item_value')),
+            'quantity' => filled($get('quantity')) ? max(1, (int) $get('quantity')) : null,
+            'variant' => filled($get('variant')) ? trim((string) $get('variant')) : null,
+            'weight_grams' => $kg !== null ? (int) round($kg * 1000) : null,
+            'length' => ($l = $number($get('length'))) ? (int) ceil($l) : null,
+            'width' => ($w = $number($get('width'))) ? (int) ceil($w) : null,
+            'height' => ($h = $number($get('height'))) ? (int) ceil($h) : null,
+            'note' => filled($get('note')) ? trim((string) $get('note')) : null,
+            'insurance' => $get('insurance'),
+        ], fn ($v) => $v !== null);
+    }
+
+    /**
+     * Why "Buat resi" cannot book yet, said right above the button (and in a notification when it is pressed anyway).
+     *
+     * @return list<string>
+     */
+    private static function reasons(Lead $lead, array $data, ?ShipmentDraft $draft): array
+    {
+        $reasons = [];
+        $chosen = Shipments::payment($lead, self::asksPayment($lead) ? ($data['payment'] ?? null) : null);
+
+        if ($chosen === null) {
+            $reasons[] = 'Pilih cara bayar dulu (COD atau Transfer).';
+        } elseif (Shipments::unpaid($lead, $chosen) && ! ($data['transfer_checked'] ?? false)) {
+            $reasons[] = 'Centang "Saya sudah memastikan transfer pembeli masuk" dulu.';
+        }
+
+        if (self::needsAddress($lead) && filled($data['addr_kode_pos'] ?? null) && ! preg_match('/^\d{5}$/', trim((string) $data['addr_kode_pos']))) {
+            $reasons[] = 'Kode pos harus 5 angka.';
+        }
+
+        if (filled($data['weight_kg'] ?? null) && ! is_numeric(str_replace(',', '.', (string) $data['weight_kg']))) {
+            $reasons[] = 'Berat harus angka (kg).';
+        }
+
+        $dims = array_filter([$data['length'] ?? null, $data['width'] ?? null, $data['height'] ?? null], 'filled');
+
+        if ($dims !== [] && count($dims) < 3) {
+            $reasons[] = 'Isi panjang, lebar dan tinggi sekaligus, atau kosongkan ketiganya.';
+        }
+
+        foreach ($draft?->problems ?? [] as $problem) {
+            if ($chosen === null && str_starts_with($problem, 'Cara bayar belum dipastikan')) {
+                continue;
+            }
+
+            $reasons[] = $problem;
+        }
+
+        return array_values(array_unique($reasons));
     }
 
     /** The lead's way of paying is unknown or only read from the chat: the agent picks before booking. */
@@ -147,27 +257,28 @@ class ShipmentActions
     {
         $payment = fn (Get $get) => self::asksPayment($lead()) ? $get('payment') : null;
         $address = fn (Get $get) => self::needsAddress($lead()) ? array_map(fn ($f) => $get($f), array_combine(array_keys(self::ADDRESS_FIELDS), array_keys(self::ADDRESS_FIELDS))) : [];
+        $current = fn (Get $get) => self::draft($lead(), $get('location_id'), $get('rate_code'), $address($get), $payment($get), self::edits($get));
         $field = fn (string $name, string $label) => TextInput::make($name)->label($label)->live(onBlur: true)->maxLength(150)->default(fn () => self::addressState($lead())[$name] ?? null);
+        $rp = fn (?int $v) => 'Rp'.number_format((int) $v, 0, ',', '.');
+        $detail = fn (string $name, string $label) => TextInput::make($name)->label($label)->live(onBlur: true);
 
-        return Action::make($name)->label('Buat resi')->icon(Heroicon::OutlinedTruck)->color('gray')
+        $self = Action::make($name)->label('Buat resi')->icon(Heroicon::OutlinedTruck)->color('gray')
             ->visible(fn () => self::available() && ($l = $lead()) !== null && ! $l->trashed() && Shipment::latestFor($l) === null)
             ->modalHeading('Buat resi otomatis')
             ->modalDescription('Periksa dulu sebelum dikirim ke penyedia pengiriman. Resi yang terbit dikirim ke pembeli lewat WhatsApp seperti biasa.')
-            ->modalSubmitActionLabel('Buat resi')
-            // Nothing is booked until the agent has said how the buyer pays, and checked an unconfirmed transfer.
-            ->modalSubmitAction(fn (Action $submit, Action $action) => $submit->disabled(function () use ($action, $lead) {
-                $data = $action->getRawData();
-                $chosen = Shipments::payment($lead(), $data['payment'] ?? null);
+            ->modalSubmitActionLabel('Buat resi');
 
-                return $chosen === null || (Shipments::unpaid($lead(), $chosen) && ! ($data['transfer_checked'] ?? false));
-            }))
+        // Always the modal's own (primary) button; disabled with the reason written right above it.
+        $self->modalSubmitAction(fn (Action $action) => $action->disabled(fn () => self::reasons($lead(), $self->getRawData(), self::formDraft($lead(), $self->getRawData())) !== []));
+
+        return $self
             ->schema([
-                Radio::make('payment')->label('Cara bayar')->options(Shipments::PAYMENTS)->inline()->live()->required()->default(null)
+                Radio::make('payment')->label('Cara bayar')->options(Shipments::PAYMENTS)->inline()->live()->default(null)
                     ->visible(fn () => self::asksPayment($lead()))
                     ->helperText(fn () => ($s = app(Shipments::class)->paymentSuggestion($lead())) !== null
                         ? 'Saran dari chat: '.(Shipments::PAYMENTS[$s] ?? $s).'. Pastikan dulu, lalu pilih.'
                         : 'Cara bayar lead ini belum diketahui. Pilih sesuai kesepakatan dengan pembeli.'),
-                Checkbox::make('transfer_checked')->label('Saya sudah memastikan transfer pembeli masuk')->accepted()
+                Checkbox::make('transfer_checked')->label('Saya sudah memastikan transfer pembeli masuk')
                     ->visible(fn (Get $get) => Shipments::unpaid($lead(), Shipments::payment($lead(), $get('payment'))))
                     ->helperText('⚠ Pembayaran transfer belum dikonfirmasi (belum ada bukti bayar atau tanda lunas di lead). Paket dikirim tanpa COD.')->live(),
                 Section::make('Alamat penerima')->description('Alamat lead belum lengkap. Ambil dari chat atau isi di sini; disimpan ke lead saat resi dibuat.')
@@ -198,38 +309,77 @@ class ShipmentActions
                         $field('addr_kelurahan', 'Kelurahan / desa'),
                         $field('addr_kecamatan', 'Kecamatan'),
                         $field('addr_kota', 'Kota / kabupaten'),
-                        $field('addr_kode_pos', 'Kode pos')->maxLength(5)->rule('nullable')->rule('regex:/^\d{5}$/'),
+                        $field('addr_kode_pos', 'Kode pos')->maxLength(5),
                     ]),
                 Select::make('location_id')->label('Kelurahan tujuan')->live()
                     ->options(fn (Get $get) => collect(self::draft($lead(), null, null, $address($get), $payment($get))->candidates)->mapWithKeys(fn (CarrierLocation $l) => [$l->id => $l->label()])->all())
                     ->default(fn () => self::draft($lead(), null, null)->destination?->id)
                     ->visible(fn (Get $get) => count(($d = self::draft($lead(), null, null, $address($get), $payment($get)))->candidates) > 1 || ($d->destination === null && $d->candidates !== [])),
                 Select::make('rate_code')->label('Kurir dan layanan')->live()
-                    ->options(fn (Get $get) => self::draft($lead(), $get('location_id'), $get('rate_code'), $address($get), $payment($get))->choices())
+                    ->options(fn (Get $get) => $current($get)->choices())
                     ->default(fn () => self::draft($lead(), null, null)->rate?->key())
                     ->visible(fn (Get $get) => self::draft($lead(), $get('location_id'), null, $address($get), $payment($get))->rates !== []),
-                Text::make(fn (Get $get) => self::preview(self::draft($lead(), $get('location_id'), $get('rate_code'), $address($get), $payment($get))))->columnSpanFull(),
+                Section::make('Rincian paket')
+                    ->description('Kosongkan untuk memakai hitungan (terlihat samar di tiap isian). Ubah bila ada kesepakatan lain di chat; perubahan dicatat di lead.')
+                    ->collapsible()
+                    ->columns(2)
+                    ->schema([
+                        $detail('charged', 'Ongkir ditagih ke pembeli')->prefix('Rp')->numeric()->minValue(0)
+                            ->placeholder(fn (Get $get) => number_format((int) $current($get)->charged, 0, ',', '.'))
+                            ->helperText(fn (Get $get) => ($d = $current($get))->promoCharged !== null ? 'Hasil promo ongkir: '.$rp($d->promoCharged).' · ongkir asli '.$rp($d->rate?->price) : null)
+                            ->hintAction(Action::make('usePromo')->label('Pakai promo')->link()
+                                ->visible(fn (Get $get) => ($d = $current($get))->promoCharged !== null && $d->charged !== $d->promoCharged)
+                                ->action(fn (Get $get, Set $set) => $set('charged', $current($get)->promoCharged))),
+                        $detail('cod_amount', 'Total COD')->prefix('Rp')->numeric()->minValue(0)
+                            ->visible(fn (Get $get) => $current($get)->cod)
+                            ->placeholder(fn (Get $get) => number_format($current($get)->calculatedCod, 0, ',', '.'))
+                            ->helperText('Otomatis harga × jumlah + ongkir ditagih. Isi bila ada kesepakatan khusus.'),
+                        $detail('description', 'Isi paket')->maxLength(150)->columnSpanFull()
+                            ->placeholder(fn (Get $get) => $current($get)->description),
+                        $detail('item_value', 'Nilai barang (untuk asuransi)')->prefix('Rp')->numeric()->minValue(0)
+                            ->placeholder(fn (Get $get) => number_format($current($get)->itemValue, 0, ',', '.')),
+                        $detail('weight_kg', 'Berat')->suffix('kg')
+                            ->placeholder(fn (Get $get) => str_replace('.', ',', (string) round($current($get)->weightGrams / 1000, 2))),
+                        $detail('quantity', 'Jumlah')->numeric()->integer()->minValue(1)->maxValue(999)
+                            ->visible(fn () => self::singleItem($lead()))
+                            ->placeholder(fn () => (string) self::item($lead())['quantity']),
+                        $detail('variant', 'Varian')->maxLength(100)
+                            ->visible(fn () => self::singleItem($lead()))
+                            ->placeholder(fn () => self::item($lead())['variant'] ?: '-'),
+                        $detail('length', 'Panjang')->suffix('cm')->numeric()->minValue(1)
+                            ->placeholder(fn (Get $get) => (string) ($current($get)->dimensions['length'] ?? '')),
+                        $detail('width', 'Lebar')->suffix('cm')->numeric()->minValue(1)
+                            ->placeholder(fn (Get $get) => (string) ($current($get)->dimensions['width'] ?? '')),
+                        $detail('height', 'Tinggi')->suffix('cm')->numeric()->minValue(1)
+                            ->placeholder(fn (Get $get) => (string) ($current($get)->dimensions['height'] ?? '')),
+                        Toggle::make('insurance')->label('Asuransi')->live()
+                            ->default(fn () => (bool) app(Shipments::class)->account()?->setting('insurance', false)),
+                        $detail('note', 'Catatan untuk kurir')->maxLength(200)->columnSpanFull()
+                            ->placeholder(fn (Get $get) => $current($get)->note ?: 'mis. rumah pagar hijau, titip ke tetangga'),
+                    ]),
+                Text::make(fn (Get $get) => ($d = $current($get))->problems === [] ? self::preview($d) : null)->columnSpanFull(),
+                Text::make(fn (Get $get) => self::reasonsBox(self::reasons($lead(), array_map(fn ($key) => $get($key), array_combine(self::STATE, self::STATE)), $current($get))))->columnSpanFull()->key('reasons'),
             ])
             ->action(function (array $data, Action $action) use ($lead) {
                 $record = $lead();
-                $choice = ['location_id' => $data['location_id'] ?? null, 'rate_code' => $data['rate_code'] ?? null, 'payment' => self::asksPayment($record) ? ($data['payment'] ?? null) : null];
-                $draft = app(Shipments::class)->draft(self::withAddress($record, $data), $choice);
+                $draft = self::formDraft($record, $data, fresh: true);
+                $reasons = self::reasons($record, $data, $draft);
 
-                if (! $draft->ok() || ($draft->unpaid && ! ($data['transfer_checked'] ?? false))) {
-                    Notification::make()->title('Resi belum bisa dibuat')
-                        ->body($draft->ok() ? 'Pembayaran transfer belum dikonfirmasi: pastikan transfer masuk dulu.' : implode(' ', $draft->problems))->danger()->send();
-                    $action->halt();
+                if ($reasons !== []) {
+                    self::stopped($record, $reasons, $action);
                 }
 
-                self::savePayment($record, $choice['payment']);
+                self::savePayment($record, self::asksPayment($record) ? ($data['payment'] ?? null) : null);
                 self::saveAddress($record, $data);
 
                 try {
                     [$shipment, $new] = app(Shipments::class)->book($record, $draft, auth()->user());
                 } catch (CarrierException $e) {
-                    Notification::make()->title('Resi belum bisa dibuat')->body($e->getMessage())->danger()->send();
+                    self::stopped($record, [$e->getMessage()], $action);
+                }
 
-                    return;
+                if ($new) {
+                    self::saveDetails($record, $draft, self::edits(fn (string $key) => $data[$key] ?? null));
                 }
 
                 $shipment->refresh();
@@ -242,13 +392,94 @@ class ShipmentActions
             });
     }
 
+    /** The draft for the form's state (the submit button, the action): the same one the preview shows. */
+    private static function formDraft(?Lead $lead, array $data, bool $fresh = false): ?ShipmentDraft
+    {
+        if ($lead === null) {
+            return null;
+        }
+
+        $get = fn (string $key) => $data[$key] ?? null;
+        $address = self::needsAddress($lead) ? array_intersect_key($data, self::ADDRESS_FIELDS) : [];
+        $payment = self::asksPayment($lead) ? ($data['payment'] ?? null) : null;
+
+        if ($fresh) {
+            self::$drafts = [];
+        }
+
+        return self::draft($lead, $data['location_id'] ?? null, $data['rate_code'] ?? null, $address, $payment, self::edits($get));
+    }
+
+    /** Booking stopped: the agent is always told why, and it is logged (lead id only) so a silent button can be traced. */
+    private static function stopped(Lead $lead, array $reasons, Action $action): never
+    {
+        Notification::make()->title('Resi belum bisa dibuat')
+            ->body(new HtmlString(implode('<br>', array_map(fn ($r) => '• '.e($r), $reasons))))->danger()->persistent()->send();
+        Log::warning('Buat resi stopped before booking', ['tenant' => app(CurrentTenant::class)->id(), 'lead' => $lead->getKey(), 'reasons' => count($reasons)]);
+        $action->halt();
+    }
+
+    private static function reasonsBox(array $reasons): ?HtmlString
+    {
+        return $reasons === [] ? null : new HtmlString('<div style="color:var(--danger-600);padding:.5rem .75rem;border:1px solid var(--danger-300);border-radius:.5rem;background:var(--danger-50)"><strong>Belum bisa membuat resi:</strong>'
+            .implode('', array_map(fn ($r) => '<div>• '.e($r).'</div>', $reasons)).'</div>');
+    }
+
+    /**
+     * What was used goes back onto the lead: the shipping charged, the total, quantity and variant. When the agent
+     * changed anything, one activity says what ("Rincian resi diubah agen: Ongkir ditagih Rp45.000 → Rp32.900").
+     */
+    private static function saveDetails(Lead $lead, ShipmentDraft $draft, array $edit): void
+    {
+        $changes = [];
+        $edited = self::withItem($lead, $edit);
+
+        foreach (['quantity', 'variant', 'order_items'] as $key) {
+            if ($edited->{$key} != $lead->{$key}) {
+                $changes[$key] = $edited->{$key};
+            }
+        }
+
+        if ((int) $lead->shipping_cost !== (int) $draft->charged || $lead->shipping_cost === null) {
+            $changes['shipping_cost'] = $draft->charged;
+        }
+
+        $total = $draft->cod ? $draft->codAmount - (int) $draft->rate?->codFee : $draft->goodsTotal + (int) $draft->charged;
+
+        if ((int) $lead->deal_value !== $total) {
+            $changes['deal_value'] = $total;
+        }
+
+        $before = ['quantity' => $lead->quantity, 'variant' => $lead->variant];
+
+        if ($changes !== []) {
+            $lead->forceFill($changes)->save();
+        }
+
+        $items = [];
+
+        foreach (['quantity' => 'Jumlah', 'variant' => 'Varian'] as $key => $label) {
+            if (array_key_exists($key, $changes)) {
+                $items[] = $label.' '.($before[$key] ?? '-').' → '.$changes[$key];
+            }
+        }
+
+        $lines = [...array_map(fn ($label, $pair) => $label.' '.$pair[0].' → '.$pair[1], array_keys($draft->edits), $draft->edits), ...$items];
+
+        if ($lines !== []) {
+            $lead->activities()->create(['user_id' => auth()->id(), 'type' => 'note', 'body' => 'Rincian resi diubah agen: '.implode('; ', $lines).'.', 'meta' => ['edits' => array_keys($draft->edits)]]);
+        }
+    }
+
     public static function preview(ShipmentDraft $draft): HtmlString
     {
         if ($draft->problems !== []) {
             return new HtmlString('<div style="color:var(--danger-600);display:grid;gap:.25rem">'.implode('', array_map(fn ($p) => '<div>• '.e($p).'</div>', $draft->problems)).'</div>');
         }
 
-        return new HtmlString('<div style="white-space:pre-line;padding:.6rem .8rem;border-radius:.5rem;background:var(--gray-50);border:1px solid var(--gray-200)">'.e($draft->summary()).'</div>');
+        $warnings = implode('', array_map(fn ($w) => '<div style="color:var(--warning-700);margin-top:.35rem">⚠ '.e($w).'</div>', $draft->warnings()));
+
+        return new HtmlString('<div style="white-space:pre-line;padding:.6rem .8rem;border-radius:.5rem;background:var(--gray-50);border:1px solid var(--gray-200)">'.e($draft->summary()).'</div>'.$warnings);
     }
 
     /**

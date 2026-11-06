@@ -47,6 +47,7 @@ use App\Support\SpreadsheetReader;
 use App\WhatsApp\GatewayUrlGuard;
 use App\WhatsApp\InboundMessage;
 use Carbon\CarbonImmutable;
+use Filament\Actions\Action;
 use Filament\Actions\Testing\TestAction;
 use Filament\Notifications\Livewire\Notifications;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -1594,6 +1595,88 @@ class EverproShippingTest extends TestCase
         $this->assertSame([18000, 313000], [$order['shipment_price'], $order['cod_price']]);
     }
 
+    /** The body of the last notification titled $title shown to the signed-in agent. */
+    private function notice(string $title): string
+    {
+        $notices = new Notifications;
+        $notices->mount();
+
+        return (string) $notices->notifications->last(fn ($n) => $n->getTitle() === $title)?->getBody();
+    }
+
+    /** The button the modal shows to book. */
+    private function submit($page): Action
+    {
+        return $page->instance()->getMountedAction()->getModalSubmitAction();
+    }
+
+    public function test_the_buat_resi_button_is_the_modals_own_and_books_with_an_address_typed_in(): void
+    {
+        $this->configure();
+        // COD saved on the lead, the address only as text: typed into the modal
+        $lead = $this->order('cod', extra: ['shipping_address_parts' => null, 'shipping_address' => 'Jl. Mawar No. 5']);
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+
+        $page = Livewire::test(EditLead::class, ['record' => $lead->getRouteKey()])->mountAction('createShipment')
+            ->setActionData(['addr_rt_rw' => '001/002', 'addr_kelurahan' => 'Sekeloa', 'addr_kecamatan' => 'Coblong', 'addr_kota' => 'Kota Bandung', 'addr_kode_pos' => '4013']);
+
+        // Never the gray "Buat resi" link that opened the modal
+        $this->assertSame('submit', $this->submit($page)->getName());
+        $this->assertSame('primary', $this->submit($page)->getColor());
+        $this->assertTrue($this->submit($page)->isDisabled());
+        $page->callMountedAction();
+        $this->assertStringContainsString('Kode pos harus 5 angka.', $this->notice('Resi belum bisa dibuat'));
+        $this->assertSame([], $this->callsTo('/shipment/v2/orders'));
+
+        // A field the browser let through but the form refuses: every error in a notification too
+        $page->setActionData(['charged' => '-5'])->callMountedAction()->assertHasActionErrors(['charged']);
+        $this->assertStringContainsStringIgnoringCase('ongkir ditagih ke pembeli', $this->notice('Periksa isian Buat resi'));
+
+        $page->setActionData(['addr_kode_pos' => '40134', 'charged' => null]);
+        $this->assertFalse($this->submit($page)->isDisabled());
+        $page->callMountedAction()->assertHasNoActionErrors();
+
+        $this->assertCount(1, $this->callsTo('/shipment/v2/orders'));
+        $this->assertSame('40134', $this->callsTo('/shipment/v2/orders')[0]['body']['receiver_postal_code']);
+        $this->assertSame(Shipment::SHIPPED, $this->shipment()->state);
+    }
+
+    public function test_the_agent_changes_the_shipping_and_cod_before_booking_and_an_old_shipping_cost_is_warned_about(): void
+    {
+        $this->configure();
+        $this->inShop(fn () => $this->bag->update(['shipping_promos' => [['type' => 'discount', 'amount' => 5000, 'area' => 'all']]]));
+        // Recorded before the promo existed
+        $lead = $this->order('cod', extra: ['shipping_cost' => 45000]);
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+
+        $draft = $this->inShop(fn () => app(Shipments::class)->draft($lead));
+        $this->assertSame([45000, 13000, 345000], [$draft->charged, $draft->promoCharged, $draft->codAmount]);
+        $this->assertSame(['Ongkir tercatat Rp45.000 berbeda dari hitungan promo Rp13.000 — pastikan sesuai kesepakatan.'], $draft->warnings());
+
+        $edited = $this->inShop(fn () => app(Shipments::class)->draft($lead, ['edit' => ['charged' => 13000, 'cod_amount' => 300000]]));
+        $this->assertSame([13000, 313000, 300000], [$edited->charged, $edited->calculatedCod, $edited->codAmount]);
+        $this->assertSame(['Total COD Rp300.000 berbeda dari hitungan Rp313.000 (harga × jumlah + ongkir ditagih).'], $edited->warnings());
+
+        Livewire::test(EditLead::class, ['record' => $lead->getRouteKey()])->mountAction('createShipment')
+            ->setActionData(['charged' => '13000', 'cod_amount' => '300000', 'weight_kg' => '2,5', 'note' => 'Pagar hijau', 'quantity' => '2', 'variant' => 'Merah'])
+            ->callMountedAction()->assertHasNoActionErrors();
+
+        $order = $this->callsTo('/shipment/v2/orders')[0]['body'];
+        $this->assertSame([18000, 300000, 2.5, 'Pagar hijau'], [$order['shipment_price'], $order['cod_price'], $order['weight'], $order['receiver_address_note']]);
+        $this->assertStringContainsString('Tas Badminton Merah x2', $order['package_desc']);
+
+        $shipment = $this->shipment();
+        $this->assertSame([13000, 300000, 2500], [$shipment->charged, $shipment->cod_amount, $shipment->weight_grams]);
+        $lead = $this->inShop(fn () => $lead->fresh());
+        $this->assertSame([13000, 300000, 'Merah'], [(int) $lead->shipping_cost, (int) $lead->deal_value, $lead->variant]);
+        $this->assertSame('Merah', $lead->order_items[0]['variant']);
+        $activity = $this->inShop(fn () => $lead->activities()->where('body', 'like', 'Rincian resi diubah agen:%')->sole());
+        $this->assertStringContainsString('Ongkir ditagih Rp45.000 → Rp13.000', $activity->body);
+        $this->assertStringContainsString('Total COD Rp313.000 → Rp300.000', $activity->body);
+        $this->assertStringContainsString('Berat 2 kg → 2,5 kg', $activity->body);
+        $this->assertStringContainsString('Varian Hitam → Merah', $activity->body);
+    }
+
     public function test_buat_resi_never_assumes_transfer_when_the_way_of_paying_is_unknown(): void
     {
         $this->configure();
@@ -1607,7 +1690,9 @@ class EverproShippingTest extends TestCase
 
         // Not without picking
         $page = Livewire::test(EditLead::class, ['record' => $lead->getRouteKey()])->mountAction('createShipment');
-        $page->callMountedAction()->assertHasActionErrors(['payment' => 'required']);
+        $this->assertTrue($this->submit($page)->isDisabled());
+        $page->callMountedAction();
+        $this->assertStringContainsString('Pilih cara bayar dulu (COD atau Transfer).', $this->notice('Resi belum bisa dibuat'));
         $this->assertSame([], $this->callsTo('/shipment/v2/orders'));
 
         // Picked COD: saved to the lead as confirmed, and booked as COD
@@ -1662,7 +1747,9 @@ class EverproShippingTest extends TestCase
         $this->assertStringContainsString('⚠ Pembayaran transfer belum dikonfirmasi.', $draft->summary());
 
         $page = Livewire::test(EditLead::class, ['record' => $lead->getRouteKey()])->mountAction('createShipment');
-        $page->callMountedAction()->assertHasActionErrors(['transfer_checked' => 'accepted']);
+        $this->assertTrue($this->submit($page)->isDisabled());
+        $page->callMountedAction();
+        $this->assertStringContainsString('Saya sudah memastikan transfer pembeli masuk', $this->notice('Resi belum bisa dibuat'));
         $this->assertSame([], $this->callsTo('/shipment/v2/orders'));
         $page->setActionData(['transfer_checked' => true])->callMountedAction()->assertHasNoActionErrors();
         $this->assertFalse($this->callsTo('/shipment/v2/orders')[0]['body']['is_cod']);
