@@ -34,7 +34,33 @@ final class ShipmentDraft
         public ?string $promo = null,
         public ?string $payment = null,
         public bool $unpaid = false,
+        public int $goodsTotal = 0,
+        public ?int $promoCharged = null,
+        public ?int $recordedCharged = null,
+        public int $calculatedCod = 0,
+        public ?array $dimensions = null,
+        public ?string $note = null,
+        public bool $insurance = false,
+        /** @var array<string, array{0: mixed, 1: mixed}> what the agent changed: field label => [calculated, used] */
+        public array $edits = [],
     ) {}
+
+    /** "Ongkir tercatat Rp45.000 berbeda dari hitungan promo Rp32.900 ..." when the lead's old shipping cost is not what the promo gives now. */
+    public function warnings(): array
+    {
+        $rp = fn (?int $v) => 'Rp'.number_format((int) $v, 0, ',', '.');
+        $out = [];
+
+        if ($this->rate !== null && $this->recordedCharged !== null && $this->promoCharged !== null && $this->recordedCharged !== $this->promoCharged && $this->charged === $this->recordedCharged) {
+            $out[] = 'Ongkir tercatat '.$rp($this->recordedCharged).' berbeda dari hitungan promo '.$rp($this->promoCharged).' — pastikan sesuai kesepakatan.';
+        }
+
+        if ($this->rate !== null && $this->cod && $this->codAmount !== $this->calculatedCod) {
+            $out[] = 'Total COD '.$rp($this->codAmount).' berbeda dari hitungan '.$rp($this->calculatedCod).' (harga × jumlah + ongkir ditagih).';
+        }
+
+        return $out;
+    }
 
     /**
      * The rates the agent picks from: regular and express, cheapest first; cargo too for a parcel over 5 kg. The
@@ -84,7 +110,14 @@ final class ShipmentDraft
             };
         }
 
-        $lines[] = 'Isi paket: '.($this->description ?: '-').' · nilai barang '.$rp($this->itemValue).' · berat '.number_format($this->weightGrams / 1000, 0).' kg';
+        $kg = rtrim(rtrim(number_format($this->weightGrams / 1000, 2, ',', '.'), '0'), ',');
+        $lines[] = 'Isi paket: '.($this->description ?: '-').' · nilai barang '.$rp($this->itemValue).' · berat '.$kg.' kg'
+            .($this->dimensions ? ' · '.$this->dimensions['length'].'×'.$this->dimensions['width'].'×'.$this->dimensions['height'].' cm' : '')
+            .($this->insurance ? ' · diasuransikan' : '');
+
+        if (filled($this->note)) {
+            $lines[] = 'Catatan untuk kurir: '.$this->note;
+        }
         $lines[] = match (true) {
             $this->cod => 'Total COD (ditagih kurir ke pembeli): '.$rp($this->codAmount).($this->rate?->codFee ? ' (termasuk biaya COD '.$rp($this->rate->codFee).')' : ''),
             $this->unpaid => 'Bukan COD: pembeli bayar di muka. ⚠ Pembayaran transfer belum dikonfirmasi.',

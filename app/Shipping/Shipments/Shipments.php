@@ -121,11 +121,48 @@ class Shipments
             }
         }
 
+        $edit = array_filter((array) ($choice['edit'] ?? []), fn ($v) => $v !== null && $v !== '');
+        $rp = fn (?int $v) => 'Rp'.number_format((int) $v, 0, ',', '.');
         $draft->problems = array_merge($draft->problems, $this->leadProblems($lead));
         $draft->items = $this->items($lead);
-        $draft->itemValue = array_sum(array_map(fn ($i) => $i['price'] * $i['quantity'], $draft->items));
+        $draft->goodsTotal = array_sum(array_map(fn ($i) => $i['price'] * $i['quantity'], $draft->items));
+        $draft->itemValue = $draft->goodsTotal;
         $draft->description = Str::limit(implode(', ', array_map(fn ($i) => $i['name'].' x'.$i['quantity'], $draft->items)), 150, '');
         $draft->weightGrams = $this->weight($lead);
+        $draft->dimensions = $this->dimensions($lead);
+        $draft->note = ((array) $lead->shipping_address_parts)['landmark'] ?? null;
+        $draft->insurance = (bool) $account->setting('insurance', false);
+
+        // What the agent changed in the form, each against what was calculated
+        $use = function (string $key, string $label, mixed $value, ?callable $show = null) use ($draft, $edit) {
+            if (! array_key_exists($key, $edit) || $edit[$key] == $value) {
+                return $value;
+            }
+
+            $draft->edits[$label] = [$show ? $show($value) : $value, $show ? $show($edit[$key]) : $edit[$key]];
+
+            return $edit[$key];
+        };
+        $kg = fn ($g) => rtrim(rtrim(number_format(((int) $g) / 1000, 2, ',', '.'), '0'), ',').' kg';
+        $draft->description = Str::limit(trim((string) $use('description', 'Isi paket', $draft->description)), 150, '');
+        $draft->itemValue = (int) $use('item_value', 'Nilai barang', $draft->itemValue, $rp);
+        $draft->weightGrams = (int) $use('weight_grams', 'Berat', $draft->weightGrams, $kg);
+        $draft->note = $use('note', 'Catatan kurir', $draft->note, fn ($v) => filled($v) ? $v : '-') ?: null;
+        $draft->insurance = (bool) $use('insurance', 'Asuransi', $draft->insurance, fn ($v) => $v ? 'ya' : 'tidak');
+
+        if (isset($edit['length'], $edit['width'], $edit['height'])) {
+            $dims = ['length' => (int) $edit['length'], 'width' => (int) $edit['width'], 'height' => (int) $edit['height']];
+            $show = fn (?array $d) => $d ? $d['length'].'×'.$d['width'].'×'.$d['height'].' cm' : '-';
+
+            if ($dims !== $draft->dimensions) {
+                $draft->edits['Dimensi'] = [$show($draft->dimensions), $show($dims)];
+                $draft->dimensions = $dims;
+            }
+        }
+
+        if ($draft->weightGrams <= 0) {
+            $draft->problems[] = 'Berat paket harus lebih dari 0 kg.';
+        }
         $draft->payment = self::payment($lead, $choice['payment'] ?? null);
         $draft->cod = $draft->payment === 'cod';
         $draft->unpaid = self::unpaid($lead, $draft->payment);
@@ -136,7 +173,7 @@ class Shipments
 
         if ($draft->items === []) {
             $draft->problems[] = 'Produk dan jumlah pesanan belum diisi di lead.';
-        } elseif ($draft->itemValue <= 0) {
+        } elseif ($draft->goodsTotal <= 0 && $draft->itemValue <= 0) {
             $draft->problems[] = 'Nilai barang belum diketahui: isi harga produk di katalog atau di pesanan lead.';
         }
 
@@ -164,9 +201,9 @@ class Shipments
 
             $draft->rates = $provider->rates(new RateRequest(
                 (string) $account->setting('origin_id'), $draft->destination->id, $draft->weightGrams, $draft->itemValue, $draft->cod,
-                (bool) $account->setting('insurance', false), $draft->shipmentType, $this->dimensions($lead),
+                $draft->insurance, $draft->shipmentType, $draft->dimensions,
                 (string) $this->originPostal($account), $draft->destination->postalCode, $this->originSubDistrict($account), $draft->destination->subDistrict ?: null,
-                $draft->cod ? $draft->itemValue + (int) ($lead->shipping_cost ?? 0) : null,
+                $draft->cod ? (int) ($edit['cod_amount'] ?? $draft->goodsTotal + (int) ($edit['charged'] ?? $lead->shipping_cost ?? 0)) : null,
             ));
         } catch (CarrierException $e) {
             $draft->problems[] = $e->getMessage();
@@ -188,14 +225,18 @@ class Shipments
 
         // What the buyer was charged (already after the product's shipping promo), else the courier's price less
         // that promo. Everpro is still paid its own price; the difference is the shop's subsidy.
-        if ($lead->shipping_cost !== null) {
-            $draft->charged = (int) $lead->shipping_cost;
-        } else {
-            [$off, $draft->promo] = ShippingPromos::best($this->shippingItems($lead), $draft->destination->province ?: $lead->shipping_province, $draft->rate->price);
-            $draft->charged = $draft->rate->price - $off;
-        }
+        // The agent may change both (what was agreed in the chat); each change is kept with what was calculated.
+        [$off, $promo] = ShippingPromos::best($this->shippingItems($lead), $draft->destination->province ?: $lead->shipping_province, $draft->rate->price);
+        $draft->promoCharged = $draft->rate->price - $off;
+        $draft->recordedCharged = $lead->shipping_cost !== null ? (int) $lead->shipping_cost : null;
+        $draft->charged = (int) $use('charged', 'Ongkir ditagih', $draft->recordedCharged ?? $draft->promoCharged, $rp);
+        $draft->promo = $draft->charged === $draft->promoCharged ? $promo : null;
+        $draft->calculatedCod = $draft->cod ? $draft->goodsTotal + $draft->charged + $draft->rate->codFee : 0;
+        $draft->codAmount = $draft->cod ? (int) $use('cod_amount', 'Total COD', $draft->calculatedCod, $rp) : 0;
 
-        $draft->codAmount = $draft->cod ? $draft->itemValue + $draft->charged + $draft->rate->codFee : 0;
+        if ($draft->charged < 0 || ($draft->cod && $draft->codAmount <= 0)) {
+            $draft->problems[] = $draft->charged < 0 ? 'Ongkir ditagih tidak boleh minus.' : 'Total COD harus lebih dari Rp0.';
+        }
 
         if ($draft->shipmentType === 'PICKUP') {
             try {
@@ -358,6 +399,7 @@ class Shipments
                 'request' => [
                     'destination' => $draft->destination->toArray(), 'item_value' => $draft->itemValue, 'description' => $draft->description,
                     'pickup_time' => $draft->pickupTimes[0] ?? null, 'shipment_type' => $draft->shipmentType, 'by' => $actor?->getKey(), 'rate' => $draft->rate->meta,
+                    'dimensions' => $draft->dimensions, 'note' => $draft->note, 'insurance' => $draft->insurance, 'edits' => $draft->edits ?: null,
                 ],
             ];
 
@@ -408,11 +450,11 @@ class Shipments
                 [
                     'name' => trim($lead->name), 'phone' => LocalPhone::number($lead->phone), 'address' => trim((string) $lead->shipping_address),
                     'location_id' => (string) data_get($request, 'destination.id'), 'postal_code' => data_get($request, 'destination.postalCode') ?: ($parts['kode_pos'] ?? null),
-                    'sub_district' => data_get($request, 'destination.subDistrict') ?: null, 'note' => $parts['landmark'] ?? null,
+                    'sub_district' => data_get($request, 'destination.subDistrict') ?: null, 'note' => array_key_exists('note', $request) ? $request['note'] : ($parts['landmark'] ?? null),
                 ],
                 (int) $shipment->weight_grams, (string) ($request['description'] ?? ''), (int) ($request['item_value'] ?? 0),
-                $shipment->is_cod, (int) $shipment->cod_amount, (int) $shipment->price, (bool) $account->setting('insurance', false),
-                (string) ($request['shipment_type'] ?? 'PICKUP'), $request['pickup_time'] ?? null, null, (array) ($request['rate'] ?? []),
+                $shipment->is_cod, (int) $shipment->cod_amount, (int) $shipment->price, (bool) ($request['insurance'] ?? $account->setting('insurance', false)),
+                (string) ($request['shipment_type'] ?? 'PICKUP'), $request['pickup_time'] ?? null, $request['dimensions'] ?? null, (array) ($request['rate'] ?? []),
             ));
 
             $shipment->forceFill(array_filter([
