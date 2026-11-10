@@ -98,6 +98,35 @@ class RegionDirectory
     }
 
     /**
+     * Every city and regency in one list, for address dropdowns that start at the city ("mulai dari
+     * kota/kabupaten"): [code, "Kabupaten Bandung (Jawa Barat)", '', other words people type]. The province in the
+     * label keeps twins apart (Kota/Kabupaten Bandung, Kabupaten Bandung Barat); the extra words let "kab bekasi",
+     * "kota band" or "jaksel" find their city. Sorted by name, cached until the next import.
+     *
+     * @return list<array{0: string, 1: string, 2: string, 3: string}>
+     */
+    public static function allCities(): array
+    {
+        return Cache::rememberForever('regions.all-cities.'.self::version(), function () {
+            $provinces = Region::query()->where('level', Region::PROVINCE)->pluck('name', 'code');
+            $aliases = [];
+            foreach (self::CITY_ALIASES as $short => $official) {
+                $aliases[$official][] = $short;
+            }
+
+            return Region::query()->where('level', Region::CITY)->orderBy('name')->get(['code', 'name', 'search'])
+                ->map(function (Region $c) use ($provinces, $aliases) {
+                    $province = self::shippingProvince((string) ($provinces[substr($c->code, 0, 2)] ?? ''));
+                    $type = preg_match('/^kota\b/iu', $c->name) ? 'kota' : 'kab kabupaten';
+
+                    return [$c->code, $c->name.($province !== '' ? ' ('.$province.')' : ''), '',
+                        mb_strtolower(trim($type.' '.implode(' ', $aliases[(string) $c->search] ?? []).' '.self::provinceAliases((string) ($provinces[substr($c->code, 0, 2)] ?? ''))))];
+                })
+                ->all();
+        });
+    }
+
+    /**
      * The names behind picked codes, checked from the top: every code must exist, be of its level and sit under the
      * one above it, and a lower part needs the parts above. Returns the names (and the village's postal code), or an
      * error message.

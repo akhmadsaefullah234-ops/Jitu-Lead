@@ -63,6 +63,15 @@ class LeadForm extends Model
         return FormFields::normalize($this->fields);
     }
 
+    /**
+     * "Formulir dua langkah": name, WhatsApp, colour and quantity first (the lead is kept when the buyer goes on),
+     * then the address. Only for a form with an address after other fields.
+     */
+    public function twoStep(): bool
+    {
+        return ! empty($this->design['two_step']) && FormFields::stepSplit($this->fieldList()) !== null;
+    }
+
     public function design(string $key, mixed $default = null): mixed
     {
         $value = $this->design[$key] ?? null;

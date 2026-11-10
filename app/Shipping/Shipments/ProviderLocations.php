@@ -10,6 +10,7 @@ use App\Shipping\Carriers\CarrierException;
 use App\Shipping\Carriers\CarrierLocation;
 use App\Shipping\Carriers\CarrierProvider;
 use App\Shipping\Carriers\Carriers;
+use App\Shipping\Regions;
 use App\Support\CurrentTenant;
 use Illuminate\Support\Facades\Log;
 
@@ -113,7 +114,32 @@ final class ProviderLocations
             return $lead->provider_location_state;
         }
 
+        // The provider's province is kept with the place (candidates); a different one than ours is noted, never fatal.
+        if (($warning = self::provinceDifference($parts + ['provinsi' => $lead->shipping_province], $place, $provider->key())) !== null) {
+            $note = $note !== null ? $note.'; '.$warning : $warning;
+            Log::warning('Provider location province differs', ['tenant' => $this->current->id(), 'lead' => $lead->getKey(), 'note' => $warning]);
+        }
+
         return $this->keep($lead, $key, $state, $place, $candidates, $note);
+    }
+
+    /**
+     * 'provinsi Everpro "Jawa Tengah" berbeda dari provinsi kita "Jawa Barat"', or null when they agree or one is
+     * unknown. Our province may be derived from the city code (forms that start at the city).
+     */
+    public static function provinceDifference(array $parts, ?CarrierLocation $place, string $provider = 'everpro'): ?string
+    {
+        $ours = trim((string) ($parts['provinsi'] ?? ''));
+        $theirs = trim((string) $place?->province);
+
+        if ($ours === '' || $theirs === '') {
+            return null;
+        }
+
+        $canonical = fn (string $name) => self::norm(Regions::province($name) ?? $name);
+
+        return $canonical($ours) === $canonical($theirs) ? null
+            : 'provinsi '.Carriers::label($provider).' "'.$theirs.'" berbeda dari provinsi kita "'.$ours.'"';
     }
 
     /**

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\LandingPages\PageData;
 use App\LandingPages\WhatsAppRotation;
 use App\LeadForms\FormFields;
+use App\LeadForms\FormQuote;
 use App\LeadForms\FormView;
 use App\LeadForms\SubmitLeadForm;
 use App\Models\LeadForm;
@@ -63,14 +64,22 @@ class LeadFormController extends Controller
 
             // A filled robot trap no longer throws the submission away here: App\LeadForms\SpamGuard (inside
             // SubmitLeadForm) saves it marked as suspected spam, and only rejects, logs and counts a clear robot.
+            // The RT/RW | dusun choice: the box not chosen is emptied, an RT/RW of zeros is none (FormFields::prepare).
+            $request->merge(['f' => FormFields::prepare($fields, (array) $request->input('f', []))]);
+
+            // Step 1 of a two-step form: only the fields before the address; the lead is kept without its address.
+            $stepOne = $request->input('step') === '1' && $form->twoStep();
+            $asked = $stepOne ? FormFields::stepOneFields($fields) : $fields;
+
             try {
                 $data = $request->validate([
-                    ...FormFields::rules($fields),
+                    ...FormFields::rules($asked),
                     'page' => ['nullable', 'integer'],
+                    'ab' => ['nullable', 'in:A,B'],
                     'event_id' => ['nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9_-]+$/'],
                     'source_url' => ['nullable', 'url', 'max:500'],
                     ...array_fill_keys([...SubmitLeadForm::CAMPAIGN_FIELDS, ...SubmitLeadForm::BROWSER_IDS], ['nullable', 'string', 'max:200']),
-                ], [], FormFields::attributes($fields));
+                ], [], FormFields::attributes($asked));
             } catch (ValidationException $e) {
                 if ($request->expectsJson()) {
                     throw $e;
@@ -86,9 +95,30 @@ class LeadFormController extends Controller
                 }
             }
 
+            if ($stepOne) {
+                $submit->stepOne($tenant, $form, $data, $request);
+
+                return response()->json(['ok' => true, 'step' => 2]);
+            }
+
             $result = $submit($tenant, $form, $data, $request);
 
             return $this->respond($request, $result['action']);
+        });
+    }
+
+    /** GET /f/{agency}/{form}/ringkasan: price, shipping and total for the address picked so far (the order summary). */
+    public function quote(Request $request, string $tenant, string $form, CurrentTenant $current): JsonResponse
+    {
+        $tenant = $this->tenant($tenant);
+
+        return $current->run($tenant, function () use ($request, $tenant, $form) {
+            $form = LeadForm::query()->where('slug', $form)->firstOrFail();
+            abort_unless($form->isActive(), 404);
+            $address = array_map(fn ($v) => mb_substr((string) $v, 0, 100), array_filter((array) $request->query('alamat', []), 'is_scalar'));
+            $page = filter_var($request->query('page'), FILTER_VALIDATE_INT) ?: null;
+
+            return response()->json(FormQuote::withText(FormQuote::for($tenant, $form, $address, (int) $request->query('jumlah', 1), $page)));
         });
     }
 

@@ -6,6 +6,7 @@ use App\Enums\Interest;
 use App\Enums\Need;
 use App\Enums\PaymentMethod;
 use App\Enums\StageType;
+use App\LeadForms\FormFields;
 use App\Models\Concerns\BelongsToTenant;
 use App\Shipping\Shipments\ProviderLocations;
 use App\Support\CurrentTenant;
@@ -33,7 +34,7 @@ use LogicException;
     'payment_type', 'payment_type_source', 'payment_proof_at', 'paid_at', 'shipping_province', 'tracking_number', 'shipped_at', 'shipping_address_parts',
     'ad_id', 'ad_title', 'ad_url', 'product_source', 'auto_shipment_at', 'auto_shipment_state', 'auto_shipment_note',
     'provider_location_state', 'provider_location_id', 'provider_location_label', 'provider_location_candidates', 'provider_location_note',
-    'provider_location_key', 'provider_location_at',
+    'provider_location_key', 'provider_location_at', 'lead_form_id', 'landing_page_id', 'ab_variant',
 ])]
 class Lead extends Model
 {
@@ -47,6 +48,8 @@ class Lead extends Model
         'lead_source_id' => LeadSource::class,
         'property_id' => Property::class,
         'lost_reason_id' => LostReason::class,
+        'lead_form_id' => LeadForm::class,
+        'landing_page_id' => LandingPage::class,
     ];
 
     /** Set for a save whose way of paying was read from the chat (kept unconfirmed); any other change confirms it. */
@@ -81,6 +84,15 @@ class Lead extends Model
             }
 
             $lead->paymentFromChat = false;
+
+            // "Alamat belum lengkap" (a form's RT/RW check, a two-step form left at step 1) ends once the address is there.
+            $incomplete = ((array) $lead->custom_fields)[FormFields::INCOMPLETE_KEY] ?? null;
+            if (filled($incomplete) && filled($lead->shipping_address) && ($lead->isDirty('shipping_address') || $lead->isDirty('shipping_address_parts'))
+                && ($incomplete === FormFields::STEP_ONE_MESSAGE || ! FormFields::lacksRtOrDusun(['street' => (string) $lead->shipping_address] + (array) $lead->shipping_address_parts))) {
+                $custom = (array) $lead->custom_fields;
+                unset($custom[FormFields::INCOMPLETE_KEY], $custom['formulir_langkah_1']);
+                $lead->custom_fields = $custom ?: null;
+            }
 
             // The clock for "no response yet" starts whenever someone new is given the lead.
             if ($lead->isDirty('owner_id') && ! $lead->isDirty('assigned_at')) {

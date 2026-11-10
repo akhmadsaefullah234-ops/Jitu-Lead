@@ -116,7 +116,11 @@ class LeadFormResource extends Resource
                     ]),
                     Section::make('Kolom formulir')->collapsible()
                         ->description('Tambah, seret, atau pakai tombol naik/turun untuk mengurutkan. Setiap kolom bisa disimpan ke kolom lead.')
-                        ->schema([FormFields::repeater()->hiddenLabel()]),
+                        ->schema([
+                            FormFields::repeater()->hiddenLabel(),
+                            Toggle::make('design.two_step')->label('Formulir dua langkah')->inline(false)
+                                ->helperText('Langkah 1: kolom sebelum alamat (nama, WhatsApp, warna, jumlah); lead tersimpan saat pembeli menekan Lanjut dan ditandai "alamat belum lengkap" bila berhenti. Langkah 2: alamat dan seterusnya.'),
+                        ]),
                     Section::make('Tombol kirim')->collapsible()->collapsed()->columns(['default' => 1, 'sm' => 2])->schema([
                         TextInput::make('submit.label')->label('Teks tombol')->required()->maxLength(40)->default('Kirim'),
                         Select::make('submit.color')->label('Warna')->options(Buttons::COLORS)->default('brand')->native(false),

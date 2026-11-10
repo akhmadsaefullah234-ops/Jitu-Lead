@@ -16,11 +16,13 @@ Route::middleware('throttle:public-pages')->group(function () {
     Route::get('w/{tenant}', [LeadFormController::class, 'whatsapp'])->name('go.wa');
 });
 
-// Address dropdowns: the regions under a Kemendagri code, one level at a time.
+// Address dropdowns: the regions under a Kemendagri code, one level at a time (or every city at once).
+Route::get('wilayah/semua-kota', [RegionController::class, 'cities'])->middleware('throttle:regions')->name('regions.cities');
 Route::get('wilayah/{code?}', [RegionController::class, 'children'])->where('code', '\d{2}(\.\d{2}){0,2}')
     ->middleware('throttle:regions')->name('regions.children');
 
 Route::post('f/{tenant}/{form}', [LeadFormController::class, 'submit'])->middleware('throttle:form-submit')->name('form.submit');
+Route::get('f/{tenant}/{form}/ringkasan', [LeadFormController::class, 'quote'])->middleware('throttle:regions')->name('form.quote');
 
 // Pricing, read from the same config/plans.php as the Langganan screen and the limit checks.
 Route::get('harga', fn () => view('billing.pricing', [

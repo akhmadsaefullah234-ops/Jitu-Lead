@@ -2,6 +2,7 @@
 
 namespace App\Ai;
 
+use App\LeadForms\FormFields;
 use App\Models\Lead;
 use App\Privacy\PersonalData;
 
@@ -46,6 +47,9 @@ class BuyerFacts
             'Lokasi' => $line($lead?->location),
             'Varian' => $line($lead?->variant),
             'Jumlah' => $lead?->quantity ? (string) $lead->quantity : '',
+            // Marked by the order form ("Tambahkan RT/RW atau dusun", or the address not filled in yet): ask the buyer.
+            'Alamat belum lengkap' => filled($missing = ((array) ($lead?->custom_fields ?? []))[FormFields::INCOMPLETE_KEY] ?? null)
+                ? $line($missing).'. Tanyakan ke pembeli dengan sopan sebelum pesanan diproses.' : '',
             'Pesanan sebelumnya' => $this->hasEarlierOrder()
                 ? 'ada (dikirim'.($lead->shipped_at ? ' '.$lead->shipped_at->format('j M Y') : '').(filled($lead->tracking_number) ? ', resi '.$line($lead->tracking_number) : '').')'
                 : 'tidak ada',
