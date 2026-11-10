@@ -41,6 +41,7 @@ return new class extends Migration
             $table->string('location_id', 64);
             $table->string('location_label', 250);
             $table->string('location_postal', 10)->nullable();
+            $table->json('location')->nullable();
             $table->unsignedInteger('used_count')->default(0);
             $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
             $table->timestamps();

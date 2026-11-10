@@ -42,6 +42,7 @@ use App\Shipping\Carriers\ShipmentStatus;
 use App\Shipping\Shipments\AutoShipments;
 use App\Shipping\Shipments\LabelSheet;
 use App\Shipping\Shipments\LabelStore;
+use App\Shipping\Shipments\ProviderLocations;
 use App\Shipping\Shipments\ResiImport;
 use App\Shipping\Shipments\Shipments;
 use App\Support\CurrentTenant;
@@ -1627,21 +1628,21 @@ class EverproShippingTest extends TestCase
         $this->assertStringContainsString(AddressCheck::PROBLEM, $noRt->auto_shipment_note);
         $this->assertStringContainsString('cara bayar belum dipastikan agen', $chat->auto_shipment_note);
 
-        // The provider does not know the kelurahan under that postal code: not guessed
-        $this->assertSame(AutoShipments::SCHEDULED, $unsure->auto_shipment_state);
-        $this->runAuto();
-        $unsure = $this->inShop(fn () => $unsure->fresh());
+        // The provider does not know the kelurahan under that postal code: matched "perlu dipilih" when the order
+        // was recorded, so resi otomatis does not even wait for it
+        $this->assertSame(ProviderLocations::MULTIPLE, $unsure->provider_location_state);
         $this->assertSame(AutoShipments::SKIPPED, $unsure->auto_shipment_state);
-        $this->assertStringContainsString('Buat resi manual', $unsure->auto_shipment_note);
+        $this->assertStringContainsString('kelurahan tujuan perlu dipilih', $unsure->auto_shipment_note);
+        $this->runAuto();
         $this->assertSame([], $this->callsTo('/shipment/v2/orders'));
 
         // The lead list: "Perlu dilengkapi" and the reason column
         $this->actingInTenant($this->adminOf($this->shop), $this->shop);
         Livewire::test(ListLeads::class)->filterTable('resi', 'incomplete')
-            ->assertCanSeeTableRecords([$unpaid, $noRt, $chat])->assertCanNotSeeTableRecords([$unsure])
+            ->assertCanSeeTableRecords([$unpaid, $noRt, $chat, $unsure])
             ->assertTableColumnStateSet('resi_check', 'Perlu dilengkapi: transfer belum dikonfirmasi lunas', $unpaid);
         Livewire::test(ListLeads::class)->filterTable('resi', 'ready')
-            ->assertCanSeeTableRecords([$unsure])->assertCanNotSeeTableRecords([$unpaid, $noRt, $chat]);
+            ->assertCanNotSeeTableRecords([$unpaid, $noRt, $chat, $unsure]);
     }
 
     public function test_the_daily_limit_and_the_cod_cap_leave_the_rest_to_a_manual_click(): void

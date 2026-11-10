@@ -378,8 +378,18 @@ class Shipments
     public function destination(CarrierProvider $provider, Lead $lead, ?string $chosen = null): array
     {
         $parts = (array) $lead->shipping_address_parts;
+
+        // Matched before (ProviderLocations: "pasti", from the address or an agent's earlier choice): no new search.
+        if (blank($chosen) && ($known = ProviderLocations::place($lead)) !== null) {
+            return [$known, ProviderLocations::candidates($lead) ?: [$known]];
+        }
+
         $area = implode(', ', array_filter([$parts['kelurahan'] ?? null, $parts['kecamatan'] ?? null, $parts['kota'] ?? null], fn ($v) => is_string($v) && trim($v) !== ''));
         $candidates = $provider->locations($parts['kode_pos'] ?? null, $area ?: null);
+
+        if (filled($chosen) && ! collect($candidates)->contains(fn (CarrierLocation $l) => $l->id === (string) $chosen)) {
+            $candidates = [...$candidates, ...ProviderLocations::candidates($lead)];
+        }
 
         if ($candidates === [] && filled($parts['kode_pos'] ?? null) && $area !== '') {
             $candidates = $provider->locations(null, $area);

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Shipments;
 use App\Filament\Pages\Inbox;
 use App\Filament\Resources\Leads\LeadResource;
 use App\Filament\Resources\Shipments\Pages\ListShipments;
+use App\Filament\Support\LocationActions;
 use App\Filament\Support\ShipmentActions;
 use App\Models\CarrierAccount;
 use App\Models\Property;
@@ -12,6 +13,7 @@ use App\Models\Shipment;
 use App\Shipping\Carriers\ShipmentStatus;
 use App\Shipping\Shipments\LabelSheet;
 use App\Shipping\Shipments\LabelStore;
+use App\Shipping\Shipments\ProviderLocations;
 use App\Shipping\Shipments\Shipments;
 use App\Support\CurrentTenant;
 use BackedEnum;
@@ -177,6 +179,10 @@ class ShipmentResource extends Resource
                         default => 'info',
                     })
                     ->description(fn (Shipment $r) => $r->waitingBalance() ? $r->error : (($t = self::statusTime($r)) ? $t->timezone($tz())->format('d M H:i') : null)),
+                TextColumn::make('location')->label('Lokasi '.config('carriers.labels.everpro'))->toggleable()->badge()
+                    ->state(fn (Shipment $r) => ProviderLocations::LABELS[$r->lead?->provider_location_state] ?? null)->placeholder('-')
+                    ->color(fn (?string $state) => $state === ProviderLocations::LABELS[ProviderLocations::EXACT] ? 'success' : 'warning')
+                    ->tooltip(fn (Shipment $r) => $r->lead?->provider_location_note ?: $r->lead?->provider_location_label),
                 TextColumn::make('tracked_at')->label('Terakhir diperbarui')->toggleable()
                     ->state(fn (Shipment $r) => $r->state === Shipment::SHIPPED && filled($r->awb) ? $r->lastUpdatedAt()?->timezone($tz())->format('d M H:i') : null)->placeholder('-')
                     ->color(fn (Shipment $r) => $r->trackingStale() ? 'danger' : null)->weight(fn (Shipment $r) => $r->trackingStale() ? 'bold' : null)
@@ -202,6 +208,9 @@ class ShipmentResource extends Resource
                     ->query(fn (Builder $q, array $data) => filled($data['value'] ?? null) ? $q->whereHas('lead', fn ($l) => $l->where('property_id', (int) $data['value'])) : $q),
             ])
             ->recordActions([
+                LocationActions::choose(fn ($record) => $record?->lead)->label('Pilih lokasi')
+                    ->visible(fn (Shipment $record) => ShipmentActions::available() && in_array($record->state, [Shipment::FAILED, Shipment::PENDING], true)
+                        && in_array($record->lead?->provider_location_state, [ProviderLocations::MULTIPLE, ProviderLocations::NONE], true)),
                 Action::make('print')->label(fn (Shipment $r) => $r->printed_at ? 'Cetak ulang' : 'Cetak')->icon(Heroicon::OutlinedPrinter)->color('gray')
                     ->visible(fn (Shipment $r) => $r->printable())
                     ->action(fn (Shipment $record, $livewire) => self::printNow(collect([$record]), $livewire, false)),

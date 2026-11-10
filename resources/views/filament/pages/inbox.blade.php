@@ -166,11 +166,12 @@
                         @if ($ship = $shippingChips[$lead->id] ?? null)
                             @include('filament.pages.partials.inbox-ship-chip', ['ship' => $ship])
                             @if ($ship['create'])<button type="button" class="wa-ship-btn" wire:click="mountAction('createShipment')">Buat resi</button>@endif
+                            @if (in_array($lead->provider_location_state, ['multiple', 'none'], true))<button type="button" class="wa-ship-btn" wire:click="mountAction('chooseLocation')">Pilih lokasi</button>@endif
                         @endif
                         @if ($lead->auto_shipment_state === \App\Shipping\Shipments\AutoShipments::SCHEDULED)<span class="wa-print">{{ $this->cancelAutoShipmentAction }}</span>@endif
                         <span class="wa-chip-prod">{{ $this->productAction }}</span>
                         <span class="wa-more">
-                            <x-filament-actions::group :actions="[$this->paymentReceivedAction, $this->createShipmentAction, $this->retryShipmentAction, $this->linkShipmentAction, $this->trackShipmentAction, $this->shipmentLabelAction, $this->cancelShipmentAction, $this->trackingAction, $this->shippingQuoteAction, $this->openLeadAction]"
+                            <x-filament-actions::group :actions="[$this->paymentReceivedAction, $this->createShipmentAction, $this->chooseLocationAction, $this->retryShipmentAction, $this->linkShipmentAction, $this->trackShipmentAction, $this->shipmentLabelAction, $this->cancelShipmentAction, $this->trackingAction, $this->shippingQuoteAction, $this->openLeadAction]"
                                 icon="heroicon-m-ellipsis-horizontal" label="Aksi lain" tooltip="Aksi lain" color="gray" :icon-button="true" dropdown-placement="bottom-end" />
                         </span>
                     </div>

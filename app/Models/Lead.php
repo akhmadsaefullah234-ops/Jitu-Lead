@@ -7,6 +7,7 @@ use App\Enums\Need;
 use App\Enums\PaymentMethod;
 use App\Enums\StageType;
 use App\Models\Concerns\BelongsToTenant;
+use App\Shipping\Shipments\ProviderLocations;
 use App\Support\CurrentTenant;
 use App\Support\PhoneNumber;
 use App\Tracking\PipelineConversions;
@@ -89,6 +90,12 @@ class Lead extends Model
 
         // A stage the agency mapped to an ad conversion, or becoming Hot, is reported to Meta/TikTok.
         static::saved(fn (Lead $lead) => PipelineConversions::saved($lead));
+        // An address with a postal code or kelurahan is matched once to the shipping provider's place (queued).
+        static::saved(function (Lead $lead) {
+            if ($lead->wasChanged('shipping_address_parts') || ($lead->wasRecentlyCreated && filled($lead->shipping_address_parts))) {
+                ProviderLocations::queue($lead);
+            }
+        });
         // The same moments put WhatsApp Business labels on the chat (trial, off by default).
         static::saved(fn (Lead $lead) => BusinessLabels::saved($lead));
     }

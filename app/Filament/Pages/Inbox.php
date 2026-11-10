@@ -14,6 +14,7 @@ use App\Enums\MessageStatus;
 use App\Filament\Concerns\NotifiesShipmentFormErrors;
 use App\Filament\Resources\Leads\LeadResource;
 use App\Filament\Resources\MediaAssets\MediaAssetResource;
+use App\Filament\Support\LocationActions;
 use App\Filament\Support\ShipmentActions;
 use App\Media\Library;
 use App\Models\AiDraft;
@@ -21,11 +22,9 @@ use App\Models\Lead;
 use App\Models\MediaAsset;
 use App\Models\MediaFolder;
 use App\Models\Property;
-use App\Models\Shipment;
 use App\Models\WaConversation;
 use App\Models\WaTemplate;
 use App\Regions\RegionDirectory;
-use App\Shipping\Carriers\ShipmentStatus;
 use App\Shipping\CourierChoice;
 use App\Shipping\Regions;
 use App\Shipping\Shipments\InboxShipping;
@@ -452,6 +451,11 @@ class Inbox extends Page
     public function createShipmentAction(): Action
     {
         return ShipmentActions::create(fn () => $this->current()?->lead)->size('sm');
+    }
+
+    public function chooseLocationAction(): Action
+    {
+        return LocationActions::choose(fn () => $this->current()?->lead)->size('sm');
     }
 
     public function linkShipmentAction(): Action
