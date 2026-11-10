@@ -103,7 +103,7 @@ final class PackingState
             return [];
         }
 
-        $parcels = Shipment::query()->whereIn('lead_id', $leads->modelKeys())->where('state', '!=', Shipment::CANCELLED)
+        $parcels = Shipment::query()->whereIn('lead_id', $leads->map(fn ($l) => $l->getKey())->all())->where('state', '!=', Shipment::CANCELLED)
             ->orderByDesc('id')->get()->unique('lead_id')->keyBy('lead_id');
 
         return $leads->mapWithKeys(fn (Lead $lead) => [$lead->getKey() => self::of($lead, $parcels->get($lead->getKey()))])->all();

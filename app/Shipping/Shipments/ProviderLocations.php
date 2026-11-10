@@ -9,4 +9,9 @@ final class ProviderLocations
     public const MULTIPLE = 'multiple';
 
     public const NONE = 'none';
+
+    public static function chip(\App\Models\Lead $lead): ?string
+    {
+        return null;
+    }
 }

@@ -1572,7 +1572,7 @@ class EverproShippingTest extends TestCase
         Storage::disk('local')->assertExists($shipment->label_path);
         $this->assertStringStartsWith(LabelStore::DIR.'/'.$this->shop->id.'/', $shipment->label_path);
         $this->assertSame([$shipment->id], $this->inShop(fn () => Shipment::query()->tab('unprinted')->pluck('id')->all()));
-        Livewire::test(Inbox::class, ['leadId' => $lead->id])->assertSee('Belum dicetak')->assertDontSee('Resi otomatis dalam');
+        Livewire::test(Inbox::class, ['leadId' => $lead->id])->assertSee('Order OK · siap cetak')->assertDontSee('Resi otomatis dalam');
     }
 
     public function test_cancelled_during_the_wait_no_resi_is_made(): void
