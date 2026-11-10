@@ -53,6 +53,10 @@ class FormView
         return [
             'form' => $form,
             'fields' => $form->fieldList(),
+            'twoStep' => $form->twoStep(),
+            'quoteUrl' => FormQuote::available($tenant, $form, $pageId) ? route('form.quote', [$tenant->slug, $form->slug]) : null,
+            // Set by the landing page when it was served through its A/B test address (App\LandingPages\AbTest).
+            'abVariant' => in_array($v = request()->attributes->get('ab_variant'), ['A', 'B'], true) ? $v : null,
             'endpoint' => $form->submitUrl(),
             'pageId' => $pageId,
             'formId' => $formId,

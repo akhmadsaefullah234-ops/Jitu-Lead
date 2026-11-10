@@ -3,6 +3,7 @@
 namespace App\Shipping\Shipments;
 
 use App\Automation\RetailStages;
+use App\LeadForms\FormFields;
 use App\Leads\AddressCheck;
 use App\Models\CarrierAccount;
 use App\Models\Lead;
@@ -241,6 +242,11 @@ class AutoShipments
             $problems[] = AddressCheck::PROBLEM;
         }
 
+        // A form's "Tambahkan RT/RW atau dusun" (or a two-step form left at step 1): the AI asks the buyer first.
+        if (filled($incomplete = ((array) $lead->custom_fields)[FormFields::INCOMPLETE_KEY] ?? null)) {
+            $problems[] = 'alamat belum lengkap ('.mb_strtolower((string) $incomplete).')';
+        }
+
         foreach (['kelurahan' => 'kelurahan', 'kecamatan' => 'kecamatan', 'kota' => 'kota', 'provinsi' => 'provinsi', 'kode_pos' => 'kode pos'] as $key => $label) {
             if (blank($parts[$key] ?? null)) {
                 $problems[] = 'alamat belum ada '.$label;
@@ -327,6 +333,7 @@ class AutoShipments
             $part('kelurahan'), $part('kecamatan'), $part('kota'), $part('provinsi'), $part('kode_pos'),
             '(leads.property_id is not null or leads.order_items is not null)',
             "(leads.custom_fields->'spam') is null",
+            "(leads.custom_fields->'".FormFields::INCOMPLETE_KEY."') is null",
             // The provider's place: "pasti", or not matched yet (ProviderLocations).
             "coalesce(leads.provider_location_state, 'exact') = 'exact'",
         ]).')';

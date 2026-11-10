@@ -6,6 +6,7 @@ use App\Actions\RegisterLead;
 use App\Automation\StageAutomation;
 use App\Catalog\ProductMatcher;
 use App\Jobs\SendConversionEvents;
+use App\LandingPages\AbTest;
 use App\LandingPages\Buttons;
 use App\LandingPages\PageData;
 use App\LandingPages\WhatsAppRotation;
@@ -59,9 +60,19 @@ class SubmitLeadForm
         $source = $page ? 'Landing: '.$page->title : ($form->is_primary ? 'Formulir web' : 'Formulir: '.$form->name);
         $campaign = array_filter(array_intersect_key($data, array_flip(self::CAMPAIGN_FIELDS)));
 
+        $variant = AbTest::variantOf($page, $data['ab'] ?? null);
+
+        if ($variant !== null) {
+            $campaign['ab_variant'] = $variant;
+        }
+
         [$lead, $created] = ($this->register)($result['lead'] + ['name' => 'Tanpa nama'], $source, 'form', null, $campaign, $page?->property_id);
 
-        $this->applyAnswers($lead, $created, $form, $result, $tenant);
+        // The buyer finishing a two-step form: step 1 already made the lead; it is handled as new from here on.
+        $resumed = ! $created && (int) ($lead->custom_fields['formulir_langkah_1'] ?? 0) === (int) $form->getKey();
+        $created = $created || $resumed;
+
+        $this->applyAnswers($lead, $created, $form, $result, $tenant, $page, $variant);
 
         if ($spam['verdict'] === SpamGuard::SUSPECT) {
             SpamGuard::mark($lead, $created, $spam['reasons'], $request->userAgent());
@@ -112,8 +123,78 @@ class SubmitLeadForm
         return ['lead' => $lead, 'created' => $created, 'action' => $this->after($tenant, $form, $lead, $result['vars'], $page)];
     }
 
+    /**
+     * Step 1 of a two-step form (name, WhatsApp, colour, quantity): the lead is kept, marked "alamat belum lengkap",
+     * so a buyer who stops there can still be followed up. No welcome, alert or conversion yet: those come with
+     * step 2, which finds this lead again by its number.
+     *
+     * @param  array<string, mixed>  $data  validated input of the step-1 fields
+     */
+    public function stepOne(Tenant $tenant, LeadForm $form, array $data, Request $request): ?Lead
+    {
+        $fields = FormFields::stepOneFields($form->fieldList());
+        $result = FormFields::answers($fields, (array) ($data['f'] ?? []));
+        $spam = SpamGuard::check($request, $result['lead']['phone'] ?? null);
+
+        if ($spam['verdict'] === SpamGuard::REJECT || blank($result['lead']['phone'] ?? $result['lead']['email'] ?? null)) {
+            return null;
+        }
+
+        $page = filled($data['page'] ?? null) ? LandingPage::query()->find($data['page']) : null;
+        $source = $page ? 'Landing: '.$page->title : ($form->is_primary ? 'Formulir web' : 'Formulir: '.$form->name);
+        $campaign = array_filter(array_intersect_key($data, array_flip(self::CAMPAIGN_FIELDS)));
+        $variant = AbTest::variantOf($page, $data['ab'] ?? null);
+
+        if ($variant !== null) {
+            $campaign['ab_variant'] = $variant;
+        }
+
+        [$lead, $created] = ($this->register)($result['lead'] + ['name' => 'Tanpa nama'], $source, 'form', null, $campaign, $page?->property_id);
+
+        if (! $created && filled($lead->shipping_address)) {
+            // A buyer we already know with an address: nothing to mark.
+            return $lead;
+        }
+
+        foreach (['name', 'variant', 'quantity'] as $column) {
+            if (isset($result['lead'][$column]) && ($created || blank($lead->{$column}))) {
+                $lead->{$column} = $result['lead'][$column];
+            }
+        }
+
+        $custom = (array) $lead->custom_fields;
+        $custom['formulir_langkah_1'] = $form->getKey();
+        $custom[FormFields::INCOMPLETE_KEY] = FormFields::STEP_ONE_MESSAGE;
+        $lead->custom_fields = $custom;
+        $this->source($lead, $form, $page, $variant);
+        $lead->save();
+
+        if ($spam['verdict'] === SpamGuard::SUSPECT) {
+            SpamGuard::mark($lead, $created, $spam['reasons'], $request->userAgent());
+        }
+
+        $lead->activities()->create([
+            'type' => 'note',
+            'body' => "Formulir {$form->name}, langkah 1:
+".collect($result['answers'])->map(fn ($a) => "- {$a['label']}: {$a['value']}")->implode('
+').'
+Alamat belum diisi.',
+            'meta' => ['formulir' => $form->getKey(), 'langkah' => 1],
+        ]);
+
+        return $lead;
+    }
+
+    /** Which form and page (and A/B variant) a new lead came from, for the report per page. */
+    private function source(Lead $lead, LeadForm $form, ?LandingPage $page, ?string $variant): void
+    {
+        $lead->lead_form_id ??= $form->getKey();
+        $lead->landing_page_id ??= $page?->getKey();
+        $lead->ab_variant ??= $variant;
+    }
+
     /** Lead columns, extra fields, the answers as a note, and stored photos. A returning lead keeps what it had. */
-    private function applyAnswers(Lead $lead, bool $created, LeadForm $form, array $result, Tenant $tenant): void
+    private function applyAnswers(Lead $lead, bool $created, LeadForm $form, array $result, Tenant $tenant, ?LandingPage $page = null, ?string $variant = null): void
     {
         foreach (['variant', 'quantity', 'shipping_address', 'shipping_province', 'shipping_address_parts', 'payment_type'] as $column) {
             if (isset($result['lead'][$column]) && ($created || blank($lead->{$column}))) {
@@ -121,7 +202,21 @@ class SubmitLeadForm
             }
         }
 
+        if ($created) {
+            $this->source($lead, $form, $page, $variant);
+        }
+
         $custom = (array) $lead->custom_fields;
+
+        // "Alamat belum lengkap": what the address still lacks (the AI asks the buyer), or cleared by a full address.
+        if (isset($result['lead']['shipping_address']) && ($created || blank($lead->getOriginal('shipping_address')))) {
+            unset($custom['formulir_langkah_1']);
+            if ($result['incomplete'] !== []) {
+                $custom[FormFields::INCOMPLETE_KEY] = implode('; ', $result['incomplete']);
+            } else {
+                unset($custom[FormFields::INCOMPLETE_KEY]);
+            }
+        }
 
         if ($result['custom'] !== []) {
             $custom['formulir'] = array_replace((array) ($custom['formulir'] ?? []), $result['custom']);
@@ -140,6 +235,7 @@ class SubmitLeadForm
             $lead->activities()->create([
                 'type' => 'note',
                 'body' => "Jawaban formulir {$form->name}:\n".collect($result['answers'])->map(fn ($a) => "- {$a['label']}: {$a['value']}")->implode("\n")
+                    .($result['incomplete'] !== [] ? "\nAlamat belum lengkap: ".implode('; ', $result['incomplete']).'.' : '')
                     .(isset($result['lead']['shipping_address']) && blank($lead->payment_type) ? "\nCara bayar belum ditanyakan." : ''),
                 'meta' => ['formulir' => $form->getKey()],
             ]);

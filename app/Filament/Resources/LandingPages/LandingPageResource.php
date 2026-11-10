@@ -7,6 +7,7 @@ use App\Billing\PlanLimits;
 use App\Filament\Resources\LandingPages\Pages\CreateLandingPage;
 use App\Filament\Resources\LandingPages\Pages\EditLandingPage;
 use App\Filament\Resources\LandingPages\Pages\ListLandingPages;
+use App\LandingPages\AbTest;
 use App\LandingPages\BlockStyle;
 use App\LandingPages\Navigation;
 use App\LandingPages\PageLayout;
@@ -29,6 +30,7 @@ use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Grid;
@@ -121,6 +123,22 @@ class LandingPageResource extends Resource
                             Select::make('property_id')->label(Industry::t('catalog_item').' yang dipromosikan')->placeholder('Tidak dipilih')
                                 ->options(fn () => Property::query()->orderBy('name')->pluck('name', 'id'))->searchable()
                                 ->helperText('Lead dari halaman ini otomatis tercatat tertarik pada '.Industry::t('catalog_item').' ini.'),
+                        ]),
+                    ]),
+                    Tab::make('Uji A/B')->icon(Heroicon::OutlinedArrowsRightLeft)->schema([
+                        Section::make('Uji A/B halaman ini')->columns(['default' => 1, 'sm' => 2])->statePath('ab_test')
+                            ->description('Halaman ini (A) dan halaman B tampil 50:50 di satu alamat: /p/agensi/halaman-ini?v=auto. Halaman B boleh tetap draf. Varian tercatat di lead (A/B) dan di samping UTM.')
+                            ->schema([
+                                Toggle::make('enabled')->label('Aktifkan uji A/B')->inline(false)->columnSpanFull(),
+                                Select::make('partner_id')->label('Halaman B')->native(false)->searchable()->columnSpanFull()
+                                    ->options(fn (?LandingPage $record) => LandingPage::query()->when($record, fn ($q) => $q->whereKeyNot($record->getKey()))->orderBy('title')->pluck('title', 'id'))
+                                    ->required(fn (Get $get) => (bool) $get('enabled')),
+                                TextInput::make('spend_a')->label('Belanja iklan A (Rp)')->numeric()->minValue(0)->helperText('Isi manual dari Meta Ads untuk biaya per closing.'),
+                                TextInput::make('spend_b')->label('Belanja iklan B (Rp)')->numeric()->minValue(0),
+                            ]),
+                        View::make('filament.ab-test-report')->viewData(fn (?LandingPage $record) => [
+                            'rows' => $record && ! empty($record->ab_test['partner_id']) ? AbTest::report($record) : [],
+                            'url' => $record ? $record->publicUrl().'?v=auto' : null,
                         ]),
                     ]),
                     Tab::make('Pesan sambutan')->icon(Heroicon::OutlinedChatBubbleLeftRight)->schema([
@@ -240,7 +258,7 @@ class LandingPageResource extends Resource
             $slug = $base.'-'.$i;
         }
 
-        $copy = $page->replicate(['views', 'published_at']);
+        $copy = $page->replicate(['views', 'published_at', 'ab_test', 'ab_views']);
         $copy->forceFill(['title' => Str::limit($page->title, 100, '').' (salinan)', 'slug' => $slug, 'status' => 'draft', 'views' => 0, 'published_at' => null])->save();
 
         return $copy;

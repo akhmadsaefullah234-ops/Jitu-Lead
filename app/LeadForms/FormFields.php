@@ -110,6 +110,37 @@ class FormFields
 
     public const ADDRESS_MODES = ['free' => 'Ketik bebas', 'region' => 'Dropdown wilayah (provinsi > kota > kecamatan > kelurahan)'];
 
+    /**
+     * Extra choices of an address field (stored as address_options). The first two only work with region dropdowns:
+     * - hide_postal: the postal code is not asked; the server takes the picked kelurahan's. It is shown as a fallback
+     *   when the kelurahan has no postal code or was not picked from the list.
+     * - city_first: the dropdowns start at the city/regency (one list of all of them, labelled with the province);
+     *   the province is derived from the city's code (12.71 => 12).
+     * - rt_choice: "Alamat saya memakai: RT/RW | Dusun/kampung" shows the RT/RW or the dusun box, not both.
+     * - soft_rt_check: the street box (one box for "jalan, RT/RW dan/atau dusun, nomor rumah/patokan") should name an
+     *   RT/RW or a dusun; without one the lead is marked "alamat belum lengkap" and the AI asks, nothing is refused.
+     */
+    public const ADDRESS_OPTIONS = [
+        'hide_postal' => 'Sembunyikan kode pos (otomatis dari kelurahan)',
+        'city_first' => 'Mulai dari kota/kabupaten (provinsi otomatis)',
+        'rt_choice' => 'Pilihan "Alamat saya memakai: RT/RW | Dusun/kampung"',
+        'soft_rt_check' => 'Periksa RT/RW atau dusun di kolom jalan (tidak menolak kiriman)',
+    ];
+
+    /** Shown (and kept on the lead) when the street box of a soft_rt_check address names no RT/RW or dusun. */
+    public const SOFT_RT_MESSAGE = 'Tambahkan RT/RW atau dusun';
+
+    public const SOFT_RT_HINT = 'Contoh: Jl. Mawar No. 10, RT 01/RW 02';
+
+    /** Kept on a lead (custom_fields) whose address still needs something; the AI asks the buyer for it. */
+    public const INCOMPLETE_KEY = 'alamat_belum_lengkap';
+
+    /** A lead saved at step 1 of a two-step form, before the address. */
+    public const STEP_ONE_MESSAGE = 'Alamat belum diisi (pembeli berhenti di langkah 1 formulir)';
+
+    /** The answer of the rt_choice question. */
+    public const RT_KINDS = ['rt' => 'RT/RW', 'dusun' => 'Dusun/kampung'];
+
     private const REGION_CODE = ['provinsi' => '/^\d{2}$/', 'kota' => '/^\d{2}\.\d{2}$/', 'kecamatan' => '/^\d{2}\.\d{2}\.\d{2}$/', 'kelurahan' => '/^\d{2}\.\d{2}\.\d{2}\.\d{4}$/'];
 
     /** What the old editor filled in as required sub-fields; new fields start with it too. */
@@ -135,6 +166,11 @@ class FormFields
             $chain = self::regionChain($field);
             $deepest = max(array_map(fn ($p) => (int) array_search($p, $chain, true), array_intersect($required, $chain)) ?: [-1]);
             $required = array_values(array_intersect($parts, array_unique([...$required, ...array_slice($chain, 0, $deepest + 1)])));
+        }
+
+        // A hidden postal code comes from the kelurahan; its fallback box is only required when that has none.
+        if (self::postalHidden($field)) {
+            $required = array_values(array_diff($required, ['kode_pos']));
         }
 
         return $required;
@@ -179,13 +215,21 @@ class FormFields
         return $parts;
     }
 
-    /** With dropdowns: the region levels shown, from the province down to the first level that is hidden. */
+    /**
+     * With dropdowns: the region levels shown, from the province (or, with city_first, the city) down to the first
+     * level that is hidden.
+     */
     public static function regionChain(array $field): array
     {
         $parts = (array) ($field['parts'] ?? self::LEGACY_PARTS);
         $chain = [];
+        $levels = array_keys(RegionDirectory::CHAIN);
 
-        foreach (array_keys(RegionDirectory::CHAIN) as $level) {
+        if (self::addressOption($field, 'city_first')) {
+            $levels = array_slice($levels, 1);
+        }
+
+        foreach ($levels as $level) {
             if (! in_array($level, $parts, true)) {
                 break;
             }
@@ -193,6 +237,75 @@ class FormFields
         }
 
         return $chain;
+    }
+
+    public static function addressOption(array $field, string $option): bool
+    {
+        return ($field['type'] ?? null) === 'address' && in_array($option, (array) ($field['address_options'] ?? []), true);
+    }
+
+    /** Dropdowns that start at the city/regency; the province comes from the city's code. */
+    public static function cityFirst(array $field): bool
+    {
+        return self::regionMode($field) && self::addressOption($field, 'city_first') && in_array('kota', self::regionChain($field), true);
+    }
+
+    /** The postal code is taken from the picked kelurahan and only shown as a fallback. */
+    public static function postalHidden(array $field): bool
+    {
+        return self::regionMode($field) && self::addressOption($field, 'hide_postal') && in_array('kelurahan', self::regionChain($field), true)
+            && in_array('kode_pos', (array) ($field['parts'] ?? self::LEGACY_PARTS), true);
+    }
+
+    /** "Alamat saya memakai: RT/RW | Dusun/kampung": both boxes shown, one asked at a time. */
+    public static function rtChoice(array $field): bool
+    {
+        $parts = self::addressParts($field);
+
+        return self::addressOption($field, 'rt_choice') && in_array('rt_rw', $parts, true) && in_array('dusun', $parts, true);
+    }
+
+    /** The street box checked for an RT/RW or dusun (soft_rt_check), when shown. */
+    public static function softRtCheck(array $field): bool
+    {
+        return self::addressOption($field, 'soft_rt_check') && in_array('street', self::addressParts($field), true);
+    }
+
+    /**
+     * The sub-fields an answer holds: the ones shown, plus with dropdowns the province of a city_first address and
+     * the postal code of a kelurahan (filled in by the server even when the box is hidden).
+     */
+    public static function storedParts(array $field): array
+    {
+        $parts = self::addressParts($field);
+
+        if (self::regionMode($field)) {
+            if (self::cityFirst($field) && ! in_array('provinsi', $parts, true)) {
+                $parts[] = 'provinsi';
+            }
+            if (in_array('kelurahan', self::regionChain($field), true) && ! in_array('kode_pos', $parts, true)) {
+                $parts[] = 'kode_pos';
+            }
+        }
+
+        return $parts;
+    }
+
+    /**
+     * The region codes of an answer for RegionDirectory::resolve(): the levels shown, and with city_first the
+     * province taken from the city's code ("32.16" => "32").
+     *
+     * @return array<string, mixed>
+     */
+    public static function regionCodes(array $field, array $value): array
+    {
+        $codes = array_intersect_key($value, array_flip(self::regionChain($field)));
+
+        if (self::cityFirst($field) && is_string($codes['kota'] ?? null) && preg_match(self::REGION_CODE['kota'], trim($codes['kota']))) {
+            $codes = ['provinsi' => substr(trim($codes['kota']), 0, 2)] + $codes;
+        }
+
+        return $codes;
     }
 
     /** The label of a sub-field: the owner's, else the default ("Patokan" once "Nomor rumah" has its own box). */
@@ -355,6 +468,9 @@ class FormFields
                                     ->visible(fn (Get $get) => (bool) $get('show')),
                             ]),
                         ]),
+                    CheckboxList::make('address_options')->label('Pilihan alamat')->columnSpanFull()->visible($has(['address']))
+                        ->options(self::ADDRESS_OPTIONS)
+                        ->helperText('Kode pos tersembunyi dan "mulai dari kota/kabupaten" hanya berlaku untuk dropdown wilayah. Kode pos tetap tampil sebagai cadangan bila kelurahan tidak punya kode pos. Pemeriksaan RT/RW di kolom jalan tidak menolak kiriman: lead ditandai "alamat belum lengkap" dan AI menanyakannya.'),
                     CheckboxList::make('rules')->label('Aturan "salah satu wajib" (bila alamat wajib diisi)')->columnSpanFull()->visible($has(['address']))
                         ->options(array_map(fn ($r) => $r[1], self::ADDRESS_RULES))
                         ->helperText('Untuk alamat dusun tanpa RT/RW, pilih "bila RT/RW kosong atau 0/000": alamat dengan RT/RW tetap boleh tanpa nomor rumah/patokan.'),
@@ -506,6 +622,13 @@ class FormFields
         }
 
         $parts = $parts ?: self::LEGACY_PARTS;
+        $options = array_values(array_intersect(array_keys(self::ADDRESS_OPTIONS), (array) ($f['address_options'] ?? [])));
+
+        // A hidden postal code still has its box: the fallback shown when the kelurahan has none.
+        if (in_array('hide_postal', $options, true) && ! in_array('kode_pos', $parts, true)) {
+            $parts[] = 'kode_pos';
+        }
+
         $clean = fn (array $texts) => array_filter(array_map(fn ($t) => mb_substr(trim((string) $t), 0, 80), array_intersect_key($texts, array_flip($parts))), 'strlen') ?: null;
 
         return [
@@ -514,6 +637,7 @@ class FormFields
             'part_labels' => $clean($labels),
             'part_placeholders' => $clean($placeholders),
             'rules' => array_values(array_intersect(array_keys(self::ADDRESS_RULES), (array) ($f['rules'] ?? []))) ?: null,
+            'address_options' => $options ?: null,
         ];
     }
 
@@ -546,9 +670,13 @@ class FormFields
                 continue;
             }
             $settings = self::addressSettings($f);
-            $shown = array_values(array_intersect(array_keys(RegionDirectory::CHAIN), $settings['parts']));
-            if ($shown !== array_slice(array_keys(RegionDirectory::CHAIN), 0, count($shown))) {
-                $problems[] = 'Alamat "'.($f['label'] ?? 'Alamat').'": tingkat wilayah tidak boleh melompat. Tampilkan dari provinsi ke bawah tanpa celah (mis. kecamatan perlu kota/kabupaten).';
+            $levels = array_keys(RegionDirectory::CHAIN);
+            $cityFirst = in_array('city_first', (array) $settings['address_options'], true);
+            // With "mulai dari kota/kabupaten" the province is not shown: it comes from the city.
+            $levels = $cityFirst ? array_slice($levels, 1) : $levels;
+            $shown = array_values(array_intersect($levels, $settings['parts']));
+            if ($shown !== array_slice($levels, 0, count($shown))) {
+                $problems[] = 'Alamat "'.($f['label'] ?? 'Alamat').'": tingkat wilayah tidak boleh melompat. Tampilkan dari '.($cityFirst ? 'kota/kabupaten' : 'provinsi').' ke bawah tanpa celah (mis. kecamatan perlu kota/kabupaten).';
             }
         }
 
@@ -582,8 +710,34 @@ class FormFields
                     $rules[$name] = [$req, 'array'];
                     if ($region) {
                         $rules[$name][] = function (string $attribute, mixed $value, Closure $fail) use ($f) {
-                            if (is_array($value) && is_string($problem = RegionDirectory::resolve(array_intersect_key($value, array_flip(self::regionChain($f)))))) {
-                                $fail($problem);
+                            if (! is_array($value)) {
+                                return;
+                            }
+                            $names = RegionDirectory::resolve(self::regionCodes($f, $value));
+                            if (is_string($names)) {
+                                // With city_first the province is ours, taken from the city: a bad one means a bad city.
+                                $fail(self::cityFirst($f) && str_contains($names, 'provinsi') ? 'Pilihan kota/kabupaten tidak dikenal. Pilih dari daftar.' : $names);
+
+                                return;
+                            }
+                            // A hidden postal code comes from the kelurahan; without one the fallback box must be filled.
+                            $typed = is_scalar($value['kode_pos'] ?? null) ? trim((string) $value['kode_pos']) : '';
+                            $any = array_filter($value, fn ($v) => is_scalar($v) && trim((string) $v) !== '');
+                            if (self::postalHidden($f) && ! isset($names['postal']) && $typed === '' && (! empty($f['required']) || $any !== [])) {
+                                $fail('Isi kode pos (5 angka): kelurahan/desa yang dipilih belum punya kode pos.');
+                            }
+                        };
+                    }
+                    if (self::rtChoice($f)) {
+                        $rules[$name.'.rt_kind'] = ['nullable', 'in:'.implode(',', array_keys(self::RT_KINDS))];
+                        $rules[$name][] = function (string $attribute, mixed $value, Closure $fail) use ($f) {
+                            // Dusun/kampung: the courier needs a house number or a landmark (as "landmark_if_no_rt").
+                            if (! is_array($value) || ($value['rt_kind'] ?? null) !== 'dusun' || isset(self::addressRules($f)['landmark_if_no_rt'])) {
+                                return;
+                            }
+                            $pair = array_intersect(['house', 'landmark'], self::addressParts($f));
+                            if ($pair !== [] && ! array_filter($pair, fn ($p) => is_scalar($value[$p] ?? null) && trim((string) $value[$p]) !== '')) {
+                                $fail(AddressCheck::MESSAGE);
                             }
                         };
                     }
@@ -603,8 +757,13 @@ class FormFields
                         $rules[$name][0] = 'required';
                     }
                     $mustFill = self::requiredParts($f);
+                    $choice = self::rtChoice($f);
                     foreach (self::addressParts($f) as $part) {
                         $partReq = $req === 'required' && in_array($part, $mustFill, true) ? 'required' : 'nullable';
+                        // With the RT/RW | dusun choice only the chosen box is asked (prepare() empties the other).
+                        if ($choice && $partReq === 'required' && in_array($part, ['rt_rw', 'dusun'], true)) {
+                            $partReq = 'required_if:'.$name.'.rt_kind,'.($part === 'rt_rw' ? 'rt' : 'dusun');
+                        }
                         $rules[$name.'.'.$part] = match (true) {
                             $region && isset(self::REGION_CODE[$part]) => [$partReq, 'string', 'regex:'.self::REGION_CODE[$part]],
                             $part === 'kode_pos' => [$partReq, 'regex:/^\d{5}$/'],
@@ -632,7 +791,8 @@ class FormFields
                             }
                         }],
                         'email' => ['email:rfc', 'max:160'],
-                        'number' => ['numeric', 'min:0', 'max:1000000000'],
+                        // A quantity is a whole number of at least 1.
+                        'number' => ($f['maps_to'] ?? null) === 'quantity' ? ['integer', 'min:1', 'max:100000'] : ['numeric', 'min:0', 'max:1000000000'],
                         'select', 'radio' => ['string', 'in:'.self::inList($options)],
                         'date' => ['date_format:Y-m-d'],
                         'hidden' => ['string', 'max:300'],
@@ -642,6 +802,67 @@ class FormFields
         }
 
         return $rules;
+    }
+
+    /**
+     * The visitor's f[...] input made ready for validation: with the RT/RW | dusun choice, the box not chosen is
+     * emptied, and an RT/RW of only zeros ("0", "00", "000/000") counts as none.
+     *
+     * @param  list<array<string, mixed>>  $fields
+     */
+    public static function prepare(array $fields, array $input): array
+    {
+        foreach ($fields as $f) {
+            if ($f['type'] !== 'address' || ! self::rtChoice($f) || ! is_array($input[$f['key']] ?? null)) {
+                continue;
+            }
+
+            $value = $input[$f['key']];
+            $kind = ($value['rt_kind'] ?? null) === 'dusun' ? 'dusun' : 'rt';
+            $value['rt_kind'] = $kind;
+
+            if ($kind === 'dusun' || ! AddressCheck::hasRtRw($value['rt_rw'] ?? null)) {
+                $value['rt_rw'] = '';
+            }
+            if ($kind === 'rt') {
+                $value['dusun'] = '';
+            }
+
+            $input[$f['key']] = $value;
+        }
+
+        return $input;
+    }
+
+    /**
+     * Where a two-step form splits: the position of the first address field, when something the buyer fills in
+     * comes before it. Step 1 is everything before it (and the hidden ad-source fields), step 2 the rest.
+     *
+     * @param  list<array<string, mixed>>  $fields
+     */
+    public static function stepSplit(array $fields): ?int
+    {
+        foreach (array_values($fields) as $i => $f) {
+            if ($f['type'] === 'address') {
+                $before = array_filter(array_slice($fields, 0, $i), fn ($b) => $b['type'] !== 'hidden');
+
+                return $before !== [] ? $i : null;
+            }
+        }
+
+        return null;
+    }
+
+    /** @return list<array<string, mixed>> the fields of step 1 (with every hidden field) */
+    public static function stepOneFields(array $fields): array
+    {
+        $split = self::stepSplit($fields);
+
+        if ($split === null) {
+            return $fields;
+        }
+
+        return array_values(array_filter($fields, fn ($f, $i) => $i < $split || $f['type'] === 'hidden', ARRAY_FILTER_USE_BOTH));
     }
 
     /** @return array<string, string> readable names for error messages */
@@ -682,6 +903,7 @@ class FormFields
         $vars = [];
         $photos = [];
         $variants = [];
+        $incomplete = [];
 
         foreach ($fields as $f) {
             $raw = $input[$f['key']] ?? null;
@@ -696,10 +918,15 @@ class FormFields
             }
 
             $parts = $f['type'] === 'address' ? self::addressValues($f, is_array($raw) ? $raw : []) : null;
-            $value = $parts !== null ? self::address($parts, self::addressParts($f), $parts['kelurahan_type'] ?? 'Kel.') : self::display($f, $raw);
+            $value = $parts !== null ? self::address($parts, self::storedParts($f), $parts['kelurahan_type'] ?? 'Kel.') : self::display($f, $raw);
 
             if ($value === '') {
                 continue;
+            }
+
+            // "Tambahkan RT/RW atau dusun": the lead is marked, the submission is kept.
+            if ($parts !== null && ($f['maps_to'] ?? null) === 'shipping_address' && self::softRtCheck($f) && self::lacksRtOrDusun($parts)) {
+                $incomplete[] = self::SOFT_RT_MESSAGE;
             }
 
             $answers[] = ['key' => $f['key'], 'label' => $f['label'], 'value' => $value, 'hidden' => $f['type'] === 'hidden'];
@@ -745,7 +972,20 @@ class FormFields
             $vars['ringkasan'] = $summary;
         }
 
-        return ['lead' => $lead, 'custom' => $custom, 'answers' => array_map(fn ($a) => array_diff_key($a, ['hidden' => 1]), $answers), 'vars' => $vars, 'photos' => $photos];
+        return ['lead' => $lead, 'custom' => $custom, 'answers' => array_map(fn ($a) => array_diff_key($a, ['hidden' => 1]), $answers), 'vars' => $vars, 'photos' => $photos,
+            'incomplete' => array_values(array_unique($incomplete))];
+    }
+
+    /**
+     * Whether an address (parts of a form answer) names neither an RT/RW nor a dusun/kampung, in its own boxes or
+     * written in the street box ("RT 01", "RT/RW 02/03", "Dusun X", "Dsn.", "Kp. Y").
+     */
+    public static function lacksRtOrDusun(array $parts): bool
+    {
+        $street = is_scalar($parts['street'] ?? null) ? (string) $parts['street'] : '';
+
+        return ! AddressCheck::hasRtRw($parts['rt_rw'] ?? null) && trim((string) ($parts['dusun'] ?? '')) === ''
+            && ! AddressCheck::textHasRtRw($street) && ! AddressCheck::textHasDusun($street);
     }
 
     /**
@@ -792,7 +1032,7 @@ class FormFields
     public static function display(array $field, mixed $raw): string
     {
         return match ($field['type']) {
-            'address' => self::address($v = self::addressValues($field, is_array($raw) ? $raw : []), self::addressParts($field), $v['kelurahan_type'] ?? 'Kel.'),
+            'address' => self::address($v = self::addressValues($field, is_array($raw) ? $raw : []), self::storedParts($field), $v['kelurahan_type'] ?? 'Kel.'),
             'checkbox' => ($field['options'] ?? []) === []
                 ? (filter_var($raw, FILTER_VALIDATE_BOOLEAN) || $raw === 'on' ? 'Ya' : '')
                 : implode(', ', array_map('strval', array_filter((array) $raw, 'is_string'))),
@@ -804,7 +1044,8 @@ class FormFields
 
     /**
      * The parts of an address answer as text, trimmed. With dropdowns the codes become names (kept under "codes"),
-     * and an empty postal code takes the village's.
+     * a city_first address gets the province of its city, and the postal code is the village's: always when the
+     * box is hidden or not shown at all, otherwise when it was left empty.
      *
      * @return array<string, mixed>
      */
@@ -820,20 +1061,26 @@ class FormFields
         }
 
         $chain = self::regionChain($field);
-        $names = RegionDirectory::resolve(array_intersect_key($parts, array_flip($chain)));
+        $picked = self::regionCodes($field, $parts);
+        $names = RegionDirectory::resolve($picked);
         $codes = [];
 
-        foreach ($chain as $part) {
+        foreach (self::cityFirst($field) ? ['provinsi', ...$chain] : $chain as $part) {
             if (is_array($names) && isset($names[$part])) {
-                $codes[$part] = $parts[$part];
+                $codes[$part] = $picked[$part];
                 $parts[$part] = $names[$part];
             } else {
                 $parts[$part] = '';
             }
         }
 
-        if (($parts['kode_pos'] ?? null) === '' && is_array($names) && isset($names['postal'])) {
-            $parts['kode_pos'] = $names['postal'];
+        if (in_array('kelurahan', $chain, true)) {
+            $parts['kode_pos'] ??= '';
+            $village = is_array($names) ? ($names['postal'] ?? null) : null;
+
+            if ($village !== null && ($parts['kode_pos'] === '' || self::postalHidden($field))) {
+                $parts['kode_pos'] = $village;
+            }
         }
 
         return $parts + ['codes' => $codes, 'kelurahan_type' => is_array($names) ? ($names['kelurahan_type'] ?? 'Kel.') : 'Kel.'];
