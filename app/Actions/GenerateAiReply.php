@@ -25,6 +25,8 @@ use App\Models\Property;
 use App\Models\User;
 use App\Models\WaConversation;
 use App\Models\WaMessage;
+use App\Shipping\CourierChoice;
+use App\Shipping\ShippingSettings;
 use App\Support\CurrentTenant;
 use App\WhatsApp\MessageContent;
 use App\WhatsApp\RouteKind;
@@ -149,15 +151,21 @@ class GenerateAiReply
         }
 
         $library = MediaAsset::query()->where('active', true)->with('folder')->orderBy('id')->limit(self::MAX_LIBRARY_ITEMS)->get();
-        $shop = ShopTools::for($tenant);
         $retail = $tenant->industry()->key === 'retail';
         $lead = $conversation->lead;
+        $shop = ShopTools::for($tenant, $lead);
         $products = new ProductContext($lead);
         $buyer = new BuyerFacts($lead);
         // "ok", "siap", "terima kasih", 🙏: answered briefly or not at all, never handed to a person.
         $ack = ReplySignals::acknowledgement($text);
         $handedOff = $this->handedOff($conversation, $inbound);
         $history = $this->history($conversation, $handedOff);
+        $shop?->buyerSaid(collect($history)->where('role', 'user')->pluck('content')->push($text)->implode("\n"));
+
+        // An expedition the shop does not use ("bisa J&T?"): a person answers, nothing is priced.
+        if ($retail && $shop !== null && ! $ack && ($unserved = CourierChoice::resolve(ShippingSettings::of($tenant), CourierChoice::brands($text))[1]) !== []) {
+            return $this->handoffTo($inbound, 'Pembeli meminta kurir yang tidak tersedia di toko: '.implode(', ', $unserved));
+        }
         $notes = [];
         $quote = null;
         // A "yes" to the order summary just sent: the order is recorded here, and the reply never goes unsent.

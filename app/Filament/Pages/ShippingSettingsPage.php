@@ -358,6 +358,13 @@ class ShippingSettingsPage extends Page
                 TagsInput::make('couriers')->label('Kurir dan layanan')->placeholder('Ketik lalu Enter, mis. JNE REG')->live()->columnSpanFull()
                     ->required(fn (Get $get) => (bool) $get('enabled'))
                     ->helperText('Nama di sini dipakai di kolom tarif setiap zona.'),
+                Select::make('primary_courier')->label('Kurir utama')->native(false)
+                    ->options(fn (Get $get) => collect($get('couriers') ?? [])->mapWithKeys(fn ($c) => [$c => $c])->all())
+                    ->placeholder(fn (Get $get) => 'Kurir pertama'.(filled($get('couriers')[0] ?? null) ? ' ('.array_values($get('couriers'))[0].')' : ''))
+                    ->helperText('Hanya kurir ini yang dihitung dan disebut ke pembeli (AI, Inbox, sambutan). Kurir lain dihitung hanya bila pembeli memintanya; kurir yang tidak ada di daftar diserahkan ke admin.'),
+                Select::make('provider')->label('Sumber ongkir')->native(false)->selectablePlaceholder(false)->options(ShippingSettings::SOURCES)
+                    ->helperText('Everpro: ongkir ke pembeli dari tarif Everpro (sama dengan Buat resi) bila akun Everpro aktif dan kode pos/kelurahan tujuan diketahui. '
+                        .'Bila tidak, atau Everpro lambat/gagal, dipakai tabel zona dan sumbernya dicatat di aktivitas lead.'),
             ]),
             Section::make('Aturan berat')->columns(2)->schema([
                 TextInput::make('default_weight_grams')->label('Berat bawaan per produk')->numeric()->integer()->minValue(1)->maxValue(100000)->suffix('g')->required()
@@ -404,9 +411,10 @@ class ShippingSettingsPage extends Page
 
         $tenant->forceFill(['shipping' => [
             'enabled' => (bool) ($state['enabled'] ?? false),
-            'provider' => ShippingSettings::of($tenant)->provider(),
+            'provider' => isset(ShippingSettings::SOURCES[$state['provider'] ?? '']) ? $state['provider'] : ShippingSettings::of($tenant)->provider(),
             'origin' => filled($state['origin'] ?? null) ? trim($state['origin']) : null,
-            'couriers' => array_values(array_unique(array_map('trim', $state['couriers'] ?? []))),
+            'couriers' => $couriers = array_values(array_unique(array_map('trim', $state['couriers'] ?? []))),
+            'primary_courier' => in_array($state['primary_courier'] ?? null, $couriers, true) ? $state['primary_courier'] : null,
             'default_weight_grams' => (int) $state['default_weight_grams'],
             'volumetric_divisor' => (int) $state['volumetric_divisor'],
             'zones' => array_values(array_map(fn (array $z) => [

@@ -28,7 +28,7 @@ use LogicException;
     'next_action', 'next_action_due_at', 'need', 'property_type', 'location',
     'budget_min', 'budget_max', 'payment_method', 'property_id', 'survey_at',
     'survey_location', 'unit', 'deal_value', 'lost_reason_id', 'custom_fields', 'stage_entered_at',
-    'variant', 'quantity', 'shipping_address', 'courier', 'shipping_cost', 'order_items',
+    'variant', 'quantity', 'shipping_address', 'courier', 'shipping_cost', 'shipping_cost_source', 'order_items',
     'payment_type', 'payment_type_source', 'payment_proof_at', 'paid_at', 'shipping_province', 'tracking_number', 'shipped_at', 'shipping_address_parts',
     'ad_id', 'ad_title', 'ad_url', 'product_source', 'auto_shipment_at', 'auto_shipment_state', 'auto_shipment_note',
 ])]
@@ -52,6 +52,11 @@ class Lead extends Model
     protected static function booted(): void
     {
         static::saving(function (Lead $lead) {
+            // A shipping cost typed by hand (lead form, "Buat resi") no longer comes from the zone table or Everpro.
+            if ($lead->isDirty('shipping_cost') && ! $lead->isDirty('shipping_cost_source')) {
+                $lead->shipping_cost_source = null;
+            }
+
             // Saving runs before the tenant is stamped on create, so fall back to the current tenant.
             $tenantId = $lead->tenant_id ?? app(CurrentTenant::class)->id();
 

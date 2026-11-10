@@ -37,6 +37,8 @@ final class ShipmentDraft
         public int $goodsTotal = 0,
         public ?int $promoCharged = null,
         public ?int $recordedCharged = null,
+        /** Where the recorded shipping cost came from: "zone" (tabel zona), "everpro", or null (typed by hand / older orders). */
+        public ?string $recordedSource = null,
         public int $calculatedCod = 0,
         public ?array $dimensions = null,
         public ?string $note = null,
@@ -52,7 +54,11 @@ final class ShipmentDraft
         $out = [];
 
         if ($this->rate !== null && $this->recordedCharged !== null && $this->promoCharged !== null && $this->recordedCharged !== $this->promoCharged && $this->charged === $this->recordedCharged) {
-            $out[] = 'Ongkir tercatat '.$rp($this->recordedCharged).' berbeda dari hitungan promo '.$rp($this->promoCharged).' — pastikan sesuai kesepakatan.';
+            $out[] = $this->recordedSource === null
+                ? 'Ongkir tercatat '.$rp($this->recordedCharged).' berbeda dari hitungan promo '.$rp($this->promoCharged).' — pastikan sesuai kesepakatan.'
+                // The buyer was told a price from the zone table (or an older Everpro rate): the agent sees both and the gap.
+                : 'Ongkir yang disampaikan ke pembeli '.$rp($this->recordedCharged).' ('.($this->recordedSource === 'everpro' ? 'dari Everpro' : 'dari tabel zona').') berbeda dari hitungan Everpro sekarang '
+                    .$rp($this->promoCharged).' (selisih '.$rp(abs($this->recordedCharged - $this->promoCharged)).') — pastikan sesuai kesepakatan.';
         }
 
         if ($this->rate !== null && $this->cod && $this->codAmount !== $this->calculatedCod) {

@@ -159,10 +159,7 @@ class OrderConfirmation
         $couriers = ShippingSettings::of($tenant)->couriers();
         $named = array_values(array_filter($couriers, fn ($c) => mb_stripos($summary, $c) !== false));
 
-        return match (true) {
-            count($named) === 1 => $named[0],
-            count($couriers) === 1 => $couriers[0],
-            default => null,
-        };
+        // Not named: the shop's primary courier, the only one quoted unless the buyer asked for another.
+        return count($named) === 1 ? $named[0] : ShippingSettings::of($tenant)->primaryCourier();
     }
 }

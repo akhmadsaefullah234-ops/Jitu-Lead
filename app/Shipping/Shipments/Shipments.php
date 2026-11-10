@@ -243,6 +243,7 @@ class Shipments
         [$off, $promo] = ShippingPromos::best($this->shippingItems($lead), $draft->destination->province ?: $lead->shipping_province, $draft->rate->price);
         $draft->promoCharged = $draft->rate->price - $off;
         $draft->recordedCharged = $lead->shipping_cost !== null ? (int) $lead->shipping_cost : null;
+        $draft->recordedSource = $draft->recordedCharged !== null ? $lead->shipping_cost_source : null;
         $draft->charged = (int) $use('charged', 'Ongkir ditagih', $draft->recordedCharged ?? $draft->promoCharged, $rp);
         $draft->promo = $draft->charged === $draft->promoCharged ? $promo : null;
         $draft->calculatedCod = $draft->cod ? $draft->goodsTotal + $draft->charged + $draft->rate->codFee : 0;
@@ -264,7 +265,7 @@ class Shipments
     }
 
     /** The sender's postal code: kept with the origin, else the one at the end of its label ("... (17540)"). */
-    private function originPostal(CarrierAccount $account): ?string
+    public static function originPostal(CarrierAccount $account): ?string
     {
         $code = (string) $account->setting('origin_postal');
 
@@ -272,7 +273,7 @@ class Shipments
     }
 
     /** The sender's kelurahan: kept with the origin, else the first part of its label ("Sekeloa, Coblong, ..."). */
-    private function originSubDistrict(CarrierAccount $account): ?string
+    public static function originSubDistrict(CarrierAccount $account): ?string
     {
         $name = $account->setting('origin_sub_district') ?: preg_replace('/\s*\(\d{5}\)\s*$/', '', explode(',', (string) $account->setting('origin_label'))[0]);
 

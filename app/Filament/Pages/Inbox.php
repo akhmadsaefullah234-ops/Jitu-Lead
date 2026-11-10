@@ -6,6 +6,7 @@ use App\Actions\GenerateAiReply;
 use App\Actions\LearnFromReply;
 use App\Actions\SendLibraryItem;
 use App\Actions\SendWhatsAppMessage;
+use App\Ai\LeadQuote;
 use App\Automation\StageAutomation;
 use App\Automation\StageAutomationSettings;
 use App\Catalog\ProductMatcher;
@@ -25,9 +26,11 @@ use App\Models\WaConversation;
 use App\Models\WaTemplate;
 use App\Regions\RegionDirectory;
 use App\Shipping\Carriers\ShipmentStatus;
+use App\Shipping\CourierChoice;
 use App\Shipping\Regions;
 use App\Shipping\Shipping;
 use App\Shipping\ShippingQuote;
+use App\Shipping\ShippingSettings;
 use App\Support\CurrentTenant;
 use App\Support\Industry;
 use App\WhatsApp\RouteDecision;
@@ -339,9 +342,14 @@ class Inbox extends Page
                     ->datalist(fn () => RegionDirectory::cityNames()),
                 Select::make('provinsi')->label('Provinsi')->options(Regions::options())->searchable()
                     ->helperText('Boleh dikosongkan untuk kota yang dikenal.'),
+                Select::make('kurir')->label('Kurir')->native(false)->placeholder(fn () => 'Kurir utama ('.(ShippingSettings::of(app(CurrentTenant::class)->get())->primaryCourier() ?? '-').')')
+                    ->options(fn () => [CourierChoice::ALL => 'Semua kurir toko'] + collect(ShippingSettings::of(app(CurrentTenant::class)->get())->couriers())->mapWithKeys(fn ($c) => [$c => $c])->all())
+                    ->helperText('Kosongkan untuk kurir utama; kurir lain hanya bila pembeli memintanya.'),
             ])
             ->action(function (array $data, Action $action) {
-                $quote = Shipping::quote(app(CurrentTenant::class)->get(), $data['kota'] ?? null, $data['provinsi'] ?? null, $data['items'] ?? []);
+                $place = LeadQuote::exactPlace($this->current()?->lead, $data['kota'] ?? null);
+                $quote = Shipping::quote(app(CurrentTenant::class)->get(), $data['kota'] ?? null, $data['provinsi'] ?? null, $data['items'] ?? [], null,
+                    $data['kurir'] ?? null, $place['kode_pos'] ?? null, $place['kelurahan'] ?? null);
 
                 if (! $quote->ok()) {
                     Notification::make()->title($quote->status === ShippingQuote::NEEDS_ADMIN ? 'Perlu konfirmasi admin' : 'Ongkir belum bisa dihitung')
@@ -351,7 +359,7 @@ class Inbox extends Page
 
                 $this->draft = trim($this->draft) === '' ? $quote->summary() : rtrim($this->draft)."\n\n".$quote->summary();
                 $this->updatedDraft();
-                Notification::make()->title('Ongkir dihitung, zona '.$quote->zone)->body(nl2br(e($quote->summary())))->success()->persistent()->send();
+                Notification::make()->title('Ongkir dihitung dari '.$quote->sourceLabel())->body(nl2br(e($quote->summary())))->success()->persistent()->send();
             });
     }
 

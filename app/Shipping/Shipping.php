@@ -22,20 +22,41 @@ class Shipping
         $settings = ShippingSettings::of($tenant);
         $class = config('shipping.providers.'.$settings->provider()) ?? throw new InvalidArgumentException('Unknown shipping provider '.$settings->provider());
 
-        return new $class($settings);
+        return app($class, ['settings' => $settings, 'tenant' => $tenant]);
     }
 
     /**
+     * Prices the shop's primary courier, or the couriers asked for ($courier: a name such as "SiCepat REG" or
+     * "sicepat", CourierChoice::ALL, or a list). A courier the shop does not use is never priced: the quote asks
+     * for an admin. The postal code and kelurahan, when known, let Everpro price the exact place.
+     *
      * @param  list<array{product_id?: int|string|null, produk?: string|null, varian?: string|null, jumlah?: int|string|null}>  $items
+     * @param  list<string>|string|null  $courier
      */
-    public static function quote(Tenant $tenant, ?string $city, ?string $province, array $items, ?string $district = null): ShippingQuote
+    public static function quote(Tenant $tenant, ?string $city, ?string $province, array $items, ?string $district = null,
+        array|string|null $courier = null, ?string $postalCode = null, ?string $subDistrict = null): ShippingQuote
     {
         if (! self::available($tenant)) {
             return new ShippingQuote(ShippingQuote::NOT_AVAILABLE, 'Pengiriman belum diatur untuk agensi ini. Ongkir perlu dikonfirmasi admin.');
         }
 
+        $settings = ShippingSettings::of($tenant);
+        [$couriers, $unserved] = CourierChoice::resolve($settings, $courier);
+
+        if ($unserved !== []) {
+            return new ShippingQuote(ShippingQuote::NEEDS_ADMIN, 'Kurir '.implode(', ', $unserved).' tidak tersedia di toko ini (kurir toko: '.implode(', ', $settings->couriers()).'). Ongkir perlu dikonfirmasi admin.');
+        }
+
+        $postalCode = preg_match('/^\d{5}$/', $code = preg_replace('/\D/', '', (string) $postalCode)) ? $code : null;
+        $subDistrict = filled($subDistrict) ? trim($subDistrict) : null;
+        $quote = self::provider($tenant)->quote(new ShippingRequest($city, $province, self::items($items), $district, $couriers, $postalCode, $subDistrict));
+
+        if ($quote->ok() && (is_array($courier) ? $courier === [] : blank($courier))) {
+            $quote = $quote->copy(['primaryCourier' => $settings->primaryCourier()]);
+        }
+
         // The product's shipping promo (Produk > Iklan & promo) is taken off here, for every caller.
-        return ShippingPromos::apply(self::provider($tenant)->quote(new ShippingRequest($city, $province, self::items($items), $district)));
+        return ShippingPromos::apply($quote);
     }
 
     /** Input items with a product that exists in this agency's catalogue (by id, else by name). Must run inside the tenant. */
