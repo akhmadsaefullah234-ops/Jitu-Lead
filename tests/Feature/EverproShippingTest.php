@@ -42,6 +42,7 @@ use App\Shipping\Carriers\ShipmentStatus;
 use App\Shipping\Shipments\AutoShipments;
 use App\Shipping\Shipments\LabelSheet;
 use App\Shipping\Shipments\LabelStore;
+use App\Shipping\Shipments\ProviderLocations;
 use App\Shipping\Shipments\ResiImport;
 use App\Shipping\Shipments\Shipments;
 use App\Support\CurrentTenant;
@@ -132,6 +133,11 @@ class EverproShippingTest extends TestCase
     /** Tracking numbers Everpro does not know (made outside this account). */
     private array $unknownAwbs = [];
 
+    /** POST /orders/track answers per number (when set), and numbers whose batch Everpro refuses with a 400. */
+    private array $trackByAwb = [];
+
+    private array $rejectAwbs = [];
+
     /** The documented answer of GET /balance/v1/detail. */
     private array $balanceAnswer = ['cash' => 750000, 'name' => 'Quicker Sport'];
 
@@ -178,6 +184,23 @@ class EverproShippingTest extends TestCase
             $this->unauthorizedOnce = false;
 
             return Http::response(['message' => 'token expired'], 401);
+        }
+
+        if ($path === '/shipment/v1/orders/track') {
+            $asked = (array) ($r->data()['awb_numbers'] ?? []);
+
+            // Everpro's real answer to a number sent as a JSON number.
+            if (collect($asked)->contains(fn ($a) => ! is_string($a))) {
+                return Http::response(['message' => 'Unmarshal type error: expected=string, got=number, field=awb_numbers, offset=31', 'data' => null], 400);
+            }
+
+            if (array_intersect($asked, $this->rejectAwbs) !== []) {
+                return Http::response(['message' => 'invalid awb number', 'data' => null], 400);
+            }
+
+            if ($this->trackByAwb !== []) {
+                return $ok(array_values(array_filter(array_map(fn ($a) => $this->trackByAwb[$a] ?? null, $asked))));
+            }
         }
 
         if (str_ends_with($path, '/track') && in_array(basename(dirname($path)), $this->unknownAwbs, true)) {
@@ -837,14 +860,14 @@ class EverproShippingTest extends TestCase
         $this->courierSays('PICKED_UP');
         $this->courierSays('ONGOING_TO_RECEIVER');
         $this->assertCount($before, $this->sent(), 'Nothing at night: '.implode(' | ', $this->sent()));
-        $this->assertSame(2, $this->inShop(fn () => ShipmentNotice::query()->where('state', 'pending')->count()));
+        // Only the newest status waits: "picked up" is old news once the parcel is out for delivery.
+        $this->assertSame(1, $this->inShop(fn () => ShipmentNotice::query()->where('state', 'pending')->count()));
+        $this->assertSame('Status kiriman sudah berlanjut', $this->inShop(fn () => ShipmentNotice::query()->where('status', 'picked_up')->value('note')));
 
         Carbon::setTestNow(Carbon::parse('2026-11-06 05:01', 'Asia/Jakarta'));
         $this->artisan('shipping:notices')->assertSuccessful();
 
-        $messages = array_slice($this->sent(), $before);
-        $this->assertCount(1, $messages);
-        $this->assertStringContainsString('sudah diambil kurir', $messages[0]);
+        $this->assertCount(0, array_slice($this->sent(), $before), 'The delivery day has passed and the older status is not sent instead.');
         $this->assertSame('Hari pengantaran sudah lewat', $this->inShop(fn () => ShipmentNotice::query()->where('status', 'out_for_delivery')->value('note')));
     }
 
@@ -1550,7 +1573,7 @@ class EverproShippingTest extends TestCase
         Storage::disk('local')->assertExists($shipment->label_path);
         $this->assertStringStartsWith(LabelStore::DIR.'/'.$this->shop->id.'/', $shipment->label_path);
         $this->assertSame([$shipment->id], $this->inShop(fn () => Shipment::query()->tab('unprinted')->pluck('id')->all()));
-        Livewire::test(Inbox::class, ['leadId' => $lead->id])->assertSee('Belum dicetak')->assertDontSee('Resi otomatis dalam');
+        Livewire::test(Inbox::class, ['leadId' => $lead->id])->assertSee('Order OK · siap cetak')->assertDontSee('Resi otomatis dalam');
     }
 
     public function test_cancelled_during_the_wait_no_resi_is_made(): void
@@ -1605,21 +1628,21 @@ class EverproShippingTest extends TestCase
         $this->assertStringContainsString(AddressCheck::PROBLEM, $noRt->auto_shipment_note);
         $this->assertStringContainsString('cara bayar belum dipastikan agen', $chat->auto_shipment_note);
 
-        // The provider does not know the kelurahan under that postal code: not guessed
-        $this->assertSame(AutoShipments::SCHEDULED, $unsure->auto_shipment_state);
-        $this->runAuto();
-        $unsure = $this->inShop(fn () => $unsure->fresh());
+        // The provider does not know the kelurahan under that postal code: matched "perlu dipilih" when the order
+        // was recorded, so resi otomatis does not even wait for it
+        $this->assertSame(ProviderLocations::MULTIPLE, $unsure->provider_location_state);
         $this->assertSame(AutoShipments::SKIPPED, $unsure->auto_shipment_state);
-        $this->assertStringContainsString('Buat resi manual', $unsure->auto_shipment_note);
+        $this->assertStringContainsString('kelurahan tujuan perlu dipilih', $unsure->auto_shipment_note);
+        $this->runAuto();
         $this->assertSame([], $this->callsTo('/shipment/v2/orders'));
 
         // The lead list: "Perlu dilengkapi" and the reason column
         $this->actingInTenant($this->adminOf($this->shop), $this->shop);
         Livewire::test(ListLeads::class)->filterTable('resi', 'incomplete')
-            ->assertCanSeeTableRecords([$unpaid, $noRt, $chat])->assertCanNotSeeTableRecords([$unsure])
+            ->assertCanSeeTableRecords([$unpaid, $noRt, $chat, $unsure])
             ->assertTableColumnStateSet('resi_check', 'Perlu dilengkapi: transfer belum dikonfirmasi lunas', $unpaid);
         Livewire::test(ListLeads::class)->filterTable('resi', 'ready')
-            ->assertCanSeeTableRecords([$unsure])->assertCanNotSeeTableRecords([$unpaid, $noRt, $chat]);
+            ->assertCanNotSeeTableRecords([$unpaid, $noRt, $chat, $unsure]);
     }
 
     public function test_the_daily_limit_and_the_cod_cap_leave_the_rest_to_a_manual_click(): void
@@ -2332,5 +2355,176 @@ class EverproShippingTest extends TestCase
         $this->actingInTenant($this->adminOf($this->shop), $this->shop);
         $this->inShop(fn () => CarrierAccount::query()->firstOrFail()->forceFill(['balance' => 10000, 'balance_at' => now()])->save());
         Livewire::test(ListShipments::class)->assertDontSee('Saldo Everpro rendah');
+    }
+
+    // ---- Tracking after a gap (AWB as string, one refused number, catch-up messages) -----------------------------
+
+    /** A second booked parcel for another buyer, with its tracking number set to $awb. */
+    private function parcelWith(string $awb, string $phone = '6281234567890'): Shipment
+    {
+        $shipment = $this->book($this->order('cod', $phone));
+        $this->inShop(fn () => $shipment->forceFill(['awb' => $awb])->save());
+
+        return $shipment->fresh();
+    }
+
+    private function row(string $awb, ?string $code, array $history = [], mixed $statusId = null): array
+    {
+        return ['awb_number' => $awb, 'tracking_code' => $code, 'status_id' => $statusId, 'status' => null, 'tracking_history' => $history];
+    }
+
+    public function test_a_digits_only_jne_tracking_number_is_sent_to_everpro_as_a_string(): void
+    {
+        $this->configure();
+        $shipment = $this->parcelWith('6329732600177801');
+        $this->trackByAwb['6329732600177801'] = $this->row('6329732600177801', 'ARRIVED AT SORTING HUB', [
+            ['date' => '2026-11-05T01:00:00Z', 'tracking_code' => 'ARRIVED AT SORTING HUB', 'description' => 'Tiba di hub sortir'],
+        ], 400);
+
+        $this->artisan('shipping:track')->assertSuccessful();
+
+        $call = collect($this->callsTo('/shipment/v1/orders/track'))->last();
+        $this->assertStringContainsString('"awb_numbers":["6329732600177801"]', $call['raw']);
+        $fresh = $this->inShop(fn () => $shipment->fresh());
+        $this->assertSame(ShipmentStatus::IN_TRANSIT, $fresh->status);
+        $this->assertSame('ARRIVED AT SORTING HUB', $fresh->raw_status);
+        $this->assertNotNull($fresh->tracked_at);
+    }
+
+    public function test_one_refused_tracking_number_does_not_stop_the_others(): void
+    {
+        $this->configure();
+        $good = $this->parcelWith('6329732600177801');
+        $bad = $this->parcelWith('JNEBAD000001', '6281234567892');
+        $this->rejectAwbs = ['JNEBAD000001'];
+        $this->trackByAwb['6329732600177801'] = $this->row('6329732600177801', 'IN PROCESS');
+        Log::spy();
+
+        $this->artisan('shipping:track --now')->expectsOutputToContain('1 kiriman diperbarui, ditolak penyedia: JNEBAD000001')->assertSuccessful();
+
+        $this->assertSame(ShipmentStatus::IN_TRANSIT, $this->inShop(fn () => $good->fresh()->status));
+        $this->assertSame(ShipmentStatus::AWB_CREATED, $this->inShop(fn () => $bad->fresh()->status));
+        // The batch, then each number on its own.
+        $this->assertCount(3, $this->callsTo('/shipment/v1/orders/track'));
+        Log::shouldHaveReceived('warning')->withArgs(fn ($m, $c = []) => $m === 'Everpro refused tracking numbers' && $c['awbs'] === ['JNEBAD000001'])->once();
+    }
+
+    public function test_a_catch_up_after_a_gap_tells_the_buyer_only_the_newest_status(): void
+    {
+        $this->configure();
+        $shipment = $this->parcelWith('6329732600177801');
+        $before = count($this->sent());
+        // 03:00Z now: picked up, on the way and out for delivery all came in one answer.
+        $this->trackByAwb['6329732600177801'] = $this->row('6329732600177801', 'ONGOING_TO_RECEIVER', [
+            ['date' => '2026-11-04T09:00:00Z', 'tracking_code' => 'PICKED_UP', 'description' => 'Diambil kurir'],
+            ['date' => '2026-11-04T20:00:00Z', 'tracking_code' => 'ARRIVED AT SORTING HUB', 'description' => 'Hub sortir'],
+            ['date' => '2026-11-05T01:00:00Z', 'tracking_code' => 'ONGOING_TO_RECEIVER', 'description' => 'Diantar kurir'],
+        ]);
+
+        $this->artisan('shipping:track')->assertSuccessful();
+
+        $messages = array_slice($this->sent(), $before);
+        $this->assertCount(1, $messages);
+        $this->assertStringContainsString('sedang diantar kurir', $messages[0]);
+        $this->assertSame(['out_for_delivery'], $this->inShop(fn () => ShipmentNotice::query()->pluck('status')->all()));
+        $this->assertCount(4, $this->inShop(fn () => $shipment->fresh()->events), 'Resi terbit and the three steps.');
+
+        // Tracked again: once per status per parcel.
+        $this->artisan('shipping:track')->assertSuccessful();
+        $this->assertCount(1, array_slice($this->sent(), $before));
+    }
+
+    public function test_a_status_older_than_24_hours_is_not_told_but_an_open_failed_delivery_is(): void
+    {
+        $this->configure();
+        $old = $this->parcelWith('6329732600177801');
+        $failed = $this->parcelWith('6329732600177802', '6281234567892');
+        $before = count($this->sent());
+        $this->trackByAwb = [
+            '6329732600177801' => $this->row('6329732600177801', 'DELIVERED', [
+                ['date' => '2026-11-03T02:00:00Z', 'tracking_code' => 'DELIVERED', 'description' => 'Diterima oleh RINA'],
+            ]),
+            '6329732600177802' => $this->row('6329732600177802', 'FAILED', [
+                ['date' => '2026-11-03T05:00:00Z', 'tracking_code' => 'FAILED', 'description' => 'Rumah kosong'],
+            ]),
+        ];
+
+        $this->artisan('shipping:track')->assertSuccessful();
+
+        $messages = array_slice($this->sent(), $before);
+        $this->assertCount(1, $messages, implode(' | ', $messages));
+        $this->assertStringContainsString('kurir belum berhasil mengantar', $messages[0]);
+        $this->assertSame(ShipmentStatus::DELIVERED, $this->inShop(fn () => $old->fresh()->status));
+        $this->assertSame('Selesai', $this->inShop(fn () => $old->lead->fresh('stage')->stage->name), 'The stage still moves.');
+        $this->assertTrue($this->inShop(fn () => $old->lead->activities()->where('body', 'like', '%tidak dikirim ke pembeli: perubahannya sudah lebih dari 24 jam%')->exists()));
+    }
+
+    public function test_everpro_tracking_codes_seen_in_production_map_to_our_statuses(): void
+    {
+        foreach (['ARRIVED AT SORTING HUB', 'IN PROCESS', 'RECEIVED AT SORTING CENTER', 'DEPART FROM TRANSIT'] as $code) {
+            $this->assertSame(ShipmentStatus::IN_TRANSIT, ShipmentStatus::normalize('everpro', $code), $code);
+        }
+
+        $this->assertSame(ShipmentStatus::AWB_CREATED, ShipmentStatus::normalize('everpro', 'WAITING FOR PICK UP'));
+        $this->assertSame(ShipmentStatus::PICKUP_FAILED, ShipmentStatus::normalize('everpro', 'FAILED TO PICKUP'));
+        $this->assertSame('Gagal dijemput', ShipmentStatus::label(ShipmentStatus::PICKUP_FAILED));
+        // A new pickup after a failed one goes back to waiting.
+        $this->assertTrue(ShipmentStatus::advances(ShipmentStatus::PICKUP_FAILED, ShipmentStatus::AWB_CREATED));
+    }
+
+    public function test_a_failed_pickup_needs_action_and_tells_staff_not_the_buyer(): void
+    {
+        $this->configure();
+        $shipment = $this->parcelWith('6329732600177801');
+        $before = count($this->sent());
+        $this->trackByAwb['6329732600177801'] = $this->row('6329732600177801', 'FAILED TO PICKUP');
+
+        $this->artisan('shipping:track')->assertSuccessful();
+
+        $fresh = $this->inShop(fn () => $shipment->fresh());
+        $this->assertSame(ShipmentStatus::PICKUP_FAILED, $fresh->status);
+        $this->assertTrue($fresh->needsAction());
+        $this->assertTrue($fresh->cancellable());
+        $this->assertSame([$fresh->id], $this->inShop(fn () => Shipment::query()->tab('action')->pluck('id')->all()));
+        $this->assertSame([], $this->inShop(fn () => Shipment::query()->tab('printed')->pluck('id')->all()));
+        $this->assertCount(0, array_slice($this->sent(), $before));
+        Mail::assertSent(ShipmentNeedsAction::class);
+    }
+
+    public function test_a_single_tracking_that_lags_at_waiting_for_pickup_is_checked_with_the_bulk_tracking(): void
+    {
+        $this->configure();
+        $lead = $this->packed();
+        $this->track[] = $this->row('6329802600008692', 'WAITING FOR PICK UP');
+        [$shipment] = $this->link($lead, '6329802600008692');
+        $this->assertSame(ShipmentStatus::AWB_CREATED, $shipment->status);
+
+        // GET still says waiting; POST /orders/track knows it is on its way.
+        $this->track[] = $this->row('6329802600008692', 'WAITING FOR PICK UP');
+        $this->trackByAwb['6329802600008692'] = $this->row('6329802600008692', 'ARRIVED AT SORTING HUB', [], 400);
+        $this->artisan('shipping:track')->assertSuccessful();
+
+        $this->assertSame(ShipmentStatus::IN_TRANSIT, $this->inShop(fn () => $shipment->fresh()->status));
+        $this->assertStringContainsString('"awb_numbers":["6329802600008692"]', collect($this->callsTo('/shipment/v1/orders/track'))->last()['raw']);
+    }
+
+    public function test_parcels_not_refreshed_for_six_hours_are_flagged_red(): void
+    {
+        $this->configure();
+        $shipment = $this->parcelWith('6329732600177801');
+        $this->inShop(fn () => $shipment->forceFill(['tracked_at' => now()->subHours(7)])->save());
+
+        $fresh = $this->inShop(fn () => $shipment->fresh());
+        $this->assertTrue($fresh->trackingStale());
+        $this->actingAs($this->adminOf($this->shop));
+        $this->inShop(function () {
+            $this->assertStringContainsString('1 kiriman belum diperbarui lebih dari 6 jam', (string) ShipmentResource::trackingWarning());
+        });
+
+        $this->trackByAwb['6329732600177801'] = $this->row('6329732600177801', 'IN PROCESS');
+        $this->artisan('shipping:track --now')->assertSuccessful();
+
+        $this->assertFalse($this->inShop(fn () => $shipment->fresh()->trackingStale()));
+        $this->assertNull($this->inShop(fn () => ShipmentResource::trackingWarning()));
     }
 }

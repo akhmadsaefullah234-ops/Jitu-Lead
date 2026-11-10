@@ -65,11 +65,16 @@ return [
             // 300-301: waiting for pickup / drop off
             '300' => 'awb_created', '301' => 'awb_created', 'WAITING' => 'awb_created', 'WAITING_PICKUP' => 'awb_created', 'WAITING_FOR_PICK_UP' => 'awb_created',
             'WAITING_DROP_OFF' => 'awb_created', 'AWB_CREATED' => 'awb_created', 'CREATED' => 'awb_created', 'ALLOCATED' => 'awb_created',
+            // The courier did not collect the parcel: "Gagal dijemput" (Perlu tindakan); a new pickup goes back to waiting.
+            'FAILED_TO_PICKUP' => 'pickup_failed', 'FAILED_TO_PICK_UP' => 'pickup_failed', 'PICKUP_FAILED' => 'pickup_failed', 'FAILED_PICKUP' => 'pickup_failed',
             // 302: handed to the courier
             '302' => 'picked_up', 'PICKED_UP' => 'picked_up', 'PICKUP' => 'picked_up', 'TRANSFERRED_TO_3PL' => 'picked_up', 'MANIFESTED' => 'picked_up',
             // 303, 400, 403: on the way
             '303' => 'in_transit', '400' => 'in_transit', '403' => 'in_transit', 'IN_TRANSIT' => 'in_transit', 'ON_PROCESS' => 'in_transit', 'IN_PROCESS' => 'in_transit',
             'ARRIVED_AT_SORTING_HUB' => 'in_transit', 'ARRIVED_AT_DESTINATION_CITY' => 'in_transit', 'ON_TRANSIT' => 'in_transit',
+            'RECEIVED_AT_SORTING_CENTER' => 'in_transit', 'RECEIVED_AT_SORTING_HUB' => 'in_transit', 'ARRIVED_AT_SORTING_CENTER' => 'in_transit',
+            'DEPART_FROM_TRANSIT' => 'in_transit', 'DEPARTED_FROM_TRANSIT' => 'in_transit', 'ARRIVED_AT_TRANSIT' => 'in_transit', 'DEPART_FROM_SORTING_HUB' => 'in_transit',
+            'DEPART_FROM_ORIGIN' => 'in_transit', 'ARRIVED_AT_DESTINATION' => 'in_transit', 'ARRIVED_AT_DESTINATION_HUB' => 'in_transit', 'SHIPPED' => 'in_transit',
             // 404: with the courier to the buyer
             '404' => 'out_for_delivery', 'ONGOING_TO_RECEIVER' => 'out_for_delivery', 'ON_DELIVERY' => 'out_for_delivery', 'OUT_FOR_DELIVERY' => 'out_for_delivery', 'DELIVERING' => 'out_for_delivery',
             // 602, 704, 706: could not deliver

@@ -566,24 +566,110 @@ class EverproCarrier implements CarrierProvider, ListsOrders, ValidatesPhones
         return (string) $url;
     }
 
+    /**
+     * One parcel: GET /orders/{awb}/track. While that still says the parcel waits for pickup, the bulk endpoint
+     * (POST /orders/track, the one the scheduled tracking uses) is asked too and the further status wins: the
+     * single answer has been seen lagging at "WAITING FOR PICK UP" for a parcel already on its way (#41).
+     */
     public function track(string $awb): TrackResult
     {
-        return $this->trackResult($awb, (array) $this->call('get', '/shipment/v1/orders/'.rawurlencode($awb).'/track'));
+        $awb = (string) $awb;
+        $single = $this->trackResult($awb, (array) $this->call('get', '/shipment/v1/orders/'.rawurlencode($awb).'/track'));
+
+        if (ShipmentStatus::rank($single->status) > ShipmentStatus::rank(ShipmentStatus::AWB_CREATED)) {
+            return $single;
+        }
+
+        try {
+            $bulk = $this->trackBatch([$awb])[$awb] ?? null;
+        } catch (CarrierException) {
+            return $single;
+        }
+
+        if ($bulk !== null && ShipmentStatus::rank($bulk->status) > ShipmentStatus::rank($single->status)) {
+            Log::warning('Everpro single tracking lags behind bulk tracking', ['tenant' => $this->account->tenant_id, 'awb' => $awb, 'single' => $single->code, 'bulk' => $bulk->code]);
+
+            return $bulk;
+        }
+
+        return $single;
     }
 
+    /** Numbers Everpro refused in the last trackMany(), with its reason: logged, and read by the scheduled tracking. */
+    public array $rejected = [];
+
+    /**
+     * Every tracking number goes out as a JSON string: a number of digits only (JNE "6329732600177801") is an
+     * integer once it is a PHP array key, and Everpro refuses the whole batch for one number ("expected=string,
+     * got=number, field=awb_numbers"). A refused batch is tried again number by number, so one bad number never
+     * stops the others; the numbers still refused are logged and left out.
+     */
     public function trackMany(array $awbs): array
     {
+        $this->rejected = [];
+        $out = [];
+        $awbs = array_values(array_unique(array_map('strval', array_filter($awbs, fn ($a) => filled($a))), SORT_STRING));
+
+        foreach (array_chunk($awbs, 50) as $chunk) {
+            try {
+                $out += $this->trackBatch($chunk);
+
+                continue;
+            } catch (CarrierException $e) {
+                if ($e->retryable() || $e->kind === CarrierException::AUTH || count($chunk) === 1) {
+                    if (count($chunk) === 1 && ! $e->retryable() && $e->kind !== CarrierException::AUTH) {
+                        $this->rejected[$chunk[0]] = $e->getMessage();
+
+                        continue;
+                    }
+
+                    throw $e;
+                }
+            }
+
+            foreach ($chunk as $awb) {
+                try {
+                    $out += $this->trackBatch([$awb]);
+                } catch (CarrierException $e) {
+                    if ($e->retryable() || $e->kind === CarrierException::AUTH) {
+                        throw $e;
+                    }
+
+                    $this->rejected[$awb] = $e->getMessage();
+                }
+            }
+        }
+
+        if ($this->rejected !== []) {
+            Log::warning('Everpro refused tracking numbers', ['tenant' => $this->account->tenant_id, 'awbs' => array_map('strval', array_keys($this->rejected)), 'reasons' => array_values(array_unique($this->rejected))]);
+        }
+
+        return $out;
+    }
+
+    /**
+     * One POST /orders/track call. Keys of the answer are prefixed while matching so digits-only numbers stay strings;
+     * the result is keyed by the number (PHP may turn such a key into an int: read TrackResult::$awb for the string).
+     *
+     * @param  list<string>  $chunk
+     * @return array<string, TrackResult>
+     */
+    private function trackBatch(array $chunk): array
+    {
+        $chunk = array_values(array_map('strval', $chunk));
+        $data = (array) $this->call('post', '/shipment/v1/orders/track', ['awb_numbers' => $chunk]);
+        $wanted = array_fill_keys(array_map(fn (string $a) => 'awb:'.strtoupper($a), $chunk), true);
         $out = [];
 
-        foreach (array_chunk(array_values(array_unique($awbs)), 50) as $chunk) {
-            $data = (array) $this->call('post', '/shipment/v1/orders/track', ['awb_numbers' => $chunk]);
+        foreach (Arr::isList($data) ? $data : (array) (data_get($data, 'orders') ?? data_get($data, 'items') ?? []) as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
 
-            foreach (Arr::isList($data) ? $data : (array) data_get($data, 'orders', []) as $row) {
-                $awb = (string) ($row['awb_number'] ?? '');
+            $awb = trim((string) ($row['awb_number'] ?? $row['awb'] ?? ''));
 
-                if ($awb !== '' && in_array($awb, $chunk, true)) {
-                    $out[$awb] = $this->trackResult($awb, (array) $row);
-                }
+            if ($awb !== '' && isset($wanted['awb:'.strtoupper($awb)])) {
+                $out[$awb] = $this->trackResult($awb, $row);
             }
         }
 
@@ -636,25 +722,29 @@ class EverproCarrier implements CarrierProvider, ListsOrders, ValidatesPhones
                 continue;
             }
 
-            $code = isset($row['status']) ? (string) $row['status'] : (isset($row['status_id']) ? (string) $row['status_id'] : null);
+            $code = Arr::first([$row['tracking_code'] ?? null, $row['status'] ?? null, $row['status_id'] ?? null], fn ($v) => filled($v) && is_scalar($v) && ShipmentStatus::normalize($this->key(), (string) $v) !== null)
+                ?? Arr::first([$row['tracking_code'] ?? null, $row['status'] ?? null, $row['status_id'] ?? null], fn ($v) => filled($v) && is_scalar($v));
+            $code = $code !== null ? (string) $code : null;
             $events[] = new TrackEvent(
-                filled($row['date'] ?? null) ? Carbon::parse($row['date'])->toIso8601String() : now()->toIso8601String(),
+                filled($row['date'] ?? $row['created_at'] ?? null) ? Carbon::parse($row['date'] ?? $row['created_at'])->toIso8601String() : now()->toIso8601String(),
                 $code,
                 ShipmentStatus::normalize($this->key(), $code),
-                mb_substr((string) ($row['description'] ?? $row['note'] ?? ''), 0, 250),
+                mb_substr((string) ($row['description'] ?? $row['note'] ?? $row['tracking_code'] ?? ''), 0, 250),
             );
         }
 
         usort($events, fn (TrackEvent $a, TrackEvent $b) => strcmp($a->at, $b->at));
 
-        // The order's own status first; else the newest history step that we know.
-        $code = Arr::first([$data['tracking_code'] ?? null, $data['status_id'] ?? null, $data['status'] ?? null], fn ($v) => filled($v) && ShipmentStatus::normalize($this->key(), (string) $v) !== null)
-            ?? $data['tracking_code'] ?? $data['status'] ?? null;
+        // The order's own status first (tracking_code, then status_id; "FAILED TO PICKUP" comes with status null).
+        $code = Arr::first([$data['tracking_code'] ?? null, $data['status_id'] ?? null, $data['status'] ?? null], fn ($v) => filled($v) && is_scalar($v) && ShipmentStatus::normalize($this->key(), (string) $v) !== null)
+            ?? Arr::first([$data['tracking_code'] ?? null, $data['status'] ?? null], fn ($v) => filled($v) && is_scalar($v));
         $status = filled($code) ? ShipmentStatus::normalize($this->key(), (string) $code) : null;
 
-        if ($status === null) {
-            $last = collect($events)->reverse()->first(fn (TrackEvent $e) => $e->status !== null);
-            [$code, $status] = $last ? [$last->code, $last->status] : [$code, null];
+        // The newest history step we know, when it is further on than the order's status (the order's field can lag).
+        $last = collect($events)->reverse()->first(fn (TrackEvent $e) => $e->status !== null);
+
+        if ($last !== null && ($status === null || ShipmentStatus::rank($last->status) > ShipmentStatus::rank($status))) {
+            [$code, $status] = [$last->code, $last->status];
         }
 
         return new TrackResult($awb, $status, filled($code) ? (string) $code : null, $this->reason($data), $events, $events !== [] ? end($events)->at : null);

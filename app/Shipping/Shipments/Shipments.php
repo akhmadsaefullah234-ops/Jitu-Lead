@@ -378,8 +378,18 @@ class Shipments
     public function destination(CarrierProvider $provider, Lead $lead, ?string $chosen = null): array
     {
         $parts = (array) $lead->shipping_address_parts;
+
+        // Matched before (ProviderLocations: "pasti", from the address or an agent's earlier choice): no new search.
+        if (blank($chosen) && ($known = ProviderLocations::place($lead)) !== null) {
+            return [$known, ProviderLocations::candidates($lead) ?: [$known]];
+        }
+
         $area = implode(', ', array_filter([$parts['kelurahan'] ?? null, $parts['kecamatan'] ?? null, $parts['kota'] ?? null], fn ($v) => is_string($v) && trim($v) !== ''));
         $candidates = $provider->locations($parts['kode_pos'] ?? null, $area ?: null);
+
+        if (filled($chosen) && ! collect($candidates)->contains(fn (CarrierLocation $l) => $l->id === (string) $chosen)) {
+            $candidates = [...$candidates, ...ProviderLocations::candidates($lead)];
+        }
 
         if ($candidates === [] && filled($parts['kode_pos'] ?? null) && $area !== '') {
             $candidates = $provider->locations(null, $area);
@@ -1086,8 +1096,33 @@ class Shipments
             return;
         }
 
-        $eventAt = $result->at !== null ? Carbon::parse($result->at) : now();
-        $this->notices->statusChanged($shipment, $result->status, $eventAt);
+        $this->notices->statusChanged($shipment, $result->status, self::reachedAt($result));
+    }
+
+    /**
+     * When the parcel reached the result's status: the first step of the newest run of history steps with that
+     * status (a catch-up after a gap carries the whole journey; only the newest status is told, dated to when it
+     * happened). Without such a step: the newest step, else now.
+     */
+    public static function reachedAt(TrackResult $result): Carbon
+    {
+        $reached = null;
+
+        foreach ($result->events as $event) {
+            if ($event->status === null) {
+                continue;
+            }
+
+            if ($event->status === $result->status) {
+                $reached ??= $event->at;
+            } else {
+                $reached = null;
+            }
+        }
+
+        $at = $reached ?? $result->at;
+
+        return $at !== null ? Carbon::parse($at)->min(now()) : now();
     }
 
     // ---- Tracking numbers made elsewhere --------------------------------------------------------------------

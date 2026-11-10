@@ -41,13 +41,19 @@ use Throwable;
  *   in the Inbox), without a number introduction. A closed free window only leaves a note.
  * - delivery_failed also tells the lead's owner (bell and email) and puts "Perlu tindakan" on the chat;
  *   returning and returned never reach the buyer: a note and the owner is told. delivered moves the lead to
- *   Selesai through StageAutomation; returned does not cancel it, a person decides.
+ *   Selesai through StageAutomation; returned does not cancel it, a person decides. pickup_failed ("Gagal dijemput")
+ *   only tells staff.
+ * - A catch-up after a tracking gap tells only the newest status, and nothing that happened more than 24 hours
+ *   before it reached us (an open failed delivery excepted); an older message still waiting is dropped.
  */
 class StatusNotices
 {
     public const QUIET_FROM = 21;
 
     public const QUIET_UNTIL = 5;
+
+    /** A status change older than this (hours) when it reaches us is not told to the buyer (except an open failed delivery). */
+    public const STALE_HOURS = 24;
 
     public const VARIABLES = ['nama', 'produk', 'resi', 'kurir', 'link_lacak', 'alasan', 'cod_total', 'agensi'];
 
@@ -105,6 +111,13 @@ class StatusNotices
             return;
         }
 
+        if ($status === ShipmentStatus::PICKUP_FAILED) {
+            $lead->activities()->create(['type' => 'note', 'body' => 'Kurir gagal menjemput paket'.($shipment->status_reason ? ' ('.$shipment->status_reason.')' : '').'. Atur ulang penjemputan di dashboard penyedia atau antar ke agen. Pembeli tidak diberi tahu otomatis.']);
+            $this->alertStaff($shipment, 'Paket gagal dijemput, perlu tindakan', $shipment->status_reason ?: 'Kurir belum menjemput paket.', mail: true);
+
+            return;
+        }
+
         if ($status === ShipmentStatus::DELIVERY_FAILED) {
             $this->alertStaff($shipment, 'Paket gagal diantar, perlu tindakan', $shipment->status_reason ?: 'Kurir belum berhasil mengantar paket.', mail: true);
         }
@@ -118,6 +131,19 @@ class StatusNotices
         if ($setting === null || ! $setting['enabled']) {
             return;
         }
+
+        // Caught up long after it happened (tracking was down): the buyer is not told old news. A failed delivery
+        // still open is told, since the buyer can still help the courier.
+        if ($at->lt(now()->subHours(self::STALE_HOURS)) && ! ($status === ShipmentStatus::DELIVERY_FAILED && $shipment->needsAction())) {
+            $lead->activities()->create(['type' => 'note', 'body' => 'Pesan status "'.$label.'" tidak dikirim ke pembeli: perubahannya sudah lebih dari '.self::STALE_HOURS.' jam lalu ('.$at->copy()->timezone($this->timezone())->format('d M H:i').').']);
+
+            return;
+        }
+
+        // One message, the newest: older ones still waiting (quiet hours) are dropped.
+        ShipmentNotice::query()->where('shipment_id', $shipment->getKey())->where('state', ShipmentNotice::PENDING)->where('status', '!=', $status)->get()
+            ->filter(fn (ShipmentNotice $n) => ShipmentStatus::rank($n->status) <= ShipmentStatus::rank($status))
+            ->each(fn (ShipmentNotice $n) => $n->forceFill(['state' => ShipmentNotice::SKIPPED, 'note' => 'Status kiriman sudah berlanjut'])->save());
 
         try {
             $notice = ShipmentNotice::query()->create([

@@ -38,7 +38,9 @@ class ListShipments extends ListRecords
     /** The provider's balance when it is below the agency's warning level, or parcels are waiting for it. */
     public function getSubheading(): ?HtmlString
     {
-        return ShipmentResource::balanceWarning();
+        $parts = array_filter([ShipmentResource::trackingWarning(), ShipmentResource::balanceWarning()]);
+
+        return $parts === [] ? null : new HtmlString(implode(' ', array_map('strval', $parts)));
     }
 
     public function getDefaultActiveTab(): string|int|null

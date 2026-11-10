@@ -6,6 +6,7 @@ use App\Automation\StageAutomation;
 use App\Filament\Concerns\NotifiesShipmentFormErrors;
 use App\Filament\Pages\Inbox;
 use App\Filament\Resources\Leads\LeadResource;
+use App\Filament\Support\LocationActions;
 use App\Filament\Support\ShipmentActions;
 use App\Models\Shipment;
 use Filament\Actions\Action;
@@ -43,6 +44,7 @@ class EditLead extends EditRecord
             ShipmentActions::cancelAuto(fn () => $this->record),
             ActionGroup::make([
                 ShipmentActions::create(fn () => $this->record),
+                LocationActions::choose(fn () => $this->record),
                 ShipmentActions::retry(fn () => $this->record),
                 ShipmentActions::link(fn () => $this->record),
                 ShipmentActions::track(fn () => $this->record),

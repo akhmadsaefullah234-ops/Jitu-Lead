@@ -10,6 +10,9 @@ final class ShipmentStatus
 {
     public const AWB_CREATED = 'awb_created';
 
+    /** The courier came (or should have) and did not collect the parcel ("FAILED TO PICKUP"): someone has to act. */
+    public const PICKUP_FAILED = 'pickup_failed';
+
     public const PICKED_UP = 'picked_up';
 
     public const IN_TRANSIT = 'in_transit';
@@ -28,6 +31,7 @@ final class ShipmentStatus
 
     public const LABELS = [
         self::AWB_CREATED => 'Resi terbit',
+        self::PICKUP_FAILED => 'Gagal dijemput',
         self::PICKED_UP => 'Diambil kurir',
         self::IN_TRANSIT => 'Dalam perjalanan',
         self::OUT_FOR_DELIVERY => 'Sedang diantar',
@@ -38,13 +42,19 @@ final class ShipmentStatus
         self::CANCELLED => 'Dibatalkan',
     ];
 
-    /** Out for delivery and a failed attempt share a rank: a courier tries again after failing. */
+    /**
+     * Out for delivery and a failed attempt share a rank: a courier tries again after failing. A failed pickup
+     * shares the rank of a waiting parcel for the same reason (the pickup is booked again).
+     */
     private const RANK = [
-        self::AWB_CREATED => 10, self::PICKED_UP => 20, self::IN_TRANSIT => 30, self::OUT_FOR_DELIVERY => 40, self::DELIVERY_FAILED => 40,
+        self::AWB_CREATED => 10, self::PICKUP_FAILED => 10, self::PICKED_UP => 20, self::IN_TRANSIT => 30, self::OUT_FOR_DELIVERY => 40, self::DELIVERY_FAILED => 40,
         self::DELIVERED => 60, self::RETURNING => 70, self::RETURNED => 80, self::CANCELLED => 90,
     ];
 
     public const FINAL = [self::DELIVERED, self::RETURNED, self::CANCELLED];
+
+    /** Statuses a person has to act on (Pengiriman > Perlu tindakan). */
+    public const ACTION = [self::PICKUP_FAILED, self::DELIVERY_FAILED, self::RETURNING, self::RETURNED];
 
     /** Our status for a provider's code, or null when the code is not known. */
     public static function normalize(string $provider, ?string $code): ?string

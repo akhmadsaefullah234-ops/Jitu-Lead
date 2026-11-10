@@ -43,6 +43,8 @@
             .jl-col { display: none; }
             .jl-col.is-current { display: flex; }
         }
+        .jl-tag { display: inline-block; border: 1px solid var(--gray-200); border-radius: .375rem; padding: 0 .35rem; font-size: .6875rem; color: var(--gray-700); font-variant-numeric: tabular-nums; }
+        .dark .jl-tag { border-color: var(--gray-700); color: var(--gray-300); }
         .jl-empty { font-size: .75rem; color: var(--gray-500); padding: .5rem .25rem; }
         .dark .jl-chip, .dark .jl-input { background: var(--gray-900); border-color: var(--gray-700); color: var(--gray-100); }
         .dark .jl-chip[aria-pressed="true"] { background: white; color: var(--gray-950); border-color: white; }
@@ -71,33 +73,33 @@
 
     <div class="jl-period">{{ $this->periodForm }}</div>
 
-    <div x-data="{ stage: {{ collect($columns)->first()['stage']->id ?? 'null' }} }">
+    <div x-data="{ stage: @js(collect($columns)->first()['key'] ?? null) }">
     <div class="jl-tabs" role="tablist" aria-label="Tahap">
         @foreach ($columns as $column)
-            <button type="button" class="jl-chip" role="tab" wire:key="tab-{{ $column['stage']->id }}"
-                x-bind:aria-pressed="stage === {{ $column['stage']->id }} ? 'true' : 'false'" x-bind:aria-selected="stage === {{ $column['stage']->id }}"
-                x-on:click="stage = {{ $column['stage']->id }}">{{ $column['stage']->name }} <span>{{ $column['count'] }}</span></button>
+            <button type="button" class="jl-chip" role="tab" wire:key="tab-{{ $column['key'] }}"
+                x-bind:aria-pressed="stage === @js($column['key']) ? 'true' : 'false'" x-bind:aria-selected="stage === @js($column['key'])"
+                x-on:click="stage = @js($column['key'])">{{ $column['name'] }} <span>{{ $column['count'] }}</span></button>
         @endforeach
     </div>
     <div class="jl-board" x-data="{ dragging: null }">
         @foreach ($columns as $column)
             @php($stage = $column['stage'])
             <section
-                wire:key="stage-{{ $stage->id }}"
+                wire:key="stage-{{ $column['key'] }}"
                 class="jl-col {{ $stage->isOpen() ? '' : 'is-closed' }}"
-                aria-label="{{ $stage->name }}"
+                aria-label="{{ $column['name'] }}"
                 x-data="{ over: false }"
-                :class="{ 'is-over': over, 'is-current': stage === {{ $stage->id }} }"
+                :class="{ 'is-over': over, 'is-current': stage === @js($column['key']) }"
                 x-on:dragover.prevent="over = true"
                 x-on:dragleave="if (! $el.contains($event.relatedTarget)) over = false"
-                x-on:drop.prevent="over = false; if (dragging) $wire.moveLead(dragging, {{ $stage->id }})"
+                x-on:drop.prevent="over = false; if (dragging) $wire.moveLead(dragging, {{ $stage->id }}, @js($column['part']))"
             >
                 <div class="jl-colhead">
-                    <div class="t">{{ $stage->name }}<span>{{ $column['count'] }}</span></div>
+                    <div class="t">{{ $column['name'] }}<span>{{ $column['count'] }}</span></div>
                     @if ($column['value'] > 0)
                         <div class="v">Rp {{ number_format($column['value'], 0, ',', '.') }}</div>
                     @endif
-                    <div class="a">{{ $stage->default_action ?? 'Wajib pilih alasan' }}</div>
+                    <div class="a">{{ $column['hint'] }}</div>
                 </div>
                 <div class="jl-cards">
                     @forelse ($column['leads'] as $lead)
@@ -124,6 +126,27 @@
                                     <span class="sub">· {{ $lead->owner->name }}</span>
                                 @endif
                             </div>
+                            @if ($pack = $packing[$lead->id] ?? null)
+                                <div class="row jl-ship">
+                                    @if ($pack->phase === \App\Shipping\Shipments\PackingState::NEEDS_RESI)
+                                        <x-filament::badge :color="$pack->held ? 'danger' : 'warning'" size="sm">Perlu resi</x-filament::badge>
+                                        @if ($pack->reason)<span class="sub">{{ $pack->reason }}</span>@endif
+                                    @elseif ($pack->phase === \App\Shipping\Shipments\PackingState::READY)
+                                        <x-filament::badge color="info" size="sm">Siap cetak</x-filament::badge>
+                                    @else
+                                        <x-filament::badge :color="in_array($pack->phase, ['delivery_failed', 'pickup_failed'], true) ? 'danger' : 'gray'" size="sm">{{ $pack->courierStatus() }}</x-filament::badge>
+                                        @if (($days = $pack->daysSincePrinted()) !== null)<span class="sub">{{ $days === 0 ? 'dicetak hari ini' : $days.' hari sejak dicetak' }}</span>@endif
+                                    @endif
+                                </div>
+                                @if ($pack->shipment?->awb || $lead->tracking_number || $lead->courier || $lead->payment_type)
+                                    <div class="row">
+                                        @if ($awb = $pack->shipment?->awb ?? $lead->tracking_number)<span class="jl-tag" title="Nomor resi">{{ $awb }}</span>@endif
+                                        @if ($courier = $pack->shipment?->courier ?? $lead->courier)<span class="jl-tag">{{ $courier }}</span>@endif
+                                        @php($cod = $pack->shipment ? $pack->shipment->is_cod : ($lead->payment_type === 'cod' ? true : ($lead->payment_type ? false : null)))
+                                        @if ($cod !== null)<span class="jl-tag">{{ $cod ? 'COD' : 'Transfer' }}</span>@endif
+                                    </div>
+                                @endif
+                            @endif
                             @if ($lead->next_action)
                                 <div class="next">
                                     <span>{{ $lead->next_action }}</span>

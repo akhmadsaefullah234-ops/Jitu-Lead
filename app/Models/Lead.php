@@ -7,6 +7,7 @@ use App\Enums\Need;
 use App\Enums\PaymentMethod;
 use App\Enums\StageType;
 use App\Models\Concerns\BelongsToTenant;
+use App\Shipping\Shipments\ProviderLocations;
 use App\Support\CurrentTenant;
 use App\Support\PhoneNumber;
 use App\Tracking\PipelineConversions;
@@ -31,6 +32,8 @@ use LogicException;
     'variant', 'quantity', 'shipping_address', 'courier', 'shipping_cost', 'shipping_cost_source', 'order_items',
     'payment_type', 'payment_type_source', 'payment_proof_at', 'paid_at', 'shipping_province', 'tracking_number', 'shipped_at', 'shipping_address_parts',
     'ad_id', 'ad_title', 'ad_url', 'product_source', 'auto_shipment_at', 'auto_shipment_state', 'auto_shipment_note',
+    'provider_location_state', 'provider_location_id', 'provider_location_label', 'provider_location_candidates', 'provider_location_note',
+    'provider_location_key', 'provider_location_at',
 ])]
 class Lead extends Model
 {
@@ -87,6 +90,12 @@ class Lead extends Model
 
         // A stage the agency mapped to an ad conversion, or becoming Hot, is reported to Meta/TikTok.
         static::saved(fn (Lead $lead) => PipelineConversions::saved($lead));
+        // An address with a postal code or kelurahan is matched once to the shipping provider's place (queued).
+        static::saved(function (Lead $lead) {
+            if ($lead->wasChanged('shipping_address_parts') || ($lead->wasRecentlyCreated && filled($lead->shipping_address_parts))) {
+                ProviderLocations::queue($lead);
+            }
+        });
         // The same moments put WhatsApp Business labels on the chat (trial, off by default).
         static::saved(fn (Lead $lead) => BusinessLabels::saved($lead));
     }
@@ -108,6 +117,8 @@ class Lead extends Model
             'paid_at' => 'datetime',
             'auto_shipment_at' => 'datetime',
             'shipped_at' => 'datetime',
+            'provider_location_candidates' => 'array',
+            'provider_location_at' => 'datetime',
         ];
     }
 

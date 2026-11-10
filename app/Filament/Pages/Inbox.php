@@ -14,6 +14,7 @@ use App\Enums\MessageStatus;
 use App\Filament\Concerns\NotifiesShipmentFormErrors;
 use App\Filament\Resources\Leads\LeadResource;
 use App\Filament\Resources\MediaAssets\MediaAssetResource;
+use App\Filament\Support\LocationActions;
 use App\Filament\Support\ShipmentActions;
 use App\Media\Library;
 use App\Models\AiDraft;
@@ -21,13 +22,12 @@ use App\Models\Lead;
 use App\Models\MediaAsset;
 use App\Models\MediaFolder;
 use App\Models\Property;
-use App\Models\Shipment;
 use App\Models\WaConversation;
 use App\Models\WaTemplate;
 use App\Regions\RegionDirectory;
-use App\Shipping\Carriers\ShipmentStatus;
 use App\Shipping\CourierChoice;
 use App\Shipping\Regions;
+use App\Shipping\Shipments\InboxShipping;
 use App\Shipping\Shipping;
 use App\Shipping\ShippingQuote;
 use App\Shipping\ShippingSettings;
@@ -73,6 +73,10 @@ class Inbox extends Page
 
     public string $draft = '';
 
+    /** Chat list filter: "all", or "ship" (Perlu tindakan pengiriman). */
+    #[Url(as: 'f')]
+    public string $filter = 'all';
+
     /** The AI suggestion the agent loaded into the box, marked as used once sent. */
     public ?int $usedAiDraft = null;
 
@@ -109,6 +113,13 @@ class Inbox extends Page
         return WaConversation::query()->firstOrCreate(['lead_id' => $lead->getKey()], ['phone' => $lead->phone]);
     }
 
+    /** "Buat resi" on a chat's chip: opens the chat and the Buat resi form. */
+    public function ship(int $leadId): void
+    {
+        $this->open($leadId);
+        $this->mountAction('createShipment');
+    }
+
     public function open(int $leadId): void
     {
         $this->leadId = $leadId;
@@ -126,20 +137,25 @@ class Inbox extends Page
 
         $decision = $conversation ? app(RouteSelector::class)->decide($conversation) : null;
 
-        $conversations = static::visibleConversations()->with(['lead:id,name,phone,owner_id,property_id', 'lead.owner:id,name', 'lead.property:id,name', 'latestMessage'])->orderByDesc('last_message_at')->limit(100)->get();
+        $shipping = ShipmentActions::available();
+        // Every chat with a shipping step waiting (also beyond the 100 newest): the filter and its count.
+        $waiting = $shipping ? InboxShipping::needingAction(LeadResource::getEloquentQuery()) : [];
+        $conversations = static::visibleConversations()
+            ->when($this->filter === 'ship', fn ($q) => $q->whereIn('lead_id', array_keys($waiting) ?: [0]))
+            ->with(['lead', 'lead.owner:id,name', 'lead.property:id,name', 'latestMessage'])->orderByDesc('last_message_at')->limit(100)->get();
+        $chips = $shipping ? InboxShipping::chips($conversations->pluck('lead')->push($conversation?->lead)) : [];
+        // An OK order whose buyer wrote again after the OK comes first: the chat is not buried.
+        $conversations = $conversations->sortBy(fn (WaConversation $c) => [
+            ($ok = $chips[$c->lead_id]['ok_at'] ?? null) !== null && $c->last_inbound_at !== null && $c->last_inbound_at->gt($ok) ? 0 : 1,
+            -($c->last_message_at?->getTimestamp() ?? 0),
+        ])->values();
 
         return [
             'seesAll' => app(CurrentTenant::class)->roleOf(auth()->user())?->seesAllLeads() ?? false,
             'conversations' => $conversations,
-            // A parcel the courier could not deliver: a red "Perlu tindakan" on the chat.
-            'needsAction' => ShipmentActions::available()
-                ? Shipment::query()->whereIn('lead_id', $conversations->pluck('lead_id')->push($conversation?->lead_id)->filter())
-                    ->where('status', ShipmentStatus::DELIVERY_FAILED)->whereNull('final_at')->pluck('lead_id')->flip()->all()
-                : [],
-            // A label still to print (Pengiriman menu): an amber "Belum dicetak" on the chat.
-            'unprinted' => ShipmentActions::available()
-                ? Shipment::query()->tab('unprinted')->whereIn('lead_id', $conversations->pluck('lead_id')->push($conversation?->lead_id)->filter())->pluck('lead_id')->flip()->all()
-                : [],
+            'shippingChips' => $chips,
+            'shippingWaiting' => count($waiting),
+            'offersShipping' => $shipping,
             'conversation' => $conversation?->load(['lead.stage', 'lead.owner', 'lead.property', 'messages.channel']),
             'decision' => $decision,
             'aiMode' => $conversation?->lastInboundChannel?->ai_mode,
@@ -435,6 +451,11 @@ class Inbox extends Page
     public function createShipmentAction(): Action
     {
         return ShipmentActions::create(fn () => $this->current()?->lead)->size('sm');
+    }
+
+    public function chooseLocationAction(): Action
+    {
+        return LocationActions::choose(fn () => $this->current()?->lead)->size('sm');
     }
 
     public function linkShipmentAction(): Action

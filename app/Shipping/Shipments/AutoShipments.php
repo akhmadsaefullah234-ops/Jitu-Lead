@@ -273,6 +273,13 @@ class AutoShipments
             $problems[] = 'dicurigai spam';
         }
 
+        // Resi otomatis runs only for a place matched "pasti" (or not matched yet: then the postal code decides).
+        if (ProviderLocations::key($lead) === $lead->provider_location_key && $lead->provider_location_state === ProviderLocations::MULTIPLE) {
+            $problems[] = 'kelurahan tujuan perlu dipilih';
+        } elseif (ProviderLocations::key($lead) === $lead->provider_location_key && $lead->provider_location_state === ProviderLocations::NONE) {
+            $problems[] = 'lokasi tujuan tidak ketemu di '.config('carriers.labels.'.$this->shipments->account()?->provider, 'penyedia');
+        }
+
         return array_values(array_unique($problems));
     }
 
@@ -292,7 +299,10 @@ class AutoShipments
         $postal = (string) (((array) $lead->shipping_address_parts)['kode_pos'] ?? '');
 
         // The place was matched by its kelurahan (and kecamatan) name among the postal code's places; certain only when its own postal code is the buyer's.
-        if ($draft->destination->postalCode !== $postal) {
+        // A place matched "pasti" before (ProviderLocations, or an agent's choice for this kelurahan) is certain.
+        $matched = ProviderLocations::place($lead)?->id === $draft->destination->id;
+
+        if (! $matched && $draft->destination->postalCode !== $postal) {
             $problems[] = 'kelurahan tujuan di '.config('carriers.labels.'.$this->shipments->account()?->provider, 'penyedia').' tidak pasti cocok dengan kode pos';
         }
 
@@ -317,6 +327,8 @@ class AutoShipments
             $part('kelurahan'), $part('kecamatan'), $part('kota'), $part('provinsi'), $part('kode_pos'),
             '(leads.property_id is not null or leads.order_items is not null)',
             "(leads.custom_fields->'spam') is null",
+            // The provider's place: "pasti", or not matched yet (ProviderLocations).
+            "coalesce(leads.provider_location_state, 'exact') = 'exact'",
         ]).')';
 
         $active = fn ($q) => $q->whereIn('state', [Shipment::PENDING, Shipment::ORDERED, Shipment::SHIPPED]);
