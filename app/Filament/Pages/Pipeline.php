@@ -11,7 +11,9 @@ use App\Models\Lead;
 use App\Models\LostReason;
 use App\Models\Property;
 use App\Models\Stage;
+use App\Filament\Resources\Shipments\ShipmentResource;
 use App\Reports\DashboardData;
+use App\Shipping\Shipments\PackingState;
 use App\Support\CurrentTenant;
 use App\Support\Industry;
 use App\Support\Period;
@@ -20,7 +22,10 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\ToggleButtons;
+use App\Enums\Role;
+use App\Models\Shipment;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Utilities\Get;
@@ -122,23 +127,49 @@ class Pipeline extends Page
             ->groupBy('stage_id');
         // A shop counts what its orders are worth; a property agency the agreed deal values.
         $retail = Industry::current()->key === 'retail';
+        $valueSql = $retail ? DashboardData::ORDER_VALUE : 'coalesce(leads.deal_value, 0)';
         $values = $this->filteredLeads()->reorder()->groupBy('leads.stage_id')
-            ->selectRaw('leads.stage_id, sum('.($retail ? DashboardData::ORDER_VALUE : 'coalesce(leads.deal_value, 0)').') as v')->pluck('v', 'stage_id');
+            ->selectRaw('leads.stage_id, sum('.$valueSql.') as v')->pluck('v', 'stage_id');
+        $split = $this->splitStageId();
+        $columns = collect();
+
+        foreach ($stages as $stage) {
+            $inStage = $leads->get($stage->getKey(), collect());
+
+            if ($stage->getKey() !== $split) {
+                $columns->push([
+                    'key' => (string) $stage->getKey(), 'stage' => $stage, 'part' => null, 'name' => $stage->name, 'hint' => $stage->default_action ?? 'Wajib pilih alasan',
+                    'leads' => $this->sortCards($inStage)->take(self::CARDS_PER_STAGE), 'count' => $inStage->count(), 'value' => (int) ($values[$stage->getKey()] ?? 0),
+                ]);
+
+                continue;
+            }
+
+            // "Dikemas & dikirim" as two columns read from each lead's parcel; the lead's stage stays the same.
+            $states = PackingState::forLeads($inStage);
+            $perLead = $inStage->isEmpty() ? collect() : $this->filteredLeads()->reorder()->where('leads.stage_id', $stage->getKey())->groupBy('leads.id')
+                ->selectRaw('leads.id, sum('.$valueSql.') as v')->pluck('v', 'id');
+
+            foreach (['packed' => ['Dikemas', 'Order OK, resi belum dicetak'], 'sent' => ['Dikirim', 'Resi sudah dicetak']] as $part => [$name, $hint]) {
+                $cards = $inStage->filter(fn (Lead $l) => $states[$l->getKey()]->packed() === ($part === 'packed'));
+                $columns->push([
+                    'key' => $stage->getKey().'-'.$part, 'stage' => $stage, 'part' => $part, 'name' => $name, 'hint' => $hint,
+                    'leads' => $this->sortCards($cards)->take(self::CARDS_PER_STAGE), 'count' => $cards->count(),
+                    'value' => (int) $cards->sum(fn (Lead $l) => (int) ($perLead[$l->getKey()] ?? 0)),
+                ]);
+            }
+        }
 
         return [
-            'columns' => $stages->map(fn (Stage $stage) => [
-                'stage' => $stage,
-                'leads' => $this->sortCards($leads->get($stage->getKey(), collect()))->take(self::CARDS_PER_STAGE),
-                'count' => $leads->get($stage->getKey(), collect())->count(),
-                'value' => (int) ($values[$stage->getKey()] ?? 0),
-            ]),
+            'columns' => $columns,
+            'packing' => $split !== null ? PackingState::forLeads($leads->get($split, collect())) : [],
             'period' => $this->period(),
             'filters' => [
                 'all' => 'Semua',
                 'hot' => 'Hot',
                 'today' => 'Aksi hari ini',
                 'late' => 'Terlambat',
-            ],
+            ] + ($this->shipsParcels() ? ['resi' => 'Perlu resi', 'print' => 'Siap cetak', 'failed' => 'Gagal antar'] : []),
             'agents' => $this->canSeeTeam()
                 ? app(CurrentTenant::class)->get()->activeUsers()->orderBy('name')->pluck('name', 'users.id')
                 : collect(),
@@ -146,12 +177,47 @@ class Pipeline extends Page
         ];
     }
 
-    public function moveLead(int $leadId, int $stageId): void
+    /** The stage shown as Dikemas and Dikirim, when the agency has it on (Pengaturan Pipeline). */
+    public function splitStageId(): ?int
+    {
+        return PackingState::splitEnabled(app(CurrentTenant::class)->get()) ? PackingState::stageId() : null;
+    }
+
+    /** A shop that books parcels through a provider: the shipping filters are offered. */
+    private function shipsParcels(): bool
+    {
+        return Industry::current()->key === 'retail' && \App\Models\CarrierAccount::query()->exists();
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('settings')->label('Pengaturan Pipeline')->icon(Heroicon::OutlinedCog6Tooth)->color('gray')
+                ->visible(fn () => Industry::current()->key === 'retail' && app(CurrentTenant::class)->roleOf(auth()->user()) === Role::Admin)
+                ->fillForm(fn () => ['split_shipping' => PackingState::splitEnabled(app(CurrentTenant::class)->get())])
+                ->schema([
+                    Toggle::make('split_shipping')->label('Pisahkan Dikemas dan Dikirim')
+                        ->helperText('Tahap "Dikemas & dikirim" tampil sebagai dua kolom menurut resi: Dikemas (belum ada resi atau belum dicetak) dan Dikirim (resi sudah dicetak). Tahap lead tidak berubah.'),
+                ])
+                ->modalSubmitActionLabel('Simpan')
+                ->action(function (array $data) {
+                    $tenant = app(CurrentTenant::class)->get();
+                    $tenant->forceFill(['pipeline_settings' => array_merge((array) $tenant->pipeline_settings, ['split_shipping' => (bool) ($data['split_shipping'] ?? false)])])->save();
+                    Notification::make()->success()->title('Pengaturan Pipeline disimpan')->send();
+                }),
+        ];
+    }
+
+    public function moveLead(int $leadId, int $stageId, ?string $part = null): void
     {
         $lead = $this->findLead($leadId);
         $stage = Stage::query()->findOrFail($stageId);
 
         if ($stage->is($lead->stage)) {
+            if ($part !== null && $stage->getKey() === $this->splitStageId()) {
+                $this->markPrinted($lead, $part === 'sent');
+            }
+
             return;
         }
 
@@ -238,6 +304,31 @@ class Pipeline extends Page
             ->send();
     }
 
+    /** Dikemas -> Dikirim marks the label printed (like "Tandai sudah dicetak"); back again unmarks it. */
+    private function markPrinted(Lead $lead, bool $printed): void
+    {
+        $state = PackingState::of($lead, Shipment::query()->where('lead_id', $lead->getKey())->where('state', '!=', Shipment::CANCELLED)->latest('id')->first());
+
+        if ($state->packed() === ! $printed) {
+            return;
+        }
+
+        if ($state->shipment === null || ! $state->shipment->printable()) {
+            Notification::make()->warning()->title($printed ? 'Belum bisa ditandai dicetak' : 'Tanda cetak tidak bisa dibatalkan')
+                ->body($printed ? 'Lead ini belum punya resi'.($state->reason ? ' ('.$state->reason.')' : '').'. Buat resi dulu.' : 'Resi ini tidak dicetak dari JITU LEAD.')->send();
+
+            return;
+        }
+
+        if (! $printed && $state->phase !== PackingState::PRINTED) {
+            Notification::make()->warning()->title('Paket sudah diambil kurir')->body('Status kurir: '.$state->courierStatus().'. Tanda cetak tidak dibatalkan.')->send();
+
+            return;
+        }
+
+        ShipmentResource::mark(collect([$state->shipment]), $printed);
+    }
+
     private function findLead(int $id): Lead
     {
         $lead = LeadResource::getEloquentQuery()->with('stage')->findOrFail($id);
@@ -269,7 +360,18 @@ class Pipeline extends Page
             })
             ->when($this->filter === 'hot', fn (Builder $q) => $q->where('interest', Interest::Hot))
             ->when($this->filter === 'today', fn (Builder $q) => $q->open()->whereBetween('next_action_due_at', [now(), now()->endOfDay()]))
-            ->when($this->filter === 'late', fn (Builder $q) => $q->overdue());
+            ->when($this->filter === 'late', fn (Builder $q) => $q->overdue())
+            ->when(in_array($this->filter, ['resi', 'print'], true), fn (Builder $q) => $q->whereIn('leads.id', $this->packingIds($this->filter === 'resi' ? PackingState::NEEDS_RESI : PackingState::READY)))
+            ->when($this->filter === 'failed', fn (Builder $q) => $q->whereIn('leads.id', Shipment::query()->tab('action')->whereIn('status', [\App\Shipping\Carriers\ShipmentStatus::DELIVERY_FAILED])->select('lead_id')));
+    }
+
+    /** Leads of the shipping stage in one packing phase (filters "Perlu resi" and "Siap cetak"). */
+    private function packingIds(string $phase): array
+    {
+        $stage = PackingState::stageId();
+        $leads = $stage ? LeadResource::getEloquentQuery()->where('leads.stage_id', $stage)->get() : collect();
+
+        return collect(PackingState::forLeads($leads))->filter(fn (PackingState $s) => $s->phase === $phase)->keys()->all();
     }
 
     /**
