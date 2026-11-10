@@ -115,6 +115,25 @@ class ShipmentResource extends Resource
             .implode(' ', $parts).' Isi saldo di dashboard '.e($label).'.</span>');
     }
 
+    /** Red: parcels on their way whose status has not been refreshed for 6 hours (tracking failed or missed). */
+    public static function trackingWarning(): ?HtmlString
+    {
+        $stale = static::getEloquentQuery()->trackingStale();
+        $count = (clone $stale)->count();
+
+        if ($count === 0) {
+            return null;
+        }
+
+        $tz = app(CurrentTenant::class)->get()?->timezone ?: 'Asia/Jakarta';
+        $oldest = (clone $stale)->get(['tracked_at', 'awb_notified_at', 'updated_at'])->map(fn (Shipment $s) => $s->lastUpdatedAt())->filter()->min();
+
+        return new HtmlString('<span style="display:inline-block;padding:.4rem .7rem;border-radius:.5rem;background:#fee2e2;color:#991b1b;font-size:.875rem">⚠ <strong>'
+            .$count.' kiriman belum diperbarui lebih dari '.Shipment::STALE_TRACKING_HOURS.' jam</strong>'
+            .($oldest ? ' (terlama: '.e($oldest->timezone($tz)->format('d M H:i')).')' : '').'. Pelacakan otomatis mungkin gagal; statusnya bisa sudah berubah di '
+            .e(config('carriers.labels.'.(CarrierAccount::query()->value('provider') ?? 'everpro'), 'penyedia')).'.</span>');
+    }
+
     /** Ongkir, biaya COD, dana cair and cashback as the provider reports them (only what is known). */
     public static function fees(Shipment $r): array
     {
@@ -152,12 +171,16 @@ class ShipmentResource extends Resource
                     ->state(fn (Shipment $r) => self::status($r))
                     ->color(fn (Shipment $r) => match (true) {
                         $r->waitingBalance() => 'warning',
-                        $r->state === Shipment::FAILED, in_array($r->status, [ShipmentStatus::DELIVERY_FAILED, ShipmentStatus::RETURNING, ShipmentStatus::RETURNED], true) => 'danger',
+                        $r->state === Shipment::FAILED, in_array($r->status, ShipmentStatus::ACTION, true) => 'danger',
                         $r->status === ShipmentStatus::DELIVERED => 'success',
                         $r->state === Shipment::CANCELLED => 'gray',
                         default => 'info',
                     })
                     ->description(fn (Shipment $r) => $r->waitingBalance() ? $r->error : (($t = self::statusTime($r)) ? $t->timezone($tz())->format('d M H:i') : null)),
+                TextColumn::make('tracked_at')->label('Terakhir diperbarui')->toggleable()
+                    ->state(fn (Shipment $r) => $r->state === Shipment::SHIPPED && filled($r->awb) ? $r->lastUpdatedAt()?->timezone($tz())->format('d M H:i') : null)->placeholder('-')
+                    ->color(fn (Shipment $r) => $r->trackingStale() ? 'danger' : null)->weight(fn (Shipment $r) => $r->trackingStale() ? 'bold' : null)
+                    ->description(fn (Shipment $r) => $r->trackingStale() ? '⚠ Lebih dari '.Shipment::STALE_TRACKING_HOURS.' jam tanpa pembaruan' : null),
                 TextColumn::make('pickup')->label('Jadwal jemput')->toggleable()
                     ->state(fn (Shipment $r) => ($at = data_get($r->request, 'pickup_time')) ? Carbon::parse($at)->timezone($tz())->format('d M H:i')
                         : (data_get($r->request, 'shipment_type') === 'DROP' ? 'Antar ke agen' : null))->placeholder('-'),

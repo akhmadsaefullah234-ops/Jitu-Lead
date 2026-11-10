@@ -20,7 +20,7 @@ class ShipmentTimeline
 
         $tz = app(CurrentTenant::class)->get()?->timezone ?: 'Asia/Jakarta';
         $color = match ($shipment->status) {
-            ShipmentStatus::DELIVERED => '#166534', ShipmentStatus::DELIVERY_FAILED, ShipmentStatus::RETURNING, ShipmentStatus::RETURNED => '#9f1239', default => 'var(--gray-700)',
+            ShipmentStatus::DELIVERED => '#166534', ShipmentStatus::PICKUP_FAILED, ShipmentStatus::DELIVERY_FAILED, ShipmentStatus::RETURNING, ShipmentStatus::RETURNED => '#9f1239', default => 'var(--gray-700)',
         };
         $head = '<div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:center"><strong style="color:'.$color.'">'.e(ShipmentStatus::label($shipment->status)).'</strong>'
             .($shipment->waitingBalance() ? '<span style="padding:.05rem .5rem;border-radius:999px;background:#fef3c7;color:#92400e;font-size:.75rem;font-weight:600">Menunggu saldo</span>' : '')

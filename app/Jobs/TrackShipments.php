@@ -25,6 +25,12 @@ class TrackShipments implements ShouldQueue
 
     public int $timeout = 300;
 
+    /** After handle(): parcels whose status came back, and numbers the provider refused (for shipping:track --now). */
+    public int $tracked = 0;
+
+    /** @var list<string> */
+    public array $rejected = [];
+
     public function __construct(public int $tenantId) {}
 
     public function handle(CurrentTenant $current): void
@@ -48,25 +54,36 @@ class TrackShipments implements ShouldQueue
                 }
             }
 
-            $open = $all->reject(fn (Shipment $s) => $s->manual())->keyBy(fn (Shipment $s) => $s->awb);
+            // Keyed "awb:<number>": a digits-only number would otherwise become an integer key and go out as a JSON number.
+            $open = [];
 
-            if ($open->isEmpty()) {
+            foreach ($all->reject(fn (Shipment $s) => $s->manual()) as $shipment) {
+                $open['awb:'.strtoupper((string) $shipment->awb)] ??= $shipment;
+            }
+
+            if ($open === []) {
                 return;
             }
+
+            $provider = Carriers::for($tenant);
+            $awbs = array_values(array_map(fn (Shipment $s) => (string) $s->awb, $open));
 
             try {
-                $results = Carriers::for($tenant)->trackMany($open->keys()->all());
+                $results = $provider->trackMany($awbs);
             } catch (CarrierException $e) {
-                Log::warning('Shipment tracking failed', ['tenant' => $tenant->getKey(), 'reason' => $e->getMessage()]);
+                Log::warning('Shipment tracking failed', ['tenant' => $tenant->getKey(), 'reason' => $e->getMessage(), 'parcels' => count($awbs)]);
 
                 return;
             }
 
-            foreach ($results as $awb => $result) {
-                if ($shipment = $open->get($awb)) {
+            foreach ($results as $result) {
+                if ($shipment = $open['awb:'.strtoupper((string) $result->awb)] ?? null) {
                     $shipments->apply($shipment, $result);
+                    $this->tracked++;
                 }
             }
+
+            $this->rejected = array_map('strval', array_keys((array) ($provider->rejected ?? [])));
         });
     }
 }

@@ -106,7 +106,7 @@ class Shipment extends Model
 
     public function cancellable(): bool
     {
-        return $this->source !== self::MANUAL && ((in_array($this->state, [self::ORDERED, self::SHIPPED], true) && in_array($this->status, [null, ShipmentStatus::AWB_CREATED], true))
+        return $this->source !== self::MANUAL && ((in_array($this->state, [self::ORDERED, self::SHIPPED], true) && in_array($this->status, [null, ShipmentStatus::AWB_CREATED, ShipmentStatus::PICKUP_FAILED], true))
             || ($this->state === self::PENDING && $this->waitingBalance()));
     }
 
@@ -123,7 +123,34 @@ class Shipment extends Model
 
     public function needsAction(): bool
     {
-        return $this->status === ShipmentStatus::DELIVERY_FAILED && $this->final_at === null;
+        return in_array($this->status, [ShipmentStatus::DELIVERY_FAILED, ShipmentStatus::PICKUP_FAILED], true) && $this->final_at === null;
+    }
+
+    /** A parcel on its way whose status has not been refreshed for this many hours is flagged red (tracking missed). */
+    public const STALE_TRACKING_HOURS = 6;
+
+    /** When the parcel's status was last read from the provider (tracking or callback), else when it got its number. */
+    public function lastUpdatedAt(): ?\Illuminate\Support\Carbon
+    {
+        return $this->tracked_at ?? $this->awb_notified_at ?? ($this->awb ? $this->updated_at : null);
+    }
+
+    /** Still on its way, tracked by us, and not refreshed for STALE_TRACKING_HOURS. */
+    public function trackingStale(): bool
+    {
+        $at = $this->lastUpdatedAt();
+
+        return $this->state === self::SHIPPED && $this->final_at === null && filled($this->awb) && $this->untrackable_at === null
+            && $at !== null && $at->lt(now()->subHours(self::STALE_TRACKING_HOURS));
+    }
+
+    /** Parcels on their way not refreshed for STALE_TRACKING_HOURS. */
+    public function scopeTrackingStale(Builder $query): Builder
+    {
+        $cut = now()->subHours(self::STALE_TRACKING_HOURS);
+
+        return $query->where('state', self::SHIPPED)->whereNull('final_at')->whereNotNull('awb')->whereNull('untrackable_at')
+            ->whereRaw('coalesce(tracked_at, awb_notified_at, updated_at) < ?', [$cut]);
     }
 
     /** Tabs of the Pengiriman menu. */
@@ -154,7 +181,7 @@ class Shipment extends Model
             'balance' => $query->whereIn('state', [self::PENDING, self::ORDERED])->whereNotNull('balance_wait_at')->whereNull('awb'),
             'action' => $query->whereNull('balance_wait_at')->where(fn ($q) => $q->where('state', self::FAILED)
                 ->orWhere(fn ($q) => $q->whereIn('state', [self::PENDING, self::ORDERED])->whereNotNull('error'))
-                ->orWhereIn('status', [ShipmentStatus::DELIVERY_FAILED, ShipmentStatus::RETURNING, ShipmentStatus::RETURNED])
+                ->orWhereIn('status', ShipmentStatus::ACTION)
                 ->orWhere(fn ($q) => $q->where('state', self::SHIPPED)->whereNull('printed_at')->whereNull('label_path')->whereNotNull('label_failed_at'))),
             'done' => $query->where('status', ShipmentStatus::DELIVERED),
             'cancelled' => $query->where('state', self::CANCELLED),

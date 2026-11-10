@@ -1086,8 +1086,33 @@ class Shipments
             return;
         }
 
-        $eventAt = $result->at !== null ? Carbon::parse($result->at) : now();
-        $this->notices->statusChanged($shipment, $result->status, $eventAt);
+        $this->notices->statusChanged($shipment, $result->status, self::reachedAt($result));
+    }
+
+    /**
+     * When the parcel reached the result's status: the first step of the newest run of history steps with that
+     * status (a catch-up after a gap carries the whole journey; only the newest status is told, dated to when it
+     * happened). Without such a step: the newest step, else now.
+     */
+    public static function reachedAt(TrackResult $result): Carbon
+    {
+        $reached = null;
+
+        foreach ($result->events as $event) {
+            if ($event->status === null) {
+                continue;
+            }
+
+            if ($event->status === $result->status) {
+                $reached ??= $event->at;
+            } else {
+                $reached = null;
+            }
+        }
+
+        $at = $reached ?? $result->at;
+
+        return $at !== null ? Carbon::parse($at)->min(now()) : now();
     }
 
     // ---- Tracking numbers made elsewhere --------------------------------------------------------------------
