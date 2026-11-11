@@ -14,7 +14,6 @@ use App\Enums\MessageStatus;
 use App\Filament\Concerns\NotifiesShipmentFormErrors;
 use App\Filament\Resources\Leads\LeadResource;
 use App\Filament\Resources\MediaAssets\MediaAssetResource;
-use App\Filament\Support\LocationActions;
 use App\Filament\Support\ShipmentActions;
 use App\Media\Library;
 use App\Models\AiDraft;
@@ -73,7 +72,7 @@ class Inbox extends Page
 
     public string $draft = '';
 
-    /** Chat list filter: "all", or "ship" (Perlu tindakan pengiriman). */
+    /** Chat list filter: "all", or "closing" (OK orders nobody has handled yet, App\Shipping\Shipments\InboxShipping). */
     #[Url(as: 'f')]
     public string $filter = 'all';
 
@@ -113,13 +112,6 @@ class Inbox extends Page
         return WaConversation::query()->firstOrCreate(['lead_id' => $lead->getKey()], ['phone' => $lead->phone]);
     }
 
-    /** "Buat resi" on a chat's chip: opens the chat and the Buat resi form. */
-    public function ship(int $leadId): void
-    {
-        $this->open($leadId);
-        $this->mountAction('createShipment');
-    }
-
     public function open(int $leadId): void
     {
         $this->leadId = $leadId;
@@ -138,24 +130,21 @@ class Inbox extends Page
         $decision = $conversation ? app(RouteSelector::class)->decide($conversation) : null;
 
         $shipping = ShipmentActions::available();
-        // Every chat with a shipping step waiting (also beyond the 100 newest): the filter and its count.
-        $waiting = $shipping ? InboxShipping::needingAction(LeadResource::getEloquentQuery()) : [];
+        // Every unhandled closing (also beyond the 100 newest): the filter "Closing (N)", hidden while there is none.
+        $waiting = $shipping ? InboxShipping::waiting(LeadResource::getEloquentQuery()) : [];
+        $filter = $this->filter === 'closing' && $waiting !== [] ? 'closing' : 'all';
+        // Newest message first, always: the OK mark never reorders the list.
         $conversations = static::visibleConversations()
-            ->when($this->filter === 'ship', fn ($q) => $q->whereIn('lead_id', array_keys($waiting) ?: [0]))
+            ->when($filter === 'closing', fn ($q) => $q->whereIn('lead_id', array_keys($waiting)))
             ->with(['lead', 'lead.owner:id,name', 'lead.property:id,name', 'latestMessage'])->orderByDesc('last_message_at')->limit(100)->get();
-        $chips = $shipping ? InboxShipping::chips($conversations->pluck('lead')->push($conversation?->lead)) : [];
-        // An OK order whose buyer wrote again after the OK comes first: the chat is not buried.
-        $conversations = $conversations->sortBy(fn (WaConversation $c) => [
-            ($ok = $chips[$c->lead_id]['ok_at'] ?? null) !== null && $c->last_inbound_at !== null && $c->last_inbound_at->gt($ok) ? 0 : 1,
-            -($c->last_message_at?->getTimestamp() ?? 0),
-        ])->values();
+        $closings = $shipping ? InboxShipping::closings($conversations->pluck('lead')->push($conversation?->lead)) : [];
 
         return [
             'seesAll' => app(CurrentTenant::class)->roleOf(auth()->user())?->seesAllLeads() ?? false,
             'conversations' => $conversations,
-            'shippingChips' => $chips,
-            'shippingWaiting' => count($waiting),
-            'offersShipping' => $shipping,
+            'activeFilter' => $filter,
+            'closings' => $closings,
+            'closingCount' => count($waiting),
             'conversation' => $conversation?->load(['lead.stage', 'lead.owner', 'lead.property', 'messages.channel']),
             'decision' => $decision,
             'aiMode' => $conversation?->lastInboundChannel?->ai_mode,
@@ -451,11 +440,6 @@ class Inbox extends Page
     public function createShipmentAction(): Action
     {
         return ShipmentActions::create(fn () => $this->current()?->lead)->size('sm');
-    }
-
-    public function chooseLocationAction(): Action
-    {
-        return LocationActions::choose(fn () => $this->current()?->lead)->size('sm');
     }
 
     public function linkShipmentAction(): Action

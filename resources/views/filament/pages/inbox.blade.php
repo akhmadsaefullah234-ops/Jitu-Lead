@@ -58,14 +58,14 @@
         .wa-filter { display: flex; flex-wrap: wrap; gap: .35rem; padding: .5rem .6rem; border-bottom: 1px solid var(--gray-200); }
         .wa-fchip { display: inline-flex; align-items: center; gap: .3rem; border: 1px solid var(--gray-300); border-radius: 9999px; padding: .2rem .65rem; font-size: .75rem; font-weight: 500; background: transparent; }
         .wa-fchip[aria-pressed="true"] { background: var(--primary-600); border-color: var(--primary-600); color: white; }
-        .wa-ship { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; margin-top: .25rem; font-size: .7rem; }
-        .wa-ship-why { color: var(--gray-600); }
-        .wa-ship-btn { border: 1px solid var(--primary-600); color: var(--primary-700); border-radius: 9999px; padding: 0 .5rem; font-size: .7rem; font-weight: 600; cursor: pointer; background: transparent; }
-        .wa-sc { border-radius: 9999px; padding: 0 .45rem; font-size: .7rem; font-weight: 600; white-space: nowrap; }
-        .wa-sc.danger { background: #ffe4e6; color: #9f1239; } .wa-sc.warning { background: #fef3c7; color: #92400e; } .wa-sc.info { background: #dbeafe; color: #1e40af; }
-        .wa-sc.gray { background: var(--gray-100); color: var(--gray-700); } .wa-sc.success { background: #dcfce7; color: #166534; }
-        .dark .wa-filter { border-color: var(--gray-700); } .dark .wa-ship-why { color: var(--gray-400); } .dark .wa-ship-btn { color: var(--primary-300); border-color: var(--primary-400); }
-        .dark .wa-sc.gray { background: var(--gray-800); color: var(--gray-200); }
+        .dark .wa-filter { border-color: var(--gray-700); }
+        /* The one shipping mark on a chat card: an unhandled closing. Same size as the unread badge, so the card keeps its height. */
+        .wa-item .n .wa-tags { display: inline-flex; gap: .25rem; align-items: center; flex: none; }
+        .wa-ok { background: #15803d; color: white; border-radius: 9999px; padding: 0 .45rem; font-size: .7rem; font-weight: 700; }
+        .dark .wa-ok { background: #22c55e; color: #052e16; }
+        .wa-okline { color: #166534; font-weight: 600; }
+        .wa-okline span { color: var(--gray-600); font-weight: 400; }
+        .dark .wa-okline { color: #86efac; } .dark .wa-okline span { color: var(--gray-400); }
         .wa-print { background: #fef3c7; color: #92400e; font-weight: 600; border-radius: 9999px; padding: 0 .45rem; font-size: .7rem; white-space: nowrap; }
         .wa-spam { background: #fef3c7; color: #92400e; border-radius: 9999px; padding: 0 .45rem; font-size: .7rem; white-space: nowrap; }
         .wa-badge { background: var(--primary-600); color: white; border-radius: 9999px; padding: 0 .45rem; font-size: .7rem; }
@@ -117,26 +117,19 @@
 
     <div class="wa {{ $conversation ? 'wa--open' : '' }}" wire:poll.10s>
         <aside class="wa-list" aria-label="Daftar percakapan">
-            @if ($offersShipping)
+            @if ($closingCount > 0)
                 <div class="wa-filter" role="group" aria-label="Saring chat">
-                    <button type="button" class="wa-fchip" aria-pressed="{{ $filter === 'all' ? 'true' : 'false' }}" wire:click="$set('filter', 'all')">Semua</button>
-                    <button type="button" class="wa-fchip" aria-pressed="{{ $filter === 'ship' ? 'true' : 'false' }}" wire:click="$set('filter', 'ship')">Perlu tindakan pengiriman @if ($shippingWaiting)<span class="wa-badge">{{ $shippingWaiting }}</span>@endif</button>
+                    <button type="button" class="wa-fchip" aria-pressed="{{ $activeFilter === 'all' ? 'true' : 'false' }}" wire:click="$set('filter', 'all')">Semua</button>
+                    <button type="button" class="wa-fchip" aria-pressed="{{ $activeFilter === 'closing' ? 'true' : 'false' }}" wire:click="$set('filter', 'closing')">Closing ({{ $closingCount }})</button>
                 </div>
             @endif
             @forelse ($conversations as $c)
                 <button type="button" class="wa-item" wire:key="c-{{ $c->id }}" wire:click="open({{ $c->lead_id }})" aria-current="{{ $conversation?->id === $c->id ? 'true' : 'false' }}">
-                    <div class="n"><span>{{ $c->lead->name }}</span>@if ($c->lead->spamReasons())<span class="wa-spam" title="{{ implode(', ', $c->lead->spamReasons()) }}">Dicurigai spam</span>@endif@if ($c->unread_count)<span class="wa-badge">{{ $c->unread_count }}</span>@endif</div>
+                    <div class="n"><span>{{ $c->lead->name }}</span>@if ($c->lead->spamReasons())<span class="wa-spam" title="{{ implode(', ', $c->lead->spamReasons()) }}">Dicurigai spam</span>@endif@if (isset($closings[$c->lead_id]) || $c->unread_count)<span class="wa-tags">@if (isset($closings[$c->lead_id]))<span class="wa-ok" title="{{ \App\Shipping\Shipments\InboxShipping::TOOLTIP }}" aria-label="{{ \App\Shipping\Shipments\InboxShipping::TOOLTIP }}">OK</span>@endif @if ($c->unread_count)<span class="wa-badge">{{ $c->unread_count }}</span>@endif</span>@endif</div>
                     <div class="p">{{ $c->lead->phone }} · {{ $c->last_message_at?->diffForHumans() }}</div>
                     @if ($preview = \App\WhatsApp\MessageContent::preview($c->latestMessage))<div class="p wa-last" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ $c->latestMessage->direction === 'out' ? 'Anda: ' : '' }}{{ $preview }}</div>@endif
                     @if ($seesAll && $c->lead->owner)<div class="p">Agen: {{ $c->lead->owner->name }}</div>@endif
                     @if ($c->lead->property)<span class="wa-prod" title="Produk yang ditanyakan">{{ $c->lead->property->name }}</span>@endif
-                    @if ($ship = $shippingChips[$c->lead_id] ?? null)
-                        <div class="wa-ship">
-                            @include('filament.pages.partials.inbox-ship-chip', ['ship' => $ship])
-                            @if ($ship['reason'])<span class="wa-ship-why">{{ $ship['reason'] }}</span>@endif
-                            @if ($ship['create'])<span role="button" tabindex="0" class="wa-ship-btn" wire:click.stop="ship({{ $c->lead_id }})" x-on:keydown.enter.stop="$wire.ship({{ $c->lead_id }})">Buat resi</span>@endif
-                        </div>
-                    @endif
                 </button>
             @empty
                 <div class="wa-empty">Belum ada percakapan. Buka chat dari kartu lead, atau tunggu pesan masuk.</div>
@@ -163,15 +156,10 @@
                             <x-filament::icon icon="heroicon-m-chevron-down" class="chev" />
                         </button>
                         @if ($lead->stage)<span class="wa-chip" title="Tahap: {{ $lead->stage->name }}">{{ $lead->stage->name }}</span>@endif
-                        @if ($ship = $shippingChips[$lead->id] ?? null)
-                            @include('filament.pages.partials.inbox-ship-chip', ['ship' => $ship])
-                            @if ($ship['create'])<button type="button" class="wa-ship-btn" wire:click="mountAction('createShipment')">Buat resi</button>@endif
-                            @if (in_array($lead->provider_location_state, ['multiple', 'none'], true))<button type="button" class="wa-ship-btn" wire:click="mountAction('chooseLocation')">Pilih lokasi</button>@endif
-                        @endif
                         @if ($lead->auto_shipment_state === \App\Shipping\Shipments\AutoShipments::SCHEDULED)<span class="wa-print">{{ $this->cancelAutoShipmentAction }}</span>@endif
                         <span class="wa-chip-prod">{{ $this->productAction }}</span>
                         <span class="wa-more">
-                            <x-filament-actions::group :actions="[$this->paymentReceivedAction, $this->createShipmentAction, $this->chooseLocationAction, $this->retryShipmentAction, $this->linkShipmentAction, $this->trackShipmentAction, $this->shipmentLabelAction, $this->cancelShipmentAction, $this->trackingAction, $this->shippingQuoteAction, $this->openLeadAction]"
+                            <x-filament-actions::group :actions="[$this->paymentReceivedAction, $this->createShipmentAction, $this->retryShipmentAction, $this->linkShipmentAction, $this->trackShipmentAction, $this->shipmentLabelAction, $this->cancelShipmentAction, $this->trackingAction, $this->shippingQuoteAction, $this->openLeadAction]"
                                 icon="heroicon-m-ellipsis-horizontal" label="Aksi lain" tooltip="Aksi lain" color="gray" :icon-button="true" dropdown-placement="bottom-end" />
                         </span>
                     </div>
@@ -181,6 +169,9 @@
                             <div>Dari iklan:
                                 @if ($lead->ad_url && preg_match('#^https?://#i', $lead->ad_url))<a href="{{ $lead->ad_url }}" target="_blank" rel="noopener nofollow">{{ $lead->ad_title ?: 'ID '.$lead->ad_id }}</a>@else{{ $lead->ad_title ?: 'ID '.$lead->ad_id }}@endif
                             </div>
+                        @endif
+                        @if ($ok = $closings[$lead->id] ?? null)
+                            <div class="wa-okline">{{ $ok['label'] }}@if ($ok['reason'])<span> · {{ $ok['reason'] }}</span>@endif</div>
                         @endif
                         @if ($lead->payment_proof_at && ! $lead->paid_at)
                             <div><span class="wa-proof">Bukti transfer masuk, perlu dicek</span></div>

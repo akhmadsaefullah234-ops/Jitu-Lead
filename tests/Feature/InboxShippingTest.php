@@ -20,8 +20,8 @@ use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
- * Inbox chips for OK orders: "Order OK · perlu resi" (with why resi otomatis did not run and "Buat resi"),
- * "siap cetak", "Dicetak · menunggu jemput", "Gagal antar", "OK/closing"; the filter "Perlu tindakan pengiriman".
+ * The Inbox's one shipping mark: a green "OK" on the card of a closing nobody has handled yet, the line with the
+ * reason in the lead details, and the filter "Closing (N)".
  */
 class InboxShippingTest extends TestCase
 {
@@ -72,59 +72,117 @@ class InboxShippingTest extends TestCase
         ]));
     }
 
-    public function test_ok_orders_get_a_chip_with_why_the_resi_was_not_made(): void
+    /** The rendered card of $lead in the chat list. */
+    private function card(string $html, Lead $lead): string
+    {
+        $conversation = $this->inShop(fn () => WaConversation::query()->where('lead_id', $lead->id)->value('id'));
+        $this->assertSame(1, preg_match('#<button[^>]*wire:key="c-'.$conversation.'".*?</button>#s', $html, $m), 'Card of '.$lead->name);
+
+        return $m[0];
+    }
+
+    public function test_only_unhandled_closings_get_one_green_ok_mark(): void
     {
         $none = $this->chat('Perlu Resi', extra: ['auto_shipment_state' => AutoShipments::SKIPPED, 'auto_shipment_note' => 'Resi otomatis tidak dibuat: cara bayar kosong. Buat resi manual.']);
         $this->parcel($ready = $this->chat('Siap Cetak'));
         $this->parcel($printed = $this->chat('Sudah Cetak'), ['printed_at' => now()]);
         $this->parcel($failed = $this->chat('Gagal Antar'), ['printed_at' => now(), 'status' => ShipmentStatus::DELIVERY_FAILED, 'status_reason' => 'Rumah kosong']);
-        $this->parcel($moving = $this->chat('Jalan'), ['printed_at' => now(), 'status' => ShipmentStatus::IN_TRANSIT]);
         $this->parcel($done = $this->chat('Selesai', RetailStages::DONE), ['printed_at' => now(), 'status' => ShipmentStatus::DELIVERED, 'final_at' => now()]);
-        $closing = $this->chat('Sudah Konfirmasi', RetailStages::ORDER);
-        $this->inShop(fn () => $closing->activities()->create(['type' => 'order_recorded', 'body' => 'Pesanan dicatat']));
+        $confirmed = $this->chat('Sudah Konfirmasi', RetailStages::ORDER);
+        $this->inShop(fn () => $confirmed->activities()->create(['type' => 'order_recorded', 'body' => 'Pesanan dicatat']));
         $plain = $this->chat('Tanya Saja', RetailStages::INQUIRY);
 
-        $chips = $this->inShop(fn () => InboxShipping::chips(Lead::query()->get()));
+        $closings = $this->inShop(fn () => InboxShipping::closings(Lead::query()->get()));
 
-        $this->assertSame('Order OK · perlu resi', $chips[$none->id]['label']);
-        $this->assertSame('cara bayar kosong', $chips[$none->id]['reason']);
-        $this->assertTrue($chips[$none->id]['create']);
-        $this->assertSame('danger', $chips[$none->id]['color']);
-        $this->assertSame('Order OK · siap cetak', $chips[$ready->id]['label']);
-        $this->assertSame('Dicetak · menunggu jemput', $chips[$printed->id]['label']);
-        $this->assertSame(['Gagal antar', 'danger', 'Rumah kosong'], [$chips[$failed->id]['label'], $chips[$failed->id]['color'], $chips[$failed->id]['reason']]);
-        $this->assertSame('OK/closing', $chips[$closing->id]['label']);
-        $this->assertArrayNotHasKey($moving->id, $chips, 'On its way: no chip.');
-        $this->assertArrayNotHasKey($done->id, $chips);
-        $this->assertArrayNotHasKey($plain->id, $chips);
+        $this->assertEqualsCanonicalizing([$none->id, $ready->id, $confirmed->id], array_keys($closings));
+        $this->assertSame(['OK · belum ada resi', 'cara bayar kosong'], [$closings[$none->id]['label'], $closings[$none->id]['reason']]);
+        $this->assertSame('OK · resi belum dicetak', $closings[$ready->id]['label']);
+        $this->assertSame('OK · belum ada resi', $closings[$confirmed->id]['label']);
 
-        Livewire::test(Inbox::class)->assertSee('Order OK · perlu resi')->assertSee('cara bayar kosong')->assertSee('Buat resi')
-            ->assertSee('Gagal antar')->assertSee('OK/closing')->assertSee('Perlu tindakan pengiriman');
-        Livewire::test(Inbox::class, ['leadId' => $none->id])->assertSee('Order OK · perlu resi');
+        $html = Livewire::test(Inbox::class)->html();
+
+        foreach ([$none, $ready, $confirmed] as $lead) {
+            $card = $this->card($html, $lead);
+            $this->assertSame(1, substr_count($card, 'class="wa-ok"'), $lead->name);
+            $this->assertStringContainsString('title="'.InboxShipping::TOOLTIP.'"', $card);
+            $this->assertStringNotContainsString('belum ada resi', $card, 'No reason line on the card.');
+            $this->assertStringNotContainsString('Buat resi', $card);
+        }
+
+        foreach ([$printed, $failed, $done, $plain] as $lead) {
+            $this->assertStringNotContainsString('wa-ok', $this->card($html, $lead), $lead->name);
+        }
+
+        // The other shipping marks and the location buttons are gone from the Inbox.
+        foreach (['Dicetak · menunggu jemput', 'Gagal dijemput', 'Gagal antar', 'perlu dipilih', 'Lokasi pasti', 'Pilih lokasi', 'Perlu tindakan pengiriman', 'cara bayar kosong'] as $gone) {
+            $this->assertStringNotContainsString($gone, $html, $gone);
+        }
     }
 
-    public function test_the_shipping_filter_counts_and_puts_ok_chats_with_new_messages_first(): void
+    public function test_the_ok_mark_does_not_make_the_card_taller(): void
     {
-        // Wrote after the OK (stage entered 3 hours ago), but its chat is older than the others.
-        $waiting = $this->chat('Menunggu', wroteAt: '-2 hours');
-        $this->parcel($ready = $this->chat('Siap Cetak', wroteAt: '-5 hours'));
+        $ok = $this->chat('Perlu Resi');
+        $plain = $this->chat('Tanya Saja', RetailStages::INQUIRY);
+        $html = Livewire::test(Inbox::class)->html();
+
+        // Same rows: the mark sits in the name row next to the unread badge.
+        $rows = fn (string $card) => substr_count($card, '<div');
+        $this->assertSame($rows($this->card($html, $plain)), $rows($this->card($html, $ok)));
+        $this->assertMatchesRegularExpression('#<div class="n">.*?class="wa-ok".*?</div>#s', $this->card($html, $ok));
+    }
+
+    public function test_the_lead_details_show_the_ok_line_and_why(): void
+    {
+        $lead = $this->chat('Perlu Resi', extra: ['auto_shipment_state' => AutoShipments::SKIPPED, 'auto_shipment_note' => 'Resi otomatis tidak dibuat: cara bayar kosong. Buat resi manual.']);
+
+        Livewire::test(Inbox::class, ['leadId' => $lead->id])
+            ->assertSeeHtml('class="wa-okline"')->assertSee('OK · belum ada resi')->assertSee('cara bayar kosong')
+            ->assertDontSee('Pilih lokasi');
+    }
+
+    public function test_the_closing_filter_counts_right_and_keeps_the_newest_first(): void
+    {
+        $this->chat('Lama', wroteAt: '-5 hours');
+        $this->parcel($this->chat('Siap Cetak', wroteAt: '-3 hours'));
+        $this->parcel($this->chat('Sudah Cetak', wroteAt: '-2 hours'), ['printed_at' => now()]);
         $this->chat('Tanya Saja', RetailStages::INQUIRY, wroteAt: '-1 minute');
-        $this->chat('Lain', RetailStages::INQUIRY, wroteAt: '-10 minutes');
 
         $all = Livewire::test(Inbox::class);
-        $order = $all->viewData('conversations')->pluck('lead.name')->all();
-        $this->assertSame('Menunggu', $order[0], implode(', ', $order));
-        $this->assertSame(2, $all->viewData('shippingWaiting'));
-        $this->assertSame('Siap Cetak', end($order), 'Wrote before the OK: in its usual place.');
+        $this->assertSame(2, $all->viewData('closingCount'));
+        $all->assertSee('Closing (2)');
+        $this->assertSame(['Tanya Saja', 'Sudah Cetak', 'Siap Cetak', 'Lama'], $all->viewData('conversations')->pluck('lead.name')->all(), 'Newest message first.');
 
-        $filtered = Livewire::test(Inbox::class)->set('filter', 'ship');
-        $this->assertEqualsCanonicalizing(['Menunggu', 'Siap Cetak'], $filtered->viewData('conversations')->pluck('lead.name')->all());
+        $filtered = Livewire::test(Inbox::class)->set('filter', 'closing');
+        $this->assertSame(['Siap Cetak', 'Lama'], $filtered->viewData('conversations')->pluck('lead.name')->all());
     }
 
-    public function test_buat_resi_from_the_chip_opens_the_chat_and_the_form(): void
+    public function test_the_closing_filter_hides_when_there_is_none(): void
+    {
+        $this->chat('Tanya Saja', RetailStages::INQUIRY);
+
+        $page = Livewire::test(Inbox::class)->set('filter', 'closing');
+        $this->assertSame(0, $page->viewData('closingCount'));
+        $page->assertDontSee('Closing (')->assertDontSeeHtml('class="wa-filter"');
+        $this->assertCount(1, $page->viewData('conversations'), 'A stale "closing" filter falls back to all chats.');
+    }
+
+    public function test_the_mark_goes_once_the_label_is_printed(): void
+    {
+        $shipment = $this->parcel($lead = $this->chat('Siap Cetak'));
+        $this->assertStringContainsString('wa-ok', $this->card(Livewire::test(Inbox::class)->html(), $lead));
+
+        $this->inShop(fn () => $shipment->forceFill(['printed_at' => now()])->save());
+
+        $page = Livewire::test(Inbox::class);
+        $this->assertStringNotContainsString('wa-ok', $this->card($page->html(), $lead));
+        $this->assertSame(0, $page->viewData('closingCount'));
+    }
+
+    public function test_the_mark_goes_once_the_lead_leaves_the_stage(): void
     {
         $lead = $this->chat('Perlu Resi');
+        $this->inShop(fn () => $lead->forceFill(['stage_id' => $this->stageId(RetailStages::CANCELLED)])->save());
 
-        Livewire::test(Inbox::class)->call('ship', $lead->id)->assertSet('leadId', $lead->id)->assertActionMounted('createShipment');
+        $this->assertStringNotContainsString('wa-ok', $this->card(Livewire::test(Inbox::class)->html(), $lead));
     }
 }

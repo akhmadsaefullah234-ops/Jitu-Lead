@@ -696,6 +696,23 @@ class EverproShippingTest extends TestCase
         $this->assertSame('Pagar hijau', $order['receiver_address_note']);
     }
 
+    public function test_pilih_lokasi_is_inside_the_buat_resi_modal_when_the_place_is_unsure(): void
+    {
+        $this->configure();
+        $lead = $this->order('cod');
+        $this->inShop(fn () => $lead->forceFill(['provider_location_state' => 'multiple'])->saveQuietly());
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+        $pick = TestAction::make('pickLocation')->schemaComponent('locationActions', 'mountedActionSchema0');
+
+        Livewire::test(Inbox::class, ['leadId' => $lead->id])->assertDontSee('Pilih lokasi')
+            ->mountAction('createShipment')->assertActionVisible($pick);
+
+        $this->inShop(fn () => $lead->forceFill(['provider_location_state' => 'exact'])->saveQuietly());
+        // A certain place: nothing to pick (Filament does not even resolve a hidden schema action).
+        $page = Livewire::test(Inbox::class, ['leadId' => $lead->id])->mountAction('createShipment');
+        $this->assertNull($page->instance()->getSchema('mountedActionSchema0')->getAction('pickLocation', 'locationActions'));
+    }
+
     public function test_a_product_without_a_price_is_named_before_anything_is_sent(): void
     {
         $this->configure();
@@ -886,7 +903,8 @@ class EverproShippingTest extends TestCase
         $admin = $this->adminOf($this->shop);
         $this->assertSame(1, $admin->notifications()->count());
         $this->actingInTenant($admin, $this->shop);
-        Livewire::test(Inbox::class, ['leadId' => $lead->id])->assertSee('Perlu tindakan');
+        // Handled in Pengiriman (tab Perlu tindakan) and the Pipeline; the Inbox only marks unhandled closings.
+        Livewire::test(Inbox::class, ['leadId' => $lead->id])->assertDontSeeHtml('class="wa-ok"')->assertDontSee('Gagal antar');
 
         $this->courierSays('IN_PROCESS_RETURN');
         $this->courierSays('RETURNED');
@@ -1573,7 +1591,7 @@ class EverproShippingTest extends TestCase
         Storage::disk('local')->assertExists($shipment->label_path);
         $this->assertStringStartsWith(LabelStore::DIR.'/'.$this->shop->id.'/', $shipment->label_path);
         $this->assertSame([$shipment->id], $this->inShop(fn () => Shipment::query()->tab('unprinted')->pluck('id')->all()));
-        Livewire::test(Inbox::class, ['leadId' => $lead->id])->assertSee('Order OK · siap cetak')->assertDontSee('Resi otomatis dalam');
+        Livewire::test(Inbox::class, ['leadId' => $lead->id])->assertSee('OK · resi belum dicetak')->assertSeeHtml('class="wa-ok"')->assertDontSee('Resi otomatis dalam');
     }
 
     public function test_cancelled_during_the_wait_no_resi_is_made(): void

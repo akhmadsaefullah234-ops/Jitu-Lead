@@ -9,6 +9,7 @@ use App\Models\Shipment;
 use App\Models\Tenant;
 use App\Shipping\Carriers\Carriers;
 use App\Shipping\Carriers\ShipmentStatus;
+use App\Support\CurrentTenant;
 use Illuminate\Support\Collection;
 
 /**
@@ -90,7 +91,7 @@ final class PackingState
         };
     }
 
-    /** True when the chat needs someone for the parcel (Inbox filter "Perlu tindakan pengiriman"). */
+    /** True when the parcel needs someone (Pengiriman, tab Perlu tindakan). */
     public function needsAction(): bool
     {
         return in_array($this->phase, [self::NEEDS_RESI, self::READY, self::PRINTED, self::PICKUP_FAILED, self::DELIVERY_FAILED], true);
@@ -154,7 +155,7 @@ final class PackingState
     private static function whyNoResi(Lead $lead): array
     {
         if ($lead->auto_shipment_state === AutoShipments::SCHEDULED && $lead->auto_shipment_at !== null) {
-            return ['resi otomatis dijadwalkan '.$lead->auto_shipment_at->timezone(app(\App\Support\CurrentTenant::class)->get()?->timezone ?: 'Asia/Jakarta')->format('H:i'), false];
+            return ['resi otomatis dijadwalkan '.$lead->auto_shipment_at->timezone(app(CurrentTenant::class)->get()?->timezone ?: 'Asia/Jakarta')->format('H:i'), false];
         }
 
         if (in_array($lead->auto_shipment_state, [AutoShipments::SKIPPED, AutoShipments::FAILED, AutoShipments::WAITING_BALANCE], true) && filled($lead->auto_shipment_note)) {
