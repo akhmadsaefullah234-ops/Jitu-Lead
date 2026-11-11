@@ -36,32 +36,45 @@ class AnthropicClient
      * Lets the model call tools until it writes its answer. $run gets a tool's name and input and returns what the
      * tool found; that goes back to the model as the tool result. After $maxRounds tool rounds the answer is ''.
      *
+     * The trace says why an answer came back empty (stop_reason, tool rounds, the tools called, the last result, and
+     * any text the model wrote next to a tool call), so a handoff "terpotong atau ditolak" can be explained.
+     *
      * @param  list<array{role: 'user'|'assistant', content: string|array}>  $messages
      * @param  list<array{name: string, description: string, input_schema: array}>  $tools
      * @param  callable(string, array): array  $run
      * @param  list<string>  $stopTools  tools that end the answer at once (e.g. handing the chat to a person): their
      *                                   call is returned with no result and no text, and the model is not asked again
-     * @return array{text: string, calls: list<array{name: string, input: array, result: array}>}
+     * @return array{text: string, calls: list<array{name: string, input: array, result: array}>, trace: array{stop_reason: ?string, rounds: int, tools: list<string>, last_tool: ?string, last_result: ?array, tool_text: string}}
      */
     public function converse(string $system, array $messages, array $tools, callable $run, int $maxTokens = 1024, int $maxRounds = 4, array $stopTools = []): array
     {
         $calls = [];
+        // Text the model wrote in a round that also called a tool ("Pesanan kakak: ... Total Rp 240.000"), last first.
+        $toolText = '';
+        $trace = function (?string $stop, int $rounds) use (&$calls, &$toolText): array {
+            $last = $calls === [] ? null : $calls[array_key_last($calls)];
+
+            return ['stop_reason' => $stop, 'rounds' => $rounds, 'tools' => array_column($calls, 'name'),
+                'last_tool' => $last['name'] ?? null, 'last_result' => $last['result'] ?? null, 'tool_text' => $toolText];
+        };
 
         for ($round = 0; $round <= $maxRounds; $round++) {
             $response = $this->send($this->body($system, $messages, $maxTokens) + ['tools' => $tools, 'tool_choice' => ['type' => 'auto']]);
             $stop = $response['stop_reason'] ?? null;
 
             if ($stop !== 'tool_use') {
-                return ['text' => in_array($stop, ['max_tokens', 'refusal'], true) ? '' : $this->text($response), 'calls' => $calls];
+                return ['text' => in_array($stop, ['max_tokens', 'refusal'], true) ? '' : $this->text($response), 'calls' => $calls, 'trace' => $trace($stop, $round)];
             }
 
             foreach ($response['content'] as $block) {
                 if (($block['type'] ?? null) === 'tool_use' && in_array($block['name'] ?? null, $stopTools, true)) {
                     $calls[] = ['name' => (string) $block['name'], 'input' => is_array($block['input'] ?? null) ? $block['input'] : [], 'result' => []];
 
-                    return ['text' => '', 'calls' => $calls];
+                    return ['text' => '', 'calls' => $calls, 'trace' => $trace($stop, $round)];
                 }
             }
+
+            $toolText = $this->text($response) !== '' ? $this->text($response) : $toolText;
 
             // The assistant turn goes back exactly as it came; every result answers it in one user turn.
             $messages[] = ['role' => 'assistant', 'content' => $response['content']];
@@ -81,7 +94,7 @@ class AnthropicClient
             $messages[] = ['role' => 'user', 'content' => $results];
         }
 
-        return ['text' => '', 'calls' => $calls];
+        return ['text' => '', 'calls' => $calls, 'trace' => $trace('max_rounds', $maxRounds + 1)];
     }
 
     private function body(string $system, array $messages, int $maxTokens): array

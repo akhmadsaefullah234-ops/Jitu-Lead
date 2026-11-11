@@ -72,12 +72,15 @@ class AddressCheck
         return preg_match('/\b(?:dusun|dsn|dukuh|kampung|kp|lingkungan|lingk)\b/iu', $address) === 1;
     }
 
-    /** An address text names a house number, a block, a gang or a landmark ("dekat masjid", "patokan …"). */
+    /**
+     * An address text names a house number, a block, a gang or a landmark ("dekat masjid", "patokan …"), also one in
+     * brackets the way the order form writes it ("Jambumete, (Tugu Aemar), Desa Bangunjiwo").
+     */
     public static function textHasLandmark(string $address): bool
     {
         // RT/RW, postal codes and "Dusun 2" are numbers that are not a house number.
         $rest = preg_replace([self::RT_RW_PATTERN, '/\b\d{5}\b/', '/\b(?:dusun|dsn|dukuh|kampung|kp|rw|rt|lingkungan|lingk)\.?\s*\d{1,3}\b/iu'], ' ', $address);
 
-        return preg_match('/\b(?:no|nomor|nmr)\.?\s*\d+|\bblok\s*\w+|\b(?:dekat|depan|samping|sebelah|belakang|seberang|patokan|gang|gg|ancer)\b|\b\d{1,4}[a-z]?\b(?!\s*\d)/iu', $rest) === 1;
+        return preg_match('/\b(?:no|nomor|nmr)\.?\s*\d+|\bblok\s*\w+|\b(?:dekat|depan|samping|sebelah|belakang|seberang|patokan|gang|gg|ancer)\b|\b\d{1,4}[a-z]?\b(?!\s*\d)|\([^()]*\p{L}{3,}[^()]*\)/iu', $rest) === 1;
     }
 }

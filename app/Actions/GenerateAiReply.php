@@ -18,6 +18,7 @@ use App\Catalog\ProductMatcher;
 use App\Enums\AiMode;
 use App\Enums\MessageStatus;
 use App\Enums\Role;
+use App\Leads\ChatShippingDetails;
 use App\Models\AiDraft;
 use App\Models\Lead;
 use App\Models\MediaAsset;
@@ -33,6 +34,7 @@ use App\WhatsApp\RouteKind;
 use App\WhatsApp\RouteSelector;
 use App\WhatsApp\WhatsAppException;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -68,6 +70,14 @@ class GenerateAiReply
     public const SAFE_PAYMENT_REPLY = 'Terima kasih kak, pesanannya sudah kami catat. Mohon pilih cara bayar: COD atau transfer 😊 Admin akan melanjutkan.';
 
     public const INVENTED_NOTE = 'PERBAIKI: balasanmu sebelumnya menyebut angka ongkir atau total yang tidak berasal dari cek ongkir. Tulis ulang balasannya hanya dengan angka dari hasil cek ongkir di atas.';
+
+    /** The second try after an empty answer (cut off, refused, or only tool calls). */
+    public const EMPTY_NOTE = 'PERBAIKI: jawabanmu sebelumnya kosong atau terpotong. Tulis sekarang satu balasan singkat untuk pembeli (paling banyak 6 baris), tanpa memanggil tool lagi kecuali memang perlu.';
+
+    /** Tokens and tool rounds an answer may use: a form order (summary, cek_ongkir, catat_pesanan) needs room. */
+    public const MAX_TOKENS = 2048;
+
+    public const MAX_ROUNDS = 6;
 
     /** The second try after an answer spoke about its rules or reasoning. */
     public const INTERNAL_NOTE = 'PERBAIKI: balasanmu sebelumnya berisi penjelasan tentang aturan, pengetahuan, instruksi, atau tool. Tulis ulang hanya pesan untuk pembeli, tanpa penalaran, atau panggil tool '.ReplySignals::HANDOFF_TOOL.' bila memang tidak bisa dijawab.';
@@ -204,6 +214,16 @@ class GenerateAiReply
             $fallback = OrderConfirmation::fallback($result, (string) ($pending->input['pembayaran'] ?? ''), $missing, $tenant);
         }
 
+        // The message a form opens the chat with ("Halo admin, saya … mau order …"): the draft order is written from
+        // what the form saved, not left to the model, and the buyer gets the summary even when the model fails.
+        $formOrder = null;
+
+        if ($retail && $shop !== null && $lead !== null && $fallback === null && ! $ack && app(ChatShippingDetails::class)->fromForm($text)
+            && ($form = OrderConfirmation::fromForm($tenant, $lead, $shop, $products)) !== null) {
+            [$formOrder, $fallback, $formQuote] = $form;
+            $notes[] = OrderConfirmation::DRAFT_NOTE;
+        }
+
         // What the server can already price: the address the buyer filled in, or a city named on its own.
         if ($retail && $shop !== null && $lead !== null && ! $ack) {
             $found = LeadQuote::forMessage($tenant, $lead, $text, $products);
@@ -217,6 +237,11 @@ class GenerateAiReply
 
                 $quote = $found;
             }
+        }
+
+        // The prices the form summary used are the ones the answer is checked against.
+        if ($formOrder !== null && $quote === null) {
+            $quote = $formQuote;
         }
 
         if ($ack) {
@@ -239,10 +264,10 @@ class GenerateAiReply
             $shop?->forget();
 
             try {
-                ['text' => $answer, 'calls' => $calls] = $this->ai->converse(
+                ['text' => $answer, 'calls' => $calls, 'trace' => $trace] = $this->ai->converse(
                     implode("\n\n", array_filter([$base, $quote?->instructions(), ...$notes, $retry])), $history, $tools,
                     fn (string $name, array $input) => $shop?->run($name, $input) ?? ['status' => 'error', 'pesan' => 'Tool tidak dikenal.'],
-                    stopTools: [ReplySignals::HANDOFF_TOOL, ReplySignals::SILENT_TOOL],
+                    self::MAX_TOKENS, self::MAX_ROUNDS, stopTools: [ReplySignals::HANDOFF_TOOL, ReplySignals::SILENT_TOOL],
                 );
             } catch (Throwable $e) {
                 report($e);
@@ -258,24 +283,48 @@ class GenerateAiReply
                 $calls = [$confirmed, ...$calls];
             }
 
+            if ($formOrder !== null) {
+                $calls = [$formOrder, ...$calls];
+            }
+
+            // The summary was written next to the last tool call and nothing came after it: that summary is the answer.
+            if ($answer === '' && $trace['stop_reason'] === 'end_turn' && OrderConfirmation::summarises($trace['tool_text'])) {
+                $answer = $trace['tool_text'];
+            }
+
             if (ReplySignals::silent($calls) && $ack) {
-                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed, '');
+                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed ?? $formOrder, '');
+            }
+
+            // A form order the model wants a person for (a question in "Catatan"): the buyer still gets the summary.
+            if (($why = ReplySignals::handoff($calls)) !== null && $formOrder !== null) {
+                return $this->safeReplyAndHandoff($inbound, $mode, $shop, $formOrder, self::OUT_OF_KNOWLEDGE.': '.$why, $fallback);
             }
 
             if (($why = ReplySignals::handoff($calls)) !== null || ReplySignals::silent($calls)) {
-                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed, self::OUT_OF_KNOWLEDGE.($why ? ': '.$why : ''));
+                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed ?? $formOrder, self::OUT_OF_KNOWLEDGE.($why ? ': '.$why : ''));
             }
 
             if (ShopTools::needsAdmin($calls)) {
-                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed, 'Ongkir ke tujuan ini perlu dikonfirmasi admin');
+                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed ?? $formOrder, 'Ongkir ke tujuan ini perlu dikonfirmasi admin');
+            }
+
+            if ($answer === '') {
+                $this->traceEmpty($inbound, $trace, $attempt);
+
+                if (! $last) {
+                    $retry = self::EMPTY_NOTE;
+
+                    continue;
+                }
             }
 
             if ($answer === '' || ReplySignals::saysHandoff($answer)) {
-                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed, self::OUT_OF_KNOWLEDGE.', atau jawabannya tidak bisa dipercaya (terpotong atau ditolak)');
+                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed ?? $formOrder, self::OUT_OF_KNOWLEDGE.', atau jawabannya tidak bisa dipercaya (terpotong atau ditolak)');
             }
 
             if ($package !== null && PackageStatus::invents($answer, $package)) {
-                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed, 'AI hampir menyebut perkiraan sampai yang tidak ada di data kurir');
+                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed ?? $formOrder, 'AI hampir menyebut perkiraan sampai yang tidak ada di data kurir');
             }
 
             // A shop's AI only quotes shipping costs and totals a check returned: the check runs and the answer is
@@ -295,7 +344,7 @@ class GenerateAiReply
                     }
                 }
 
-                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed, 'AI menyebut ongkir atau total yang tidak berasal dari cek ongkir');
+                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed ?? $formOrder, 'AI menyebut ongkir atau total yang tidak berasal dari cek ongkir');
             }
 
             // Only a person who checked the account may tell a buyer the payment arrived (Otomatisasi tahap, rule 3).
@@ -307,7 +356,7 @@ class GenerateAiReply
                     continue;
                 }
 
-                return $this->safeReplyAndHandoff($inbound, $mode, $shop, $confirmed, 'AI hampir menyatakan pembayaran diterima; pembayaran harus dicek agen');
+                return $this->safeReplyAndHandoff($inbound, $mode, $shop, $confirmed ?? $formOrder, 'AI hampir menyatakan pembayaran diterima; pembayaran harus dicek agen');
             }
 
             // Names, places and orders come only from this buyer: another buyer's (from a learned example) is
@@ -323,13 +372,17 @@ class GenerateAiReply
                     continue;
                 }
 
-                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed, $foreign !== []
+                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed ?? $formOrder, $foreign !== []
                     ? 'AI hampir menyebut nama atau tempat yang bukan milik pembeli ini: '.implode(', ', $foreign)
                     : 'AI hampir menyebut pesanan sebelumnya yang tidak ada di data lead');
             }
 
             // The order a "yes" confirmed is the only one this answer records.
             $actions = $confirmed !== null ? [self::orderAction($confirmed)] : array_map(self::orderAction(...), $shop?->orders() ?? []);
+
+            if ($actions === [] && $formOrder !== null) {
+                $actions = [self::orderAction($formOrder)];
+            }
 
             // "PRODUK: 3": the buyer named or switched product; the lead follows once the answer is really sent.
             [$answer, $productIds] = $products->split($answer);
@@ -342,7 +395,7 @@ class GenerateAiReply
             $assetIds = $this->photosFor($assetIds, $library, $text, $answer, $lead, $confirmed !== null || collect($calls)->contains('name', ShopTools::RECORD), $shop?->orders() ?? []);
 
             if ($answer === '') {
-                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed, self::OUT_OF_KNOWLEDGE.', atau jawabannya tidak bisa dipercaya (terpotong atau ditolak)');
+                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed ?? $formOrder, self::OUT_OF_KNOWLEDGE.', atau jawabannya tidak bisa dipercaya (terpotong atau ditolak)');
             }
 
             // Reasoning about rules, knowledge or tools is never sent to a buyer.
@@ -353,7 +406,7 @@ class GenerateAiReply
                     continue;
                 }
 
-                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed, 'AI hampir mengirim teks internal (aturan atau penalaran) ke pembeli');
+                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed ?? $formOrder, 'AI hampir mengirim teks internal (aturan atau penalaran) ke pembeli');
             }
 
             break;
@@ -372,12 +425,13 @@ class GenerateAiReply
      * The answer cannot be trusted but the buyer must hear something: a fixed short reply goes out (the order the
      * chat confirmed is still recorded) and the chat is marked as handed to an agent.
      */
-    private function safeReplyAndHandoff(WaMessage $inbound, AiMode $mode, ?ShopTools $shop, ?array $confirmed, string $reason): AiDraft
+    private function safeReplyAndHandoff(WaMessage $inbound, AiMode $mode, ?ShopTools $shop, ?array $confirmed, string $reason, ?string $reply = null): AiDraft
     {
+        $reply ??= self::SAFE_PAYMENT_REPLY;
         $actions = $confirmed !== null ? [self::orderAction($confirmed)] : array_map(self::orderAction(...), $shop?->orders() ?? []);
         $draft = $mode === AiMode::Draft
-            ? $this->draft($inbound, self::SAFE_PAYMENT_REPLY, AiDraft::PENDING, $reason, true, [], $actions)
-            : $this->sendAutomatically($inbound, self::SAFE_PAYMENT_REPLY, [], $actions);
+            ? $this->draft($inbound, $reply, AiDraft::PENDING, $reason, true, [], $actions)
+            : $this->sendAutomatically($inbound, $reply, [], $actions);
         $inbound->conversation->lead->activities()->create(['type' => 'ai_handoff', 'body' => 'AI menyerahkan chat ke agen: '.$reason]);
 
         $draft->forceFill(['reason' => $draft->reason ?? $reason])->save();
@@ -400,6 +454,26 @@ class GenerateAiReply
         return $mode === AiMode::Draft
             ? $this->draft($inbound, $fallback, AiDraft::PENDING, null, true, [], $actions)
             : $this->sendAutomatically($inbound, $fallback, [], $actions);
+    }
+
+    /**
+     * Why the model gave nothing: logged and written on the lead (activity ai_trace), since the handoff reason alone
+     * ("terpotong atau ditolak") does not say whether it was cut off, refused, or ran out of tool rounds.
+     *
+     * @param  array{stop_reason: ?string, rounds: int, tools: list<string>, last_tool: ?string, last_result: ?array, tool_text: string}  $trace
+     */
+    private function traceEmpty(WaMessage $inbound, array $trace, int $attempt): void
+    {
+        $result = $trace['last_result'] === null ? null : mb_substr((string) json_encode($trace['last_result'], JSON_UNESCAPED_UNICODE), 0, 300);
+        $meta = ['message_id' => $inbound->getKey(), 'attempt' => $attempt + 1, 'stop_reason' => $trace['stop_reason'], 'rounds' => $trace['rounds'],
+            'tools' => $trace['tools'], 'last_tool' => $trace['last_tool'], 'last_result' => $result, 'tool_text' => mb_substr($trace['tool_text'], 0, 300)];
+
+        Log::warning('AI answer empty', ['lead_id' => $inbound->conversation->lead_id] + $meta);
+        $inbound->conversation->lead?->activities()->create(['type' => 'ai_trace', 'meta' => $meta,
+            'body' => 'Jawaban AI kosong (percobaan '.($attempt + 1).'): stop_reason '.($trace['stop_reason'] ?? '-').', '.$trace['rounds'].' putaran alat'
+                .($trace['tools'] !== [] ? ' ('.implode(', ', $trace['tools']).')' : '')
+                .($result !== null ? '; hasil terakhir '.$trace['last_tool'].': '.$result : ''),
+        ]);
     }
 
     /** @param  array{name: string, input: array, result: array}  $call */
