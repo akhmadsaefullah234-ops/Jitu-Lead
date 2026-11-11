@@ -3,30 +3,31 @@
 namespace App\Shipping\Shipments;
 
 use App\Automation\RetailStages;
-use App\Models\Lead;
 use App\Models\LeadActivity;
-use App\Models\Shipment;
-use App\Shipping\Carriers\ShipmentStatus;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 /**
- * The Inbox's shipping chips, so an OK order whose resi was not made automatically is not lost among the chats:
+ * The Inbox's one shipping mark, so an OK order is not lost among the chats: a small green "OK" on the chat card
+ * for a closing nobody has handled yet, and the filter "Closing (N)". A lead counts while
  *
- * - "Order OK · perlu resi" (with why resi otomatis did not run, and "Buat resi"), "Order OK · siap cetak",
- *   "Dicetak · menunggu jemput", "Gagal dijemput" and "Gagal antar" (red), read from App\Shipping\Shipments\PackingState
- *   for leads in "Dikemas & dikirim" or with a parcel. Parcels on their way or done get none.
- * - "OK/closing": the buyer confirmed the order (activity order_recorded) but the lead is still in an earlier stage.
+ * (a) it sits in "Dikemas & dikirim" without an active resi, or with a resi issued but not printed yet
+ *     (App\Shipping\Shipments\PackingState needs_resi / ready_print); or
+ * (b) the buyer confirmed the order (activity order_recorded) but the lead is still in an earlier stage.
  *
- * Together they are the filter "Perlu tindakan pengiriman"; such a chat comes first when the buyer wrote after the OK.
+ * It stops counting once the label is printed (printed_at) or the lead leaves that stage. Everything after that
+ * (waiting for pickup, failed pickup or delivery, the Everpro location) lives in the Pengiriman menu and the
+ * Pipeline, not in the Inbox.
  */
 final class InboxShipping
 {
+    public const TOOLTIP = 'Order OK, perlu ditangani di menu Pengiriman';
+
     /**
-     * @return array<int, array{label: string, color: string, reason: ?string, create: bool, ok_at: ?Carbon, location: ?string}> by lead id, only leads with a chip
+     * @return array<int, array{label: string, reason: ?string}> by lead id, only unhandled closings: the line shown in
+     *                                                           the lead's details ("OK · belum ada resi" / "OK · resi belum dicetak") and why resi otomatis did not run
      */
-    public static function chips(Collection $leads): array
+    public static function closings(Collection $leads): array
     {
         $stageId = PackingState::stageId();
         $leads = $leads->filter()->unique('id')->values();
@@ -36,29 +37,25 @@ final class InboxShipping
         }
 
         $states = PackingState::forLeads($leads);
-        $recorded = self::recordedAt($leads->map(fn ($l) => $l->getKey())->all());
+        $recorded = self::recorded($leads->map(fn ($l) => $l->getKey())->all());
         $early = self::earlyStageIds();
         $out = [];
 
         foreach ($leads as $lead) {
             $state = $states[$lead->getKey()];
-            $inStage = $stageId !== null && (int) $lead->stage_id === $stageId;
 
-            if (($inStage || $state->shipment !== null) && ($chip = $state->chip()) !== null && $state->needsAction()) {
-                $out[$lead->getKey()] = [
-                    'label' => $chip[0], 'color' => $chip[1],
-                    'reason' => $state->phase === PackingState::NEEDS_RESI || in_array($state->phase, [PackingState::DELIVERY_FAILED, PackingState::PICKUP_FAILED], true) ? $state->reason : null,
-                    'create' => $state->phase === PackingState::NEEDS_RESI && ($state->shipment === null || $state->shipment->state === Shipment::FAILED),
-                    'ok_at' => $inStage ? $lead->stage_entered_at : ($recorded[$lead->getKey()] ?? null),
-                    'location' => ProviderLocations::chip($lead),
-                ];
+            if ($stageId !== null && (int) $lead->stage_id === $stageId) {
+                if ($state->phase === PackingState::NEEDS_RESI) {
+                    $out[$lead->getKey()] = ['label' => 'OK · belum ada resi', 'reason' => $state->reason];
+                } elseif ($state->phase === PackingState::READY) {
+                    $out[$lead->getKey()] = ['label' => 'OK · resi belum dicetak', 'reason' => null];
+                }
 
                 continue;
             }
 
-            if (! $inStage && $state->shipment === null && isset($recorded[$lead->getKey()]) && in_array((int) $lead->stage_id, $early, true)) {
-                $out[$lead->getKey()] = ['label' => 'OK/closing', 'color' => 'success', 'reason' => 'pembeli sudah konfirmasi pesanan; pindahkan ke Dikemas & dikirim', 'create' => false,
-                    'ok_at' => $recorded[$lead->getKey()], 'location' => ProviderLocations::chip($lead)];
+            if ($state->shipment === null && blank($lead->tracking_number) && isset($recorded[$lead->getKey()]) && in_array((int) $lead->stage_id, $early, true)) {
+                $out[$lead->getKey()] = ['label' => 'OK · belum ada resi', 'reason' => 'pembeli sudah konfirmasi pesanan; pindahkan ke Dikemas & dikirim'];
             }
         }
 
@@ -66,29 +63,28 @@ final class InboxShipping
     }
 
     /**
-     * Leads (of $visible) a chat filter "Perlu tindakan pengiriman" shows.
+     * The unhandled closings among the chats $visible may see (also beyond the newest 100): the filter "Closing".
      *
-     * @return array<int, array> by lead id, as chips()
+     * @return array<int, array{label: string, reason: ?string}> by lead id, as closings()
      */
-    public static function needingAction(Builder $visible): array
+    public static function waiting(Builder $visible): array
     {
         $stageId = PackingState::stageId();
         $early = self::earlyStageIds();
 
         $leads = (clone $visible)->whereHas('conversation')->where(fn (Builder $q) => $q
             ->when($stageId, fn ($q) => $q->orWhere('leads.stage_id', $stageId))
-            ->orWhereIn('leads.id', Shipment::query()->whereNull('final_at')->whereIn('status', [ShipmentStatus::DELIVERY_FAILED, ShipmentStatus::PICKUP_FAILED])->select('lead_id'))
             ->orWhere(fn ($q) => $q->whereIn('leads.stage_id', $early ?: [0])->whereIn('leads.id', LeadActivity::query()->where('type', 'order_recorded')->select('lead_id'))))
             ->limit(500)->get();
 
-        return self::chips($leads);
+        return self::closings($leads);
     }
 
-    /** @return array<int, Carbon> when each lead's order was recorded (newest) */
-    private static function recordedAt(array $ids): array
+    /** @return array<int, true> leads with a recorded order */
+    private static function recorded(array $ids): array
     {
-        return LeadActivity::query()->whereIn('lead_id', $ids)->where('type', 'order_recorded')->groupBy('lead_id')
-            ->selectRaw('lead_id, max(created_at) as at')->pluck('at', 'lead_id')->map(fn ($at) => Carbon::parse($at))->all();
+        return LeadActivity::query()->whereIn('lead_id', $ids)->where('type', 'order_recorded')->distinct()->pluck('lead_id')
+            ->mapWithKeys(fn ($id) => [(int) $id => true])->all();
     }
 
     /** Stages before "Dikemas & dikirim" (inquiry, order, payment) where a confirmed order may still sit. */

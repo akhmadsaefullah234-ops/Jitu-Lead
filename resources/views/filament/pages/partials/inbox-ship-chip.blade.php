@@ -1,3 +1,0 @@
-@php($titles = ['Order OK · perlu resi' => 'Order OK, resi belum dibuat', 'Order OK · siap cetak' => 'Label resi belum dicetak (menu Pengiriman)', 'Dicetak · menunggu jemput' => 'Resi sudah dicetak, kurir belum menjemput', 'Gagal dijemput' => 'Perlu tindakan: kurir gagal menjemput paket', 'Gagal antar' => 'Perlu tindakan: paket gagal diantar kurir', 'OK/closing' => 'Pembeli sudah konfirmasi pesanan'])
-<span class="wa-sc {{ $ship['color'] }}" title="{{ $titles[$ship['label']] ?? $ship['label'] }}{{ $ship['reason'] ? ': '.$ship['reason'] : '' }}">{{ $ship['label'] }}</span>
-@if ($ship['location'] ?? null)<span class="wa-sc {{ str_ends_with($ship['location'], 'pasti') ? 'gray' : 'warning' }}" title="Lokasi tujuan di penyedia pengiriman">{{ $ship['location'] }}</span>@endif

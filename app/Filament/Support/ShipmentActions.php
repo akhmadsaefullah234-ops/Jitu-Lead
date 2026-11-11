@@ -12,6 +12,7 @@ use App\Shipping\Carriers\CarrierLocation;
 use App\Shipping\Carriers\Carriers;
 use App\Shipping\Shipments\AutoShipments;
 use App\Shipping\Shipments\LabelSheet;
+use App\Shipping\Shipments\ProviderLocations;
 use App\Shipping\Shipments\ShipmentDraft;
 use App\Shipping\Shipments\Shipments;
 use App\Support\CurrentTenant;
@@ -315,6 +316,16 @@ class ShipmentActions
                         $field('addr_kota', 'Kota / kabupaten'),
                         $field('addr_kode_pos', 'Kode pos')->maxLength(5),
                     ]),
+                // "Pilih lokasi" lives here (not in the Inbox header): when matching found several places or none.
+                Actions::make([
+                    LocationActions::choose(fn () => $lead(), 'pickLocation')->link()
+                        ->visible(fn () => self::available() && ($l = $lead()) !== null && ProviderLocations::key($l) !== null
+                            && in_array($l->provider_location_state, [ProviderLocations::MULTIPLE, ProviderLocations::NONE], true))
+                        ->after(function (Set $set) {
+                            self::$drafts = [];
+                            $set('location_id', null);
+                        }),
+                ])->key('locationActions'),
                 Select::make('location_id')->label('Kelurahan tujuan')->live()
                     ->options(fn (Get $get) => collect(self::draft($lead(), null, null, $address($get), $payment($get))->candidates)->mapWithKeys(fn (CarrierLocation $l) => [$l->id => $l->label()])->all())
                     ->default(fn () => self::draft($lead(), null, null)->destination?->id)
