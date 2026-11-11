@@ -6,6 +6,7 @@ use App\Actions\GenerateAiReply;
 use App\Actions\HandleInboundWhatsApp;
 use App\Actions\ProvisionTenant;
 use App\Ai\ReplySignals;
+use App\Ai\ShopTools;
 use App\Enums\AiMode;
 use App\Enums\MessageStatus;
 use App\Enums\WaChannelStatus;
@@ -528,5 +529,121 @@ class AiRetailRepliesTest extends TestCase
         foreach (['terima kasih', '🙏', 'sebentar ya', 'ok sebentar', 'ok berapa?'] as $no) {
             $this->assertFalse(ReplySignals::confirmation($no), $no);
         }
+    }
+
+    // ---- 8. The message a form opens the chat with ---------------------------------------------------------------
+
+    private const FORM_MESSAGE = "Halo admin, saya Sari mau order Kaos Lari:\nVarian: Hitam\nJumlah: 2\nAlamat: Jl. Sam Ratulangi No. 12 RT 002/RW 001, Wenang Utara, Wenang, Kota Manado\nMohon info total dan ongkirnya.";
+
+    private function cut(): array
+    {
+        return ['stop_reason' => 'max_tokens', 'content' => [['type' => 'text', 'text' => 'Halo kak Sari, pesanan']]];
+    }
+
+    private function traces(): array
+    {
+        return $this->inShop(fn () => LeadActivity::query()->where('type', 'ai_trace')->orderBy('id')->get()->all());
+    }
+
+    public function test_a_cut_off_answer_to_a_form_message_sends_the_draft_summary_and_records_the_draft(): void
+    {
+        // Lead 519 as it happened: twice nothing usable came back.
+        $lead = $this->buyer($this->manado());
+        $this->ai = [$this->cut(), $this->cut()];
+
+        $message = $this->says(self::FORM_MESSAGE);
+
+        $this->assertCount(2, $this->asked(), 'Asked once more with a note, then the fixed summary.');
+        $this->assertStringContainsString(GenerateAiReply::EMPTY_NOTE, $this->asked()[1]['system']);
+        $this->assertStringContainsString('PESANAN DRAFT SUDAH DICATAT', $this->asked()[0]['system']);
+        $this->assertSame(GenerateAiReply::MAX_TOKENS, $this->asked()[0]['max_tokens']);
+        $draft = $this->draftFor($message);
+        $this->assertSame(AiDraft::SENT, $draft->status);
+        $sent = collect($this->sent())->last();
+        $this->assertStringContainsString('Pesanan sudah kami catat sebagai draft', $sent);
+        $this->assertStringContainsString('Kaos Lari Hitam x 2', $sent);
+        $this->assertStringContainsString('Ongkir JNE REG: Rp 62.000', $sent);
+        $this->assertStringContainsString('Total: Rp 240.000', $sent);
+        $this->assertStringContainsString('balas OK/SESUAI', $sent);
+        $this->assertStringContainsString('transfer atau COD', $sent);
+        $this->assertSame(0, $this->handoffs());
+        $this->assertSame('draft', $draft->actions[0]['input']['status']);
+        $this->assertTrue($draft->actions[0]['applied']);
+        $this->assertSame('Order masuk', $this->stageOf($lead));
+
+        // Why it was empty is on the lead, each time.
+        $traces = $this->traces();
+        $this->assertCount(2, $traces);
+        $this->assertSame('max_tokens', $traces[0]->meta['stop_reason']);
+        $this->assertStringContainsString('stop_reason max_tokens, 0 putaran alat', $traces[0]->body);
+
+        // The summary is one the buyer can say "ok" to: the way of paying is asked next, from the drafted order.
+        $this->ai = [$this->text('Siap kak. Bayarnya mau transfer atau COD?')];
+        $this->says('Ok');
+        $this->assertStringContainsString('Pembeli menyetujui ringkasan pesanan, tetapi cara bayar belum diketahui', $this->asked()[2]['system']);
+    }
+
+    public function test_internal_text_twice_on_a_form_message_sends_the_summary_not_a_person(): void
+    {
+        $this->buyer($this->manado());
+        $this->ai = [$this->text('Berdasarkan aturan, saya perlu memanggil tool dulu.'), $this->text('Sesuai instruksi yang diberikan, saya rangkum.')];
+
+        $message = $this->says(self::FORM_MESSAGE);
+
+        $this->assertSame(AiDraft::SENT, $this->draftFor($message)->status);
+        $this->assertStringContainsString('Pesanan sudah kami catat sebagai draft', collect($this->sent())->last());
+        $this->assertSame(0, $this->handoffs());
+    }
+
+    public function test_a_summary_written_next_to_the_last_tool_call_is_the_answer(): void
+    {
+        $this->buyer($this->manado());
+        $summary = 'Pesanan kakak: Kaos Lari Hitam x2, ongkir JNE REG Rp 62.000, total Rp 240.000. Balas OK bila sesuai dan pilih transfer atau COD ya kak.';
+        $this->ai = [
+            ['stop_reason' => 'tool_use', 'content' => [['type' => 'text', 'text' => $summary], ['type' => 'tool_use', 'id' => 'tu_x', 'name' => 'cek_ongkir', 'input' => ['items' => [['product_id' => $this->kaos->id, 'varian' => 'Hitam', 'jumlah' => 2]], 'kota' => 'Kota Manado']]]],
+            ['stop_reason' => 'end_turn', 'content' => []],
+        ];
+
+        $message = $this->says(self::FORM_MESSAGE);
+
+        $this->assertSame(AiDraft::SENT, $this->draftFor($message)->status);
+        $this->assertSame($summary, collect($this->sent())->last());
+        $this->assertSame([], $this->traces());
+    }
+
+    public function test_a_handover_on_a_form_message_still_sends_the_summary(): void
+    {
+        $this->buyer($this->manado());
+        $this->ai = [$this->tool(ReplySignals::HANDOFF_TOOL, ['alasan' => 'Pembeli bertanya garansi di catatan'])];
+
+        $message = $this->says(self::FORM_MESSAGE);
+
+        $this->assertSame(AiDraft::SENT, $this->draftFor($message)->status);
+        $this->assertStringContainsString('Pesanan sudah kami catat sebagai draft', collect($this->sent())->last());
+        $this->assertSame(1, $this->handoffs(), 'The agent still sees the question.');
+    }
+
+    public function test_tool_rounds_running_out_are_traced_and_handed_over_outside_a_form(): void
+    {
+        $this->buyer($this->manado());
+        $check = $this->tool('cek_ongkir', ['items' => [['product_id' => $this->kaos->id, 'jumlah' => 1]], 'kota' => 'Kota Manado']);
+        $this->ai = array_fill(0, 2 * (GenerateAiReply::MAX_ROUNDS + 1), $check);
+
+        $message = $this->says('Ke Manado berapa ongkirnya kalau 1?');
+
+        $this->assertSame(AiDraft::HANDOFF, $this->draftFor($message)->status);
+        $this->assertStringContainsString('terpotong atau ditolak', $this->draftFor($message)->reason);
+        $trace = $this->traces()[0];
+        $this->assertSame('max_rounds', $trace->meta['stop_reason']);
+        $this->assertSame('cek_ongkir', $trace->meta['last_tool']);
+        $this->assertStringContainsString('putaran alat (cek_ongkir', $trace->body);
+        $this->assertStringContainsString('hasil terakhir cek_ongkir: {"status":"ok"', $trace->body);
+    }
+
+    public function test_rw_00_and_a_landmark_in_brackets_do_not_stop_the_order(): void
+    {
+        $this->assertNull(ShopTools::addressProblem('Jambumete rt.02, RT/RW 02/00, (Tugu aemar), Desa Bangunjiwo, Kasihan, Bantul'));
+        $this->assertNull(ShopTools::addressProblem('Dusun Jambumete, RT/RW 00/00, (Tugu Aemar), Desa Bangunjiwo, Kasihan, Bantul'));
+        $this->assertNotNull(ShopTools::addressProblem('Dusun Jambumete, RT/RW 00/00, Desa Bangunjiwo, Kasihan, Bantul'));
     }
 }

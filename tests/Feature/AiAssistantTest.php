@@ -134,7 +134,7 @@ class AiAssistantTest extends TestCase
         $this->inbound($this->gateway(AiMode::Draft), 'Berapa harga cluster mawar?');
 
         Http::assertSent(fn (Request $r) => str_contains($r->url(), 'anthropic')
-            && $r['max_tokens'] === 1024
+            && $r['max_tokens'] === GenerateAiReply::MAX_TOKENS
             && $r['thinking'] === ['type' => 'disabled']
             && $r['output_config'] === ['effort' => 'low']);
     }

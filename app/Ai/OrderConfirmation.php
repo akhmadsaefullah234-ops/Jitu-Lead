@@ -5,8 +5,10 @@ namespace App\Ai;
 use App\Models\AiDraft;
 use App\Models\Lead;
 use App\Models\LeadActivity;
+use App\Models\Property;
 use App\Models\Tenant;
 use App\Models\WaMessage;
+use App\Shipping\ShippingQuote;
 use App\Shipping\ShippingSettings;
 
 /**
@@ -19,6 +21,11 @@ class OrderConfirmation
 {
     /** A message that summarises an order: money and words like total, ringkasan, rincian, konfirmasi. */
     private const SUMMARY = '/\b(?:total|ringkasan|rincian|konfirmasi|pesanan(?:nya)?|order(?:an)?)\b/iu';
+
+    /** Told to the model when the draft order of a form message is already written. */
+    public const DRAFT_NOTE = 'PESANAN DRAFT SUDAH DICATAT oleh sistem dari formulir pembeli (pesan terakhir adalah pesan pembuka dari formulir). Jangan memanggil '
+        .ShopTools::RECORD.' lagi dan jangan menyerahkan ke admin karena pesan ini. Rangkum pesanannya singkat (produk, varian, jumlah, alamat, ongkir dan total dari hasil cek ongkir), '
+        .'lalu minta pembeli membalas OK/SESUAI bila sudah benar dan memilih cara bayar: transfer atau COD.';
 
     /** How long a summary waits for its "ok". */
     private const WITHIN_HOURS = 72;
@@ -44,19 +51,7 @@ class OrderConfirmation
             return null;
         }
 
-        $text = (string) $summary->body;
-        $draft = self::draftedOrder($inbound);
-        $destination = LeadQuote::destination($lead);
-        $input = array_filter([
-            'items' => $draft['items'] ?? LeadQuote::items($lead),
-            'nama' => $draft['nama'] ?? $lead->name,
-            'alamat' => $draft['alamat'] ?? $lead->shipping_address,
-            'kota' => $draft['kota'] ?? $destination['kota'] ?? null,
-            'provinsi' => $draft['provinsi'] ?? $destination['provinsi'] ?? null,
-            'kecamatan' => $draft['kecamatan'] ?? $destination['kecamatan'] ?? null,
-            'kurir' => $draft['kurir'] ?? self::courier($tenant, $lead, $text),
-            'pembayaran' => $draft['pembayaran'] ?? self::payment($lead, $text),
-        ], fn ($v) => filled($v));
+        $input = self::orderInput($tenant, $lead, (string) $summary->body, self::draftedOrder($inbound));
 
         $missing = array_keys(array_filter([
             'produk' => blank($input['items'] ?? null),
@@ -66,6 +61,62 @@ class OrderConfirmation
         ]));
 
         return new self($input + ['status' => 'konfirmasi'], $missing);
+    }
+
+    /**
+     * The draft order of the message a form opens the chat with, written from what the form saved (never left to
+     * the model), and the summary sent when the model cannot write one. Null when the form left something out or
+     * the shipping cannot be priced: the model (or a person) asks as usual.
+     *
+     * @return array{0: array{name: string, input: array, result: array}, 1: string, 2: LeadQuote}|null
+     */
+    public static function fromForm(Tenant $tenant, Lead $lead, ShopTools $shop, ?ProductContext $products = null): ?array
+    {
+        $quote = LeadQuote::forLead($tenant, $lead, $products);
+        $option = $quote?->quote->options[0] ?? null;
+        $subtotal = $quote?->quote->subtotal();
+
+        if ($quote === null || ! $quote->quote->ok() || $option === null || $subtotal === null) {
+            return null;
+        }
+
+        $input = array_diff_key(self::orderInput($tenant, $lead, '', null), ['pembayaran' => 1, 'kurir' => 1]) + ['status' => 'draft'];
+        $result = $shop->run(ShopTools::RECORD, $input);
+        $shop->forget();
+
+        if (($result['status'] ?? null) !== 'draft_tercatat') {
+            return null;
+        }
+
+        $names = Property::query()->whereIn('id', array_column($input['items'], 'product_id'))->pluck('name', 'id');
+        $lines = array_map(fn (array $i) => '- '.trim(($names[$i['product_id'] ?? 0] ?? $i['produk'] ?? 'Produk').' '.($i['varian'] ?? '')).' x '.(int) ($i['jumlah'] ?? 1), $input['items']);
+        $fallback = implode("\n", [
+            'Halo kak '.$input['nama'].', terima kasih 🙏 Pesanan sudah kami catat sebagai draft:',
+            ...$lines,
+            'Dikirim ke: '.$input['alamat'],
+            'Ongkir '.$option->courier.': '.ShippingQuote::rupiah($option->price),
+            'Total: '.ShippingQuote::rupiah($subtotal + $option->price),
+            'Mohon balas OK/SESUAI bila sudah benar, dan pilih cara bayar: transfer atau COD ya kak.',
+        ]);
+
+        return [['name' => ShopTools::RECORD, 'input' => $input, 'result' => $result], $fallback, $quote];
+    }
+
+    /** catat_pesanan input from the order the AI drafted, else what the lead holds, and the summary text. */
+    private static function orderInput(Tenant $tenant, Lead $lead, string $text, ?array $draft): array
+    {
+        $destination = LeadQuote::destination($lead);
+
+        return array_filter([
+            'items' => $draft['items'] ?? LeadQuote::items($lead),
+            'nama' => $draft['nama'] ?? $lead->name,
+            'alamat' => $draft['alamat'] ?? $lead->shipping_address,
+            'kota' => $draft['kota'] ?? $destination['kota'] ?? null,
+            'provinsi' => $draft['provinsi'] ?? $destination['provinsi'] ?? null,
+            'kecamatan' => $draft['kecamatan'] ?? $destination['kecamatan'] ?? null,
+            'kurir' => $draft['kurir'] ?? self::courier($tenant, $lead, $text),
+            'pembayaran' => $draft['pembayaran'] ?? self::payment($lead, $text),
+        ], fn ($v) => filled($v));
     }
 
     public static function summarises(string $text): bool
