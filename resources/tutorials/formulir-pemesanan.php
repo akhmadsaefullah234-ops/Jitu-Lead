@@ -6,6 +6,7 @@ return [
     'title' => 'Formulir pemesanan',
     'group' => 'lead',
     'order' => 10,
+    'industries' => ['retail'],
     'leader' => true,
     'menu' => 'Formulir',
     'intro' => '<p>Formulir menangkap nama, WhatsApp, {item}, varian, jumlah, dan alamat pembeli. Pembeli membukanya lewat halaman landing atau tautan langsung /f/{akun}/{formulir}.</p>',

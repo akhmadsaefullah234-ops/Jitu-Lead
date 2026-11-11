@@ -10,7 +10,9 @@ langkah. Isinya berkas di repo, bukan database:
 - `app/Filament/Pages/Tutorial.php` dan `resources/views/filament/pages/tutorial.blade.php`: halaman daftar dan bab
   (`?bab={slug}`, `?cari=...`).
 - Tautan **Lihat tutorial** di header halaman terkait dipasang lewat render hook di `AppPanelProvider`; bab memilih
-  halamannya lewat kunci `pages`.
+  halamannya lewat kunci `pages`. Bila beberapa bab yang terlihat memakai halaman yang sama, tautan menuju bab pertama dalam
+  urutan baca (grup, lalu `order`, lalu judul). Karena itu bab toko dan bab properti untuk halaman yang sama (mis.
+  `pipeline` dan `pipeline-properti`) masing-masing diberi `industries` sendiri.
 
 ## Format bab
 

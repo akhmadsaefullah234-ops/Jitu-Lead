@@ -22,7 +22,7 @@ return [
                 'highlight' => ['.fi-fo-field:has-text("Dari")', '.fi-fo-field:has-text("Sampai")']],
         ],
         [
-            'text' => 'Baris kartu menampilkan lead baru, lead dari iklan, lead Hot, dan rata-rata waktu balas pertama, lalu angka penjualan: order masuk, dibayar atau dikirim, selesai, batal, nilai penjualan, dan konversi. Angka kecil di bawahnya adalah periode sebelumnya.',
+            'text' => 'Baris kartu menampilkan lead baru, lead dari iklan, lead Hot, dan rata-rata waktu balas pertama, lalu angka penjualan. Di toko: order masuk, dibayar atau dikirim, selesai, batal, nilai penjualan, dan konversi. Di agensi properti: survei, booking, dan closing (lihat bab Dasbor dan laporan properti). Angka kecil di bawahnya adalah periode sebelumnya.',
             'alt' => 'Kartu ringkas dasbor: lead baru, lead dari iklan, lead Hot, waktu balas pertama, order masuk, dibayar, selesai, batal',
             'shot' => ['page' => '', 'highlight' => ['.fi-wi-stats-overview >> nth=0']],
         ],
