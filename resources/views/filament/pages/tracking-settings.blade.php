@@ -10,7 +10,7 @@
         </ul>
     </x-filament::section>
 
-    <x-filament::section heading="Event dari pipeline" description="Lead dari WhatsApp dan perpindahan tahap juga bisa dilaporkan ke Meta dan TikTok. Atur di tombol &quot;Event dari pipeline&quot; di atas.">
+    <x-filament::section heading="Event dari pipeline" description="Lead dari WhatsApp dan perpindahan tahap juga bisa dilaporkan ke Meta dan TikTok. Atur di tombol “Event dari pipeline” di atas.">
         <div style="font-size:.9rem">{{ $this->pipelineSummary() }}</div>
     </x-filament::section>
 

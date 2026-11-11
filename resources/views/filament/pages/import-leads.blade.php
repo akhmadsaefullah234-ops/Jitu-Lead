@@ -25,8 +25,8 @@
                     <tr>@foreach (['nama', 'telepon', 'email', 'catatan'] as $h)<th>{{ $h }}</th>@endforeach</tr>
                 </thead>
                 <tbody>
-                    <tr>@foreach (['Budi Santoso', '081234567890', 'budi@contoh.com', 'Cari rumah 2 kamar'] as $c)<td>{{ $c }}</td>@endforeach</tr>
-                    <tr>@foreach (['Siti Aminah', '+6281398765432', '', 'Tanya KPR'] as $c)<td>{{ $c }}</td>@endforeach</tr>
+                    <tr>@foreach (['Budi Santoso', '08990001234', 'budi@contoh.com', 'Cari rumah 2 kamar'] as $c)<td>{{ $c }}</td>@endforeach</tr>
+                    <tr>@foreach (['Siti Aminah', '+628990005678', '', 'Tanya KPR'] as $c)<td>{{ $c }}</td>@endforeach</tr>
                 </tbody>
             </table>
         </div>

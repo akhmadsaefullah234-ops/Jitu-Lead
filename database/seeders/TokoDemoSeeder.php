@@ -17,6 +17,8 @@ use App\Models\LandingPage;
 use App\Models\Lead;
 use App\Models\LeadSource;
 use App\Models\LostReason;
+use App\Models\MediaAsset;
+use App\Models\MediaFolder;
 use App\Models\Property;
 use App\Models\Shipment;
 use App\Models\Tenant;
@@ -24,7 +26,9 @@ use App\Models\TrackingSetting;
 use App\Models\WaChannel;
 use App\Models\WaConversation;
 use App\Shipping\Carriers\ShipmentStatus;
+use App\Support\CurrentTenant;
 use Database\Seeders\Demo\DemoSeeder;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * "Toko Demo" (retail, slug toko-demo): the shop the tutorial screenshots come from. Three bags, a short order
@@ -58,7 +62,12 @@ class TokoDemoSeeder extends DemoSeeder
         ] + (array) $tenant->shipping])->save();
 
         // Fake keys: the demo never reaches Everpro or Meta.
-        CarrierAccount::create(['provider' => 'everpro', 'sandbox' => true, 'credentials' => ['client_key' => 'demo-key', 'client_secret' => 'demo-secret'], 'settings' => []]);
+        // While screenshots are taken, App\Tutorials\CaptureFakes answers for Everpro with made-up rates and places.
+        CarrierAccount::create(['provider' => 'everpro', 'sandbox' => true, 'balance' => 750000, 'balance_at' => now()->subMinutes(10),
+            'credentials' => ['client_key' => 'demo-key', 'client_secret' => 'demo-secret', 'callback_key' => 'demo-callback'],
+            'settings' => ['sender_name' => 'Toko Demo', 'sender_phone' => self::phone(2), 'sender_address' => 'Jl. Gudang Contoh No. 1, Coblong, Kota Bandung',
+                'origin_id' => 'DEMO-ORIGIN', 'origin_label' => 'Coblong, Coblong, Kota Bandung, Jawa Barat 40132', 'origin_postal' => '40132',
+                'service' => 'JNE REG', 'shipment_type' => 'PICKUP', 'low_balance' => 100000]]);
         TrackingSetting::create(['meta_pixel_id' => '000000000000000', 'credentials' => ['meta_capi_token' => 'demo-token']]);
 
         $channel = WaChannel::create([
@@ -144,6 +153,29 @@ class TokoDemoSeeder extends DemoSeeder
 
         $this->chats($channel, $team, $leads, $raket);
         $this->parcels($leads);
+        $this->media($raket);
+    }
+
+    /** Shop folders instead of the agency defaults (Foto rumah, Denah), with one product picture drawn here. */
+    private function media(Property $raket): void
+    {
+        MediaFolder::query()->delete();
+        $folders = collect(['Foto produk', 'Price list', 'Testimoni', 'Lainnya'])->mapWithKeys(fn ($name, $i) => [$name => MediaFolder::create(['name' => $name, 'position' => $i])]);
+
+        $path = 'media-library/'.app(CurrentTenant::class)->id().'/demo-tas-raket.png';
+        $image = imagecreatetruecolor(640, 480);
+        imagefill($image, 0, 0, imagecolorallocate($image, 237, 233, 254));
+        imagefilledrectangle($image, 170, 120, 470, 380, imagecolorallocate($image, 124, 58, 237));
+        imagestring($image, 5, 220, 400, 'Tas Raket Pro Demo', imagecolorallocate($image, 76, 29, 149));
+        ob_start();
+        imagepng($image);
+        Storage::disk('local')->put($path, (string) ob_get_clean());
+
+        MediaAsset::create(['folder_id' => $folders['Foto produk']->getKey(), 'title' => 'Foto '.$raket->name, 'kind' => 'file', 'path' => $path,
+            'original_name' => 'tas-raket-pro-demo.png', 'size_bytes' => Storage::disk('local')->size($path), 'active' => true,
+            'description' => 'Kirim bila pembeli minta foto atau menanyakan warna '.$raket->name.'.']);
+        MediaAsset::create(['folder_id' => $folders['Price list']->getKey(), 'title' => 'Katalog harga Toko Demo', 'kind' => 'link', 'url' => 'https://katalog.toko-demo.test',
+            'active' => true, 'description' => 'Kirim bila pembeli menanyakan daftar harga semua tas.']);
     }
 
     /** Chats: a welcome, a form message with the AI's summary, an AI answer, and one handed to an agent. */

@@ -125,7 +125,7 @@ class WelcomeFields
             'produk' => $name, 'properti' => $name, 'daftar_produk' => '1. '.$name,
             'ringkasan' => $name.' (Hitam) x2, dikirim ke Coblong, Kota Bandung',
             'total' => WelcomeText::rupiah($price * 2).' + ongkir Rp18.000 (JNE REG) = '.WelcomeText::rupiah($price * 2 + 18000),
-            'whatsapp' => '081234567890', 'telepon' => '081234567890', 'email' => 'rina@contoh.com',
+            'whatsapp' => '08990001234', 'telepon' => '08990001234', 'email' => 'rina@contoh.com',
             'alamat' => 'Jl. Mawar No. 5 RT 001/002, Kel. Sekeloa, Kec. Coblong, Kota Bandung, Jawa Barat 40134',
             'varian' => 'Hitam', 'warna' => 'Hitam', 'jumlah' => '2', 'ongkir' => 'Rp18.000', 'kurir' => 'JNE REG',
         ] + collect($fieldKeys)->mapWithKeys(fn ($k) => [WelcomeText::ANSWER_PREFIX.mb_strtolower($k) => '(jawaban '.$k.')'])->all());

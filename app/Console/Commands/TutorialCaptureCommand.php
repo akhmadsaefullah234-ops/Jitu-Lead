@@ -79,7 +79,12 @@ class TutorialCaptureCommand extends Command
             $env = array_replace($env, array_filter(['PATH' => getenv('PATH'), 'HOME' => getenv('HOME'), 'SYSTEMROOT' => getenv('SYSTEMROOT')]),
                 ['PHP_CLI_SERVER_WORKERS' => '4', 'CACHE_STORE' => 'array',
                     // A placeholder so the pages show AI as switched on; nothing in a capture calls the AI.
-                    'ANTHROPIC_API_KEY' => 'tutorial-capture']);
+                    'ANTHROPIC_API_KEY' => 'tutorial-capture',
+                    // Everpro answered with demo data, every other outside call refused (App\Tutorials\CaptureFakes).
+                    'TUTORIAL_CAPTURE' => '1',
+                    // So the Notifikasi page shows its buttons; nothing is ever subscribed or pushed.
+                    'VAPID_PUBLIC_KEY' => config('jitu.push.public_key') ?: 'BAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0-P0A',
+                    'VAPID_PRIVATE_KEY' => config('jitu.push.private_key') ?: 'tutorial-capture']);
             $server = new Process([PHP_BINARY, '-S', '127.0.0.1:'.$port, '-t', public_path(), base_path('vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php')],
                 public_path(), $env);
             $server->setTimeout(null)->disableOutput()->start(); // its request log is not read: a full pipe would stall it
