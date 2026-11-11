@@ -7,17 +7,20 @@ use App\Console\Commands\TutorialCaptureCommand;
 use App\Enums\Role;
 use App\Filament\Pages\Tutorial;
 use App\Models\Lead;
+use App\Models\MediaFolder;
 use App\Models\Property;
 use App\Models\Shipment;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Support\CurrentTenant;
 use App\Support\Industry;
+use App\Tutorials\CaptureFakes;
 use App\Tutorials\Chapter;
 use App\Tutorials\Tutorials;
 use Database\Seeders\AgensiDemoSeeder;
 use Database\Seeders\TokoDemoSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
 use RuntimeException;
 use Tests\TestCase;
@@ -68,6 +71,47 @@ class TutorialTest extends TestCase
         foreach (['tim-dan-peran', 'dasbor', 'formulir-pemesanan', 'halaman-landing', 'uji-ab-landing', 'inbox', 'mode-ai', 'pengetahuan-ai', 'daftar-lead', 'pipeline', 'menu-pengiriman'] as $slug) {
             $this->assertArrayHasKey($slug, Tutorials::all(), $slug);
         }
+    }
+
+    public function test_the_remaining_shop_and_general_chapters_are_there(): void
+    {
+        $shop = ['produk', 'promo-ongkir', 'otomatisasi-tahap', 'menghubungkan-everpro', 'cek-ongkir', 'membuat-resi', 'resi-otomatis',
+            'pesan-status-kiriman', 'paket-gagal-antar', 'hubungkan-impor-resi'];
+        $general = ['pesan-sambutan', 'impor-lead', 'koneksi-whatsapp', 'pustaka-media', 'follow-up-otomatis', 'tugas', 'pelacakan-iklan',
+            'label-whatsapp-business', 'laporan', 'laporan-harian', 'tahap-sumber-alasan', 'notifikasi', 'langganan', 'data-privasi'];
+
+        foreach ($shop as $slug) {
+            $this->assertSame(['retail'], Tutorials::all()[$slug]->industries, $slug);
+        }
+
+        foreach ($general as $slug) {
+            $this->assertSame(array_keys(config('industries.industries')), Tutorials::all()[$slug]->industries, $slug);
+        }
+
+        // Pages an agent cannot open are not offered to an agent.
+        foreach (['koneksi-whatsapp', 'follow-up-otomatis', 'otomatisasi-tahap', 'menghubungkan-everpro', 'pelacakan-iklan', 'tahap-sumber-alasan', 'langganan', 'data-privasi'] as $slug) {
+            $this->assertTrue(Tutorials::all()[$slug]->admin, $slug);
+        }
+
+        $this->assertTrue(Tutorials::all()['produk']->leader);
+        $this->assertNotContains('produk', $this->visibleSlugs($this->agency(), Role::Admin));
+    }
+
+    public function test_capture_fakes_answer_for_everpro_and_refuse_every_other_call(): void
+    {
+        $this->assertFalse(CaptureFakes::enabled());
+        config(['jitu.tutorial_capture' => true]);
+        $this->assertTrue(CaptureFakes::enabled());
+        $this->app->detectEnvironment(fn () => 'production');
+        $this->assertFalse(CaptureFakes::enabled());
+        $this->app->detectEnvironment(fn () => 'testing');
+
+        CaptureFakes::register();
+        $this->assertSame(750000, Http::get('https://client-api-sandbox.everpro.id/balance/v1/detail')->json('data.cash'));
+        $rates = Http::post('https://client-api-sandbox.everpro.id/shipment/v2/rates', ['is_cod' => true])->json('data.regular');
+        $this->assertNotEmpty($rates);
+        $this->assertSame(503, Http::post('https://api.anthropic.com/v1/messages')->status());
+        $this->assertSame(503, Http::get('https://graph.facebook.com/v19.0/me')->status());
     }
 
     public function test_a_shop_sees_no_property_chapter_and_an_agency_no_shop_chapter(): void
@@ -230,6 +274,7 @@ class TutorialTest extends TestCase
             $this->assertSame(12, Lead::query()->count());
             $this->assertSame(3, Property::query()->count());
             $this->assertSame(5, Shipment::query()->count());
+            $this->assertSame(['Foto produk', 'Price list', 'Testimoni', 'Lainnya'], MediaFolder::query()->orderBy('position')->pluck('name')->all());
             Lead::query()->pluck('phone')->each(fn ($p) => $this->assertMatchesRegularExpression('/^\+?(62|0)899000\d{4}$/', $p));
         });
         app(CurrentTenant::class)->run($agensi, function () {

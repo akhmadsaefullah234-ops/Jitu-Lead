@@ -89,11 +89,17 @@ php artisan tutorial:capture --url=http://127.0.0.1:8000   # pakai server yang s
 ```
 
 Perintah ini hanya jalan di `APP_ENV=local` atau `testing`. Ia menulis manifest, menjalankan server PHP di port 8123
-(`--port`) dengan cache array, lalu `node scripts/tutorial-capture.mjs` memotret tiap langkah. Setiap gambar diambil
+(`--port`) dengan cache array dan `TUTORIAL_CAPTURE=1`, lalu `node scripts/tutorial-capture.mjs` memotret tiap langkah. Setiap gambar diambil
 dengan login baru, karena periode dan filter yang dipilih satu gambar tersimpan di sesi. Bila memakai `--url`,
-jalankan server itu dengan `CACHE_STORE=array` agar login berulang tidak kena batas percobaan login. PNG diubah ke
+jalankan server itu dengan `CACHE_STORE=array` dan `TUTORIAL_CAPTURE=1` agar login berulang tidak kena batas percobaan login. PNG diubah ke
 WebP (kualitas 78) di `public/tutorial/`. Langkah yang gagal ditulis `FAILED slug/nomor: alasan` dan perintah
 keluar dengan status gagal.
+
+Dengan `TUTORIAL_CAPTURE=1` (hanya di local/testing) aplikasi tidak menghubungi layanan luar mana pun:
+`App\Tutorials\CaptureFakes` menjawab Everpro dengan saldo, lokasi, dan tarif rekaan (agar jendela Buat resi dan
+pengaturan Pengiriman tampil seperti akun yang tersambung), dan semua panggilan keluar lain dijawab 503. Bila memakai
+`--url`, jalankan server itu dengan variabel yang sama. Halaman Notifikasi diberi kunci VAPID tiruan bila belum ada,
+tanpa pernah mendaftarkan perangkat.
 
 Selalu periksa gambar baru sebelum commit: kotak harus jatuh di elemen yang dimaksud dan tidak ada data selain data
 demo.

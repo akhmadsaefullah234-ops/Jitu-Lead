@@ -2,6 +2,9 @@
 
 return [
 
+    // Set only by `php artisan tutorial:capture` on its own server (local/testing): Everpro is faked and no outside call is made (App\Tutorials\CaptureFakes).
+    'tutorial_capture' => (bool) env('TUTORIAL_CAPTURE', false),
+
     // Who may create an account: "open" (anyone, with a 14-day trial; the default),
     // "invite" (a valid invitation code is required), or "closed" (no sign-up page at all; the operator creates accounts).
     'registration' => env('REGISTRATION_MODE', 'open'),

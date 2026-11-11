@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Ai\Transcriber;
 use App\Ai\WhisperTranscriber;
 use App\Support\CurrentTenant;
+use App\Tutorials\CaptureFakes;
 use Filament\Facades\Filament;
 use Filament\Tables\Table;
 use Illuminate\Auth\Notifications\ResetPassword;
@@ -29,6 +30,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        if (CaptureFakes::enabled()) {
+            CaptureFakes::register();
+        }
+
         // Password::sendResetLink (e.g. the super admin's "send reset link" action) has no web route of its own: point it at the app panel's reset page.
         ResetPassword::createUrlUsing(fn ($user, string $token) => Filament::getPanel('app')->getResetPasswordUrl($token, $user));
 
