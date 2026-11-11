@@ -7,6 +7,7 @@ use App\Console\Commands\TutorialCaptureCommand;
 use App\Enums\Role;
 use App\Filament\Pages\Tutorial;
 use App\Models\Lead;
+use App\Models\LeadForm;
 use App\Models\MediaFolder;
 use App\Models\Property;
 use App\Models\Shipment;
@@ -95,6 +96,39 @@ class TutorialTest extends TestCase
 
         $this->assertTrue(Tutorials::all()['produk']->leader);
         $this->assertNotContains('produk', $this->visibleSlugs($this->agency(), Role::Admin));
+    }
+
+    public function test_the_property_chapters_are_there_and_replace_the_shop_ones_on_the_same_page(): void
+    {
+        $property = ['katalog-properti', 'pipeline-properti', 'menggali-kebutuhan', 'jadwal-survei', 'booking-closing', 'gugur',
+            'landing-properti', 'formulir-properti', 'follow-up-properti', 'dasbor-properti'];
+
+        foreach ($property as $slug) {
+            $this->assertSame(['properti'], Tutorials::all()[$slug]->industries, $slug);
+        }
+
+        // The shop versions of the board and the form are shop-only now; each property chapter takes their place.
+        $this->assertSame(['retail'], Tutorials::all()['pipeline']->industries);
+        $this->assertSame(['retail'], Tutorials::all()['formulir-pemesanan']->industries);
+
+        $agency = $this->agency();
+        $this->assertSame([], array_diff($property, $this->visibleSlugs($agency, Role::Admin)));
+        $agent = $this->visibleSlugs($agency, Role::Agent);
+        $this->assertContains('jadwal-survei', $agent);
+        $this->assertNotContains('katalog-properti', $agent);
+        $this->assertNotContains('follow-up-properti', $this->visibleSlugs($agency, Role::Manager));
+
+        $this->actingInTenant($this->adminOf($agency), $agency);
+        $base = '/app/'.$agency->slug;
+        $this->get($base.'/pipeline')->assertOk()->assertSee('tutorial?bab=pipeline-properti', false);
+        $this->get($base.'/lead-forms')->assertOk()->assertSee('tutorial?bab=formulir-properti', false);
+        $this->get($base.'/properties')->assertOk()->assertSee('tutorial?bab=katalog-properti', false);
+        $this->get($base.'/landing-pages')->assertOk()->assertSee('tutorial?bab=landing-properti', false);
+        $this->get($base.'/lost-reasons')->assertOk()->assertSee('tutorial?bab=gugur', false);
+
+        foreach ($property as $slug) {
+            $this->get($base.'/tutorial?bab='.$slug)->assertOk()->assertSee(Tutorials::all()[$slug]->title)->assertSee('tutorial/'.$slug.'/', false);
+        }
     }
 
     public function test_capture_fakes_answer_for_everpro_and_refuse_every_other_call(): void
@@ -280,6 +314,9 @@ class TutorialTest extends TestCase
         app(CurrentTenant::class)->run($agensi, function () {
             $this->assertSame(12, Lead::query()->count());
             $this->assertSame(3, Property::query()->count());
+            $form = LeadForm::query()->where('slug', 'minat-cluster-contoh')->firstOrFail();
+            $this->assertSame('properti', $form->template);
+            $this->assertTrue($form->is_primary);
             $this->assertSame(['Booking', 'Closing', 'Gugur', 'Jadwal survei'], Lead::query()->with('stage')->get()
                 ->pluck('stage.name')->intersect(['Booking', 'Closing', 'Gugur', 'Jadwal survei'])->unique()->sort()->values()->all());
         });

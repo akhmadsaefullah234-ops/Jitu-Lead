@@ -6,6 +6,7 @@ return [
     'title' => 'Pipeline',
     'group' => 'penjualan',
     'order' => 20,
+    'industries' => ['retail'],
     'menu' => 'Pipeline',
     'intro' => '<p>Papan tahap penjualan. Seret kartu lead dari satu kolom ke kolom lain. Setiap kolom menampilkan jumlah lead, nilai, dan langkah yang disarankan untuk tahap itu.</p>',
     'pages' => [Pipeline::class],

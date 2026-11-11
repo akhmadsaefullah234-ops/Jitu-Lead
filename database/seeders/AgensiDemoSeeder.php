@@ -12,9 +12,11 @@ use App\Enums\PropertyKind;
 use App\Enums\WaChannelStatus;
 use App\Enums\WaChannelType;
 use App\LandingPages\Templates;
+use App\LeadForms\FormTemplates;
 use App\Models\AiKnowledgeItem;
 use App\Models\LandingPage;
 use App\Models\Lead;
+use App\Models\LeadForm;
 use App\Models\LeadSource;
 use App\Models\LostReason;
 use App\Models\Property;
@@ -26,7 +28,7 @@ use Database\Seeders\Demo\DemoSeeder;
 
 /**
  * "Agensi Demo" (properti, slug agensi-demo): the property agency the tutorial screenshots come from. Three
- * listings (primary and secondary), twelve leads from Lead baru to Closing and Gugur, chats, and a "Rumah KPR"
+ * listings (primary and secondary), twelve leads from Lead baru to Closing and Gugur, chats, a "Minat properti" form, and a "Rumah KPR"
  * landing page with the KPR calculator and unit types. All of it is made up; see DemoSeeder.
  *
  *   php artisan db:seed --class=AgensiDemoSeeder
@@ -63,9 +65,19 @@ class AgensiDemoSeeder extends DemoSeeder
         $second = Property::create(['kind' => PropertyKind::Secondary, 'name' => 'Rumah Jl. Contoh No. 10', 'property_type' => 'Rumah', 'location' => 'Kota Contoh Timur',
             'price_from' => 1_250_000_000, 'status' => 'available', 'details' => ['luas_tanah' => 150, 'luas_bangunan' => 110, 'kamar_tidur' => 3, 'sertifikat' => 'SHM']]);
 
+        // The "Minat properti" form for Cluster Contoh Asri, the agency's main form (used by the landing page below)
+        LeadForm::create(['name' => 'Minat Cluster Contoh Asri', 'slug' => 'minat-cluster-contoh', 'status' => 'active', 'is_primary' => true,
+            'property_id' => $cluster->getKey()] + FormTemplates::attributes('properti'));
+
         $blocks = Templates::blocks('kpr');
         $unitTypes = collect(Templates::blocks('cluster'))->firstWhere('type', 'unit_types');
         array_splice($blocks, 3, 0, $unitTypes ? [$unitTypes] : []);
+        // The demo listing's own numbers in place of the template's "Rp 000 juta"
+        $blocks = array_map(fn (array $b) => match ($b['type']) {
+            'price' => array_replace_recursive($b, ['props' => ['price' => 'Rp 685 juta', 'installment' => 'DP mulai 5%, bisa KPR']]),
+            'kpr' => array_replace_recursive($b, ['props' => ['price' => 685_000_000, 'dp_percent' => 5]]),
+            default => $b,
+        }, $blocks);
         LandingPage::create(['title' => 'Cluster Contoh Asri - KPR ringan', 'slug' => 'cluster-contoh-asri', 'status' => 'published', 'published_at' => now()->subDays(3),
             'template' => 'kpr', 'property_id' => $cluster->getKey(), 'color' => '#16a34a', 'font' => 'ramah', 'blocks' => $blocks]);
 
@@ -108,6 +120,11 @@ class AgensiDemoSeeder extends DemoSeeder
             }
 
             $leads[$name] = $lead;
+        }
+
+        // Leads past "Jadwal survei" had their visit already (the dashboard counts them by date)
+        foreach (['Gani Contoh' => 6, 'Hesti Contoh' => 9, 'Imam Contoh' => 12, 'Juli Contoh' => 20] as $name => $days) {
+            $leads[$name]->forceFill(['survey_at' => now()->subDays($days)->setTime(10, 0), 'survey_location' => $leads[$name]->property?->name])->save();
         }
 
         foreach ([
