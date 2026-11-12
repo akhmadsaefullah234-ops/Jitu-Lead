@@ -34,10 +34,46 @@ class FormQuote
         return $product !== null && $product->price_from !== null ? $product : null;
     }
 
+    /**
+     * Whether the form shows the summary (and its page may ask /ringkasan): it can (eligible()) and the shop has
+     * not turned "Tampilkan rincian harga dan ongkir" off. Read by the form page, landing-page blocks and iframes
+     * alike (FormView::block) and by the endpoint. The AI's draft order summary never comes here: it prices
+     * through App\Ai\LeadQuote from what the lead holds, so the switch changes nothing the AI sends.
+     */
     public static function available(Tenant $tenant, LeadForm $form, ?int $pageId = null): bool
     {
-        return Shipping::available($tenant) && self::product($form, $pageId) !== null
-            && collect($form->fieldList())->contains(fn ($f) => $f['type'] === 'address' && ($f['maps_to'] ?? null) === 'shipping_address');
+        return $form->showsSummary() && self::eligible($tenant, $form, $pageId);
+    }
+
+    /** Whether the form could show a summary at all: the shop prices shipping, a priced product, an address for shipping. */
+    public static function eligible(Tenant $tenant, LeadForm $form, ?int $pageId = null): bool
+    {
+        return Shipping::available($tenant) && self::addressField($form) !== null && self::product($form, $pageId) !== null;
+    }
+
+    /**
+     * For the editor: whether the summary can show anywhere the form is used, on its own page or inside a landing
+     * page whose product has a price (the main form fills in on any page).
+     */
+    public static function eligibleAnywhere(Tenant $tenant, LeadForm $form): bool
+    {
+        if (! Shipping::available($tenant) || self::addressField($form) === null) {
+            return false;
+        }
+
+        if (self::product($form) !== null) {
+            return true;
+        }
+
+        return LandingPage::query()->whereHas('property', fn ($q) => $q->whereNotNull('price_from'))->get()
+            ->contains(fn (LandingPage $page) => $form->is_primary
+                || collect($page->sections())->contains(fn ($s) => ($s['type'] ?? null) === 'form' && (int) ($s['props']['form_id'] ?? 0) === (int) $form->getKey()));
+    }
+
+    /** @return array<string, mixed>|null the address field whose answer is the shipping address */
+    private static function addressField(LeadForm $form): ?array
+    {
+        return collect($form->fieldList())->first(fn ($f) => $f['type'] === 'address' && ($f['maps_to'] ?? null) === 'shipping_address');
     }
 
     /**
@@ -47,9 +83,10 @@ class FormQuote
     public static function for(Tenant $tenant, LeadForm $form, array $address, int $quantity, ?int $pageId = null): array
     {
         $product = self::product($form, $pageId);
-        $field = collect($form->fieldList())->first(fn ($f) => $f['type'] === 'address' && ($f['maps_to'] ?? null) === 'shipping_address');
+        $field = self::addressField($form);
 
-        if ($product === null || $field === null || ! Shipping::available($tenant)) {
+        // Turned off ("Tampilkan rincian harga dan ongkir"): nothing is priced, the page draws no box.
+        if (! $form->showsSummary() || $product === null || $field === null || ! Shipping::available($tenant)) {
             return ['ok' => false];
         }
 

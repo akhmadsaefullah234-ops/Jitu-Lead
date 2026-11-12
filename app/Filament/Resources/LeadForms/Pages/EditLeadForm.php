@@ -28,6 +28,8 @@ class EditLeadForm extends EditRecord
     protected function mutateFormDataBeforeFill(array $data): array
     {
         $data['fields'] = FormFields::forEditor($data['fields'] ?? []);
+        // Forms saved before the switch have no key: the toggle shows what the page does (on).
+        $data['design'] = ['show_summary' => $this->record->showsSummary()] + (array) ($data['design'] ?? []);
 
         return $data;
     }
@@ -50,7 +52,8 @@ class EditLeadForm extends EditRecord
             $form = $this->record->replicate();
             $form->forceFill([
                 'name' => $state['name'] ?? $this->record->name,
-                'design' => array_replace((array) $this->record->design, array_filter((array) ($state['design'] ?? []), 'is_string')),
+                // Texts and switches (two steps, the order summary) as they are now; pictures only after Simpan.
+                'design' => array_replace((array) $this->record->design, array_filter((array) ($state['design'] ?? []), fn ($v) => is_string($v) || is_bool($v))),
                 'fields' => FormFields::normalize($state['fields'] ?? []),
                 'submit' => (array) ($state['submit'] ?? []),
                 'buttons' => array_values((array) ($state['buttons'] ?? [])),

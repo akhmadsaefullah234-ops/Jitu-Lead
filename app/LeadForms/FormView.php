@@ -23,6 +23,13 @@ class FormView
         $font = LandingPage::FONTS[$form->design('font')] ?? LandingPage::FONTS['modern'];
         $background = array_key_exists((string) $form->design('background'), LeadForm::BACKGROUNDS) ? $form->design('background') : 'soft';
         $pagePx = PixelEvents::resolve($form->page_events, [], $tracking);
+        $block = self::block($form, $tenant, $tracking, null, 'lead-form', null, $form->publicUrl());
+
+        // The editor's preview runs no script: the order summary is drawn open with the product's price, so the
+        // "Tampilkan rincian harga dan ongkir" switch shows there too.
+        if ($preview && $block['quoteUrl'] !== null && ($product = FormQuote::product($form)) !== null) {
+            $block['sumPreview'] = FormQuote::withText(['harga' => (int) $product->price_from, 'jumlah' => 1, 'subtotal' => (int) $product->price_from]);
+        }
 
         return [
             'tenant' => $tenant,
@@ -38,7 +45,7 @@ class FormView
             'description' => (string) $form->design('description', ''),
             'tracking' => $tracking,
             'pagePx' => $pagePx ? json_encode($pagePx, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
-            'block' => self::block($form, $tenant, $tracking, null, 'lead-form', null, $form->publicUrl()),
+            'block' => $block,
         ];
     }
 

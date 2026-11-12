@@ -27,6 +27,12 @@ return [
                 'highlight' => ['.fi-section:has(.fi-section-header-heading:text-is("Kolom formulir")) .fi-fo-repeater-items, .fi-section:has(.fi-section-header-heading:text-is("Kolom formulir")) ul >> nth=0']],
         ],
         [
+            'text' => 'Masih di <b>Kolom formulir</b>, saklar <b>Tampilkan rincian harga dan ongkir</b> mengatur kotak ringkasan di atas tombol kirim: harga x jumlah, ongkir (dengan promo), dan total untuk alamat yang dipilih pembeli. Bawaannya hidup. Bila dimatikan, formulir tetap mengumpulkan alamat dan pesanan, dan AI tetap mengirim ringkasan pesanan di WhatsApp; hanya kotak di formulir yang disembunyikan. Saklar ini muncul setelah formulir punya {item} berharga dan kolom Alamat pengiriman.',
+            'alt' => 'Saklar Tampilkan rincian harga dan ongkir di bagian Kolom formulir',
+            'shot' => ['page' => 'lead-forms', 'steps' => [['click' => 'text="Form order singkat"'], ['scroll' => '.fi-fo-field:has-text("Tampilkan rincian harga dan ongkir")']],
+                'highlight' => ['.fi-fo-field:has-text("Tampilkan rincian harga dan ongkir")']],
+        ],
+        [
             'text' => 'Buka kolom <b>Alamat lengkap</b>. Pada <b>Cara mengisi wilayah</b>, pilih <b>Ketik bebas</b> atau <b>Dropdown wilayah</b> (provinsi, kota, kecamatan, kelurahan dari data wilayah Indonesia yang tersimpan di aplikasi). Di <b>Sub-isian alamat</b>, sembunyikan bagian yang tidak perlu. Di <b>Pilihan alamat</b> ada: sembunyikan kode pos (diisi dari kelurahan), mulai dari kota/kabupaten (provinsi otomatis), pilihan RT/RW atau dusun, dan pemeriksaan RT/RW di kolom jalan.',
             'alt' => 'Pengaturan kolom Alamat lengkap: cara mengisi wilayah, sub-isian, dan pilihan alamat',
             'shot' => ['page' => 'lead-forms', 'steps' => [['click' => 'text="Form order singkat"'], ['click' => '.fi-fo-repeater-item-header:has-text("Alamat lengkap")'], ['scroll' => '.fi-fo-field:has-text("Pilihan alamat")']],
