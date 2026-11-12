@@ -60,4 +60,11 @@
         vv.addEventListener('resize', update);
         update();
     })();
+    // On touch screens a tap also opens a button's tooltip, which then stays on screen over what the button opened
+    // (Inbox "Aksi lain" over the avatar). The button's label stays available to screen readers (aria-label).
+    document.addEventListener('pointerdown', function (e) {
+        if (e.pointerType !== 'touch') return;
+        var el = e.target.closest && e.target.closest('button, a, [role="button"]');
+        if (el && el._tippy) { el._tippy.setProps({ touch: false }); el._tippy.hide(); }
+    }, true);
 </script>

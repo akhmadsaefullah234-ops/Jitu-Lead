@@ -127,14 +127,21 @@ terlihat rusak; **rendah** = kerapian.
 | Semua tabel | HP | Panel filter membuka ke bawah di tengah halaman dan tertutup tombol + | sedang | Tombol bertulisan "Filter"; di HP panel filter tampil sebagai lembar dari bawah layar dengan latar gelap, isinya digulir di dalam lembar | [sebelum](screenshots/ui-audit/pr2/filter-hp-sebelum.png), [sesudah](screenshots/ui-audit/pr2/filter-hp-sesudah.png) |
 | Tugas | 320-414 | Diperiksa: kartu hanya tiga baris | - | Tidak perlu "Lihat detail" | - |
 
+### Diperbaiki di PR 3
+
+| Halaman | Lebar | Masalah | Keparahan | Perbaikan | Tangkapan layar |
+| --- | --- | --- | --- | --- | --- |
+| Inbox, header chat | 320-414 | Nama, chip tahap, dan chip produk berebut satu baris: terpotong menjadi "Budi C…", "Tanya …", "Tas Rak…" | sedang | Di HP baris pertama berisi kembali, nama, dan ⋯; chip tahap dan produk di baris kedua dengan teks 12px. Tombol kembali 44 x 44 | [sebelum](screenshots/ui-audit/pr3/inbox-header-hp-sebelum.png), [sesudah](screenshots/ui-audit/pr3/inbox-header-hp-sesudah.png) |
+| Inbox, tombol ⋯ (dan tombol ikon lain) | HP | Tooltip "Aksi lain" ikut muncul saat tombol disentuh dan tetap tampil menutupi avatar | rendah | Di layar sentuh tooltip tombol tidak dibuka oleh sentuhan; label tetap terbaca pembaca layar (`aria-label`). Skrip di `theme.blade.php` | - |
+| Modal panjang (mis. Buat resi di Inbox) | HP | Tombol Batal dan aksi utama ada di ujung formulir; formulir Buat resi setinggi 2.700px, tombol baru terlihat setelah digulir sampai habis. Tombol bertumpuk tiga baris | sedang | Baris tombol menempel di bawah jendela modal; tombol berdampingan (aksi utama di kanan) dan turun baris bila tidak muat | [sebelum](screenshots/ui-audit/pr3/modal-resi-hp-sebelum.png), [sesudah](screenshots/ui-audit/pr3/modal-resi-hp-sesudah.png) |
+| Halaman buat dan ubah (Lead, Properti/Produk, Formulir, pengaturan) | semua, utamanya HP | Tombol Simpan/Buat dan Batal hanya ada di bawah formulir panjang | sedang | `BasePage::stickyFormActions()`: selama tombol asli di luar layar, tombol yang sama melayang di bawah. Di bawah 1024px bar itu berada di atas tab bar dan tombol + disembunyikan | [sebelum](screenshots/ui-audit/pr3/lead-buat-hp-sebelum.png), [sesudah](screenshots/ui-audit/pr3/lead-buat-hp-sesudah.png) |
+
 ### Belum dikerjakan (PR berikutnya)
 
 | Halaman | Lebar | Masalah | Keparahan | PR |
 | --- | --- | --- | --- | --- |
 | Lead, Kiriman, Tugas | 320-414 | Kotak Cari dan "Urutkan menurut" masih dua baris di atas kartu; lencana jumlah filter menampilkan "0" walau tidak ada saringan | rendah | 4 |
 | Lead | 320-414 | Empat tombol header (Impor resi, Ekspor CSV, Pengaturan agensi, Buat lead) turun ke dua baris; digarap bersama aturan "satu tombol utama per layar" | sedang | 4 |
-| Inbox, header chat | 320-414 | Chip tahap dan produk terpotong menjadi "Tanya pr…", "Tas Rak…"; tooltip "Aksi lain" tetap tampil menutupi avatar setelah ⋯ disentuh | sedang | 3 |
-| Modal di HP | HP | Tombol aksi modal belum menempel di bawah (sticky footer) untuk formulir panjang | sedang | 3 |
 | Semua halaman panel | HP dan tablet | Area sentuh di bawah 44px: tombol ikon aksi baris (32 x 44), aksi tautan tabel (tinggi 20px), tombol menu dan lonceng di top bar (28-36px), kotak centang (16px), kotak Cari (tinggi 36px) | tinggi | 4 |
 | Semua halaman | semua | Teks di bawah 14px: lencana (12px), keterangan kartu angka Dasbor (10.9px), lencana "Admin" di Tutorial (9.9px), baris "Menu:" di Tutorial (12px) | sedang | 4 |
 | Dasbor | 320-414 | Angka besar ("Rp 1.074.000", "16.7% → 250%") pecah ke beberapa baris di kartu dua kolom | sedang | 4 |

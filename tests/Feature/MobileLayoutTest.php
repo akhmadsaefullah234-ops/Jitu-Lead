@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Filament\Pages\Pipeline;
 use App\Filament\Pages\Reports;
+use App\Filament\Resources\Leads\Pages\CreateLead;
 use App\Filament\Resources\Leads\Pages\ListLeads;
 use App\Filament\Resources\Team\Pages\ManageTeam;
 use App\Filament\Resources\WaChannels\Pages\ListWaChannels;
@@ -62,5 +63,10 @@ class MobileLayoutTest extends TestCase
     public function test_report_tables_label_each_figure_for_the_card_view(): void
     {
         Livewire::test(Reports::class)->assertSeeHtml('data-label="Konversi"');
+    }
+
+    public function test_form_buttons_stay_in_reach_while_a_long_form_scrolls(): void
+    {
+        $this->assertTrue(Livewire::test(CreateLead::class)->instance()->areFormActionsSticky());
     }
 }
