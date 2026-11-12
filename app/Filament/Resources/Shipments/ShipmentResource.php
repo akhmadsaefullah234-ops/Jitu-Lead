@@ -171,6 +171,7 @@ class ShipmentResource extends Resource
                     ->state(fn (Shipment $r) => self::fees($r))->placeholder('-')->listWithLineBreaks(),
                 TextColumn::make('status')->label('Status')->badge()
                     ->state(fn (Shipment $r) => self::status($r))
+                    ->tooltip(fn (Shipment $r) => $r->pickedUp() ? ShipmentActions::PICKED_UP_HINT.' untuk membatalkan.' : null)
                     ->color(fn (Shipment $r) => match (true) {
                         $r->waitingBalance() => 'warning',
                         $r->state === Shipment::FAILED, in_array($r->status, ShipmentStatus::ACTION, true) => 'danger',
@@ -234,6 +235,9 @@ class ShipmentResource extends Resource
                 Action::make('markUnprinted')->label('Tandai belum dicetak')->icon(Heroicon::OutlinedArrowUturnLeft)->color('gray')
                     ->visible(fn (Shipment $r) => $r->printable() && $r->printed_at !== null)
                     ->action(fn (Shipment $record) => self::mark(collect([$record]), false)),
+                // The row's own parcel (not the lead's newest): rules in Shipment::cancellable() / deletable().
+                ShipmentActions::cancelShipment(fn (Action $action) => $action->getRecord(), 'cancel')->label('Batalkan'),
+                ShipmentActions::deleteShipment('delete'),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
@@ -245,6 +249,8 @@ class ShipmentResource extends Resource
                         ->action(fn (Collection $records) => self::mark($records, true))->deselectRecordsAfterCompletion(),
                     BulkAction::make('markUnprintedBulk')->label('Tandai belum dicetak')->icon(Heroicon::OutlinedArrowUturnLeft)
                         ->action(fn (Collection $records) => self::mark($records, false))->deselectRecordsAfterCompletion(),
+                    ShipmentActions::bulkCancel(),
+                    ShipmentActions::bulkDelete(),
                 ]),
             ])
             ->emptyStateHeading('Tidak ada kiriman di sini')

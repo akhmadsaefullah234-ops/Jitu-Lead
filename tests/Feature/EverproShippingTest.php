@@ -17,6 +17,7 @@ use App\Filament\Resources\Leads\Pages\EditLead;
 use App\Filament\Resources\Leads\Pages\ListLeads;
 use App\Filament\Resources\Shipments\Pages\ListShipments;
 use App\Filament\Resources\Shipments\ShipmentResource;
+use App\Filament\Support\ShipmentActions;
 use App\Filament\Support\ShipmentTimeline;
 use App\Jobs\FetchShipmentAwb;
 use App\Leads\AddressCheck;
@@ -1815,6 +1816,161 @@ class EverproShippingTest extends TestCase
 
         Livewire::test(ListShipments::class)->assertCanSeeTableRecords([$mine])->assertCanNotSeeTableRecords([$other]);
         $this->assertSame('1', ShipmentResource::getNavigationBadge());
+    }
+
+    // ---- Batalkan and Hapus in the Pengiriman table ------------------------------------------------------------
+
+    /** A second parcel on the same lead, as if booked after the first one (bypasses the one-active-parcel rule). */
+    private function secondParcel(Shipment $first, string $awb, string $orderNo): Shipment
+    {
+        return $this->inShop(fn () => Shipment::query()->create([
+            'lead_id' => $first->lead_id, 'provider' => 'everpro', 'sequence' => 2, 'client_order_no' => 'JL-'.$this->shop->id.'-'.$first->lead_id.'-2',
+            'provider_order_no' => $orderNo, 'order_id' => 'ER-2', 'awb' => $awb, 'courier' => 'JNE REG', 'state' => Shipment::SHIPPED,
+            'status' => ShipmentStatus::AWB_CREATED, 'awb_notified_at' => now(),
+        ]));
+    }
+
+    /** @return list<string> the tabs the parcel shows in */
+    private function tabsOf(Shipment $shipment): array
+    {
+        return $this->inShop(fn () => array_values(array_filter(array_keys(Shipment::TABS),
+            fn (string $tab) => Shipment::query()->tab($tab)->whereKey($shipment->id)->exists())));
+    }
+
+    public function test_batalkan_in_the_table_cancels_the_row_clicked_with_its_own_order_number(): void
+    {
+        Storage::fake('local');
+        $this->configure();
+        $old = $this->book($this->order());
+        $new = $this->secondParcel($old, 'JNE0009999', 'TRD2026110509999');
+        $this->assertSame($new->id, $this->inShop(fn () => Shipment::latestFor($old->lead)->id), 'The lead\'s newest parcel is the other one.');
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+
+        Livewire::test(ListShipments::class)->set('activeTab', 'unprinted')
+            ->assertTableActionVisible('cancel', $old)
+            ->callTableAction('cancel', $old, ['reason' => 'Pembeli ganti alamat'])
+            ->assertHasNoTableActionErrors()
+            ->assertNotified('Kiriman dibatalkan');
+
+        $cancels = array_values(array_filter($this->calls, fn ($c) => str_ends_with($c['path'], '/cancel')));
+        $this->assertCount(1, $cancels);
+        $this->assertSame('/shipment/v1/orders/'.$old->provider_order_no.'/cancel', $cancels[0]['path'], 'The row\'s own order at Everpro.');
+        $this->assertSame(Shipment::CANCELLED, $old->fresh()->state);
+        $this->assertSame(Shipment::SHIPPED, $new->fresh()->state, 'The newer parcel of the lead is untouched.');
+        $this->assertSame(['cancelled'], $this->tabsOf($old->fresh()), 'Straight to the Dibatalkan tab.');
+        $this->assertStringContainsString('dibatalkan: Pembeli ganti alamat', $this->inShop(fn () => $old->lead->activities()->latest('id')->value('body')));
+    }
+
+    public function test_a_parcel_the_courier_collected_cannot_be_cancelled_and_bulk_skips_it_with_the_reason(): void
+    {
+        Storage::fake('local');
+        $this->configure();
+        $collected = $this->book($this->order());
+        $this->courierSays('PICKED_UP');
+        $open = $this->book($this->order('cod', '6281234567899'));
+        $this->assertNotSame($collected->awb, $open->awb);
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+        $collected = $collected->fresh();
+        $this->assertTrue($collected->pickedUp());
+
+        $page = Livewire::test(ListShipments::class)->set('activeTab', 'transit')->assertTableActionHidden('cancel', $collected);
+        $this->assertStringContainsString(ShipmentActions::PICKED_UP_HINT, $page->html());
+
+        $before = count(array_filter($this->calls, fn ($c) => str_ends_with($c['path'], '/cancel')));
+        Livewire::test(ListShipments::class)->set('activeTab', 'all')
+            ->callTableBulkAction('cancelSelected', [$collected, $open->fresh()])
+            ->assertNotified('1 dibatalkan, 1 dilewati (sudah diambil kurir)');
+
+        $this->assertSame($before + 1, count(array_filter($this->calls, fn ($c) => str_ends_with($c['path'], '/cancel'))));
+        $this->assertSame(Shipment::SHIPPED, $collected->fresh()->state);
+        $this->assertSame(Shipment::CANCELLED, $open->fresh()->state);
+        $this->assertThrows(fn () => $this->inShop(fn () => app(Shipments::class)->cancel($collected->fresh(), $this->adminOf($this->shop))), CarrierException::class, 'sudah diambil kurir');
+    }
+
+    public function test_hapus_is_only_for_parcels_no_longer_live_and_never_calls_everpro(): void
+    {
+        Storage::fake('local');
+        $this->configure();
+        $admin = $this->adminOf($this->shop);
+        $live = $this->book($this->order());
+        $cancelled = $this->book($this->order('cod', '6281234567801'));
+        $this->inShop(fn () => app(Shipments::class)->cancel($cancelled, $admin));
+        $refused = $this->inShop(fn () => Shipment::query()->create(['lead_id' => $this->order('cod', '6281234567802')->id, 'provider' => 'everpro', 'sequence' => 1,
+            'client_order_no' => 'JL-X-1', 'state' => Shipment::FAILED, 'error' => 'Alamat tidak dikenal']));
+        [$linked] = $this->link($this->order('cod', '6281234567803'), 'JNE7700112233');
+        $this->actingInTenant($admin, $this->shop);
+        $calls = count($this->calls);
+
+        Livewire::test(ListShipments::class)->set('activeTab', 'all')->assertTableActionHidden('delete', $live)
+            ->assertTableActionVisible('delete', $cancelled->fresh())->assertTableActionVisible('delete', $refused)->assertTableActionVisible('delete', $linked);
+        $this->assertThrows(fn () => $this->inShop(fn () => app(Shipments::class)->delete($live, $admin)), CarrierException::class, 'Batalkan dulu');
+
+        Livewire::test(ListShipments::class)->set('activeTab', 'all')->callTableAction('delete', $cancelled->fresh())->assertNotified('Kiriman dihapus dari daftar');
+        Livewire::test(ListShipments::class)->set('activeTab', 'all')
+            ->callTableBulkAction('deleteSelected', [$live, $refused, $linked])
+            ->assertNotified('2 dihapus, 1 dilewati (masih aktif di penyedia, batalkan dulu)');
+
+        $this->assertSame($calls, count($this->calls), 'Nothing is sent to Everpro.');
+        $this->inShop(function () use ($live, $cancelled, $refused, $linked, $admin) {
+            $this->assertNotNull(Shipment::query()->find($live->id));
+            foreach ([$cancelled, $refused, $linked] as $gone) {
+                $this->assertNull(Shipment::query()->find($gone->id));
+                $this->assertSame($admin->id, Shipment::withTrashed()->find($gone->id)->deleted_by, 'Kept, soft deleted.');
+            }
+            $this->assertSame('Kiriman '.$cancelled->awb.' dihapus dari daftar oleh '.$admin->name.'.', $cancelled->lead->activities()->latest('id')->value('body'));
+            $this->assertNull(Shipment::latestFor($linked->lead));
+        });
+
+        foreach ([$cancelled, $refused, $linked] as $gone) {
+            $this->assertSame([], $this->tabsOf($gone), 'In no tab.');
+        }
+    }
+
+    public function test_after_hapus_the_lead_gets_a_new_resi_with_a_new_order_number(): void
+    {
+        Storage::fake('local');
+        $this->configure();
+        $lead = $this->order();
+        $first = $this->book($lead);
+        $this->inShop(fn () => app(Shipments::class)->cancel($first, $this->adminOf($this->shop)));
+        $this->inShop(fn () => app(Shipments::class)->delete($first->fresh(), $this->adminOf($this->shop)));
+
+        $second = $this->book($lead);
+        $this->assertNotSame($first->id, $second->id);
+        $this->assertSame('JL-'.$this->shop->id.'-'.$lead->id.'-2', $second->client_order_no, 'The deleted parcel\'s number is not given out again.');
+        $this->assertSame($second->id, $this->inShop(fn () => Shipment::latestFor($lead)->id));
+    }
+
+    public function test_an_agent_cancels_but_does_not_delete_and_never_reaches_another_agencys_parcels(): void
+    {
+        Storage::fake('local');
+        $this->configure();
+        $agent = $this->member($this->shop, Role::Agent);
+        $mine = $this->book($this->order('cod', '6281234567841', ['owner_id' => $agent->id]));
+        $done = $this->book($this->order('cod', '6281234567842', ['owner_id' => $agent->id]));
+        $this->inShop(fn () => app(Shipments::class)->cancel($done, $this->adminOf($this->shop)));
+        $this->actingInTenant($agent, $this->shop);
+
+        Livewire::test(ListShipments::class)->set('activeTab', 'all')
+            ->assertTableActionVisible('cancel', $mine)->assertTableActionHidden('delete', $done->fresh())
+            ->assertTableBulkActionHidden('deleteSelected')->assertTableBulkActionVisible('cancelSelected');
+
+        // An agent of another agency sees none of these parcels and cannot act on them.
+        $other = app(ProvisionTenant::class)('Toko Lain', 'toko-lain', User::factory()->create(), 'retail');
+        $this->configure($other);
+        $stranger = $this->member($other, Role::Agent);
+        $this->actingInTenant($stranger, $other);
+        $calls = count($this->calls);
+
+        Livewire::test(ListShipments::class)->set('activeTab', 'all')->assertCanNotSeeTableRecords([$mine, $done]);
+        $this->assertNull(Shipment::query()->find($mine->id));
+        try {
+            Livewire::test(ListShipments::class)->set('activeTab', 'all')->callTableAction('cancel', $mine);
+        } catch (\Throwable) {
+            // Refused: the parcel is not in this agency's table.
+        }
+        $this->assertSame(Shipment::SHIPPED, $this->inShop(fn () => $mine->fresh()->state));
+        $this->assertSame($calls, count($this->calls));
     }
 
     // ---- AI ------------------------------------------------------------------------------------------------------

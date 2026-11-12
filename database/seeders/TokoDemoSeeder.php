@@ -240,7 +240,7 @@ class TokoDemoSeeder extends DemoSeeder
             'body' => $status === AiDraft::SENT ? $conversation->messages()->where('direction', 'out')->latest('id')->value('body') : null]);
     }
 
-    /** Five parcels: two not printed yet, one waiting for its resi, one on its way, one that needs action. */
+    /** Six parcels: two not printed yet, one waiting for its resi, one on its way, one that needs action, one cancelled. */
     private function parcels(array $leads): void
     {
         $n = 0;
@@ -259,6 +259,8 @@ class TokoDemoSeeder extends DemoSeeder
         $parcel($leads['Joko Contoh'], ['state' => Shipment::ORDERED, 'order_id' => 'DEMO-ORDER-3']);
         $parcel($leads['Indra Contoh'], ['state' => Shipment::SHIPPED, 'awb' => 'DEMO0000000004', 'status' => ShipmentStatus::IN_TRANSIT, 'printed_at' => now()->subDay(), 'tracked_at' => now()->subHour()]);
         $parcel($leads['Kiki Contoh'], ['state' => Shipment::SHIPPED, 'awb' => 'DEMO0000000005', 'status' => ShipmentStatus::DELIVERY_FAILED, 'status_reason' => 'Rumah kosong (data demo)', 'printed_at' => now()->subDays(2), 'tracked_at' => now()->subHour()]);
+        // Cancelled before pickup (the order was cancelled after the buyer changed their mind): the Dibatalkan tab's "Hapus".
+        $parcel($leads['Maya Contoh'], ['state' => Shipment::CANCELLED, 'awb' => 'DEMO0000000006', 'status' => ShipmentStatus::CANCELLED, 'cancelled_at' => now()->subHours(3), 'final_at' => now()->subHours(3)]);
 
         foreach (['Gilang Contoh', 'Hana Contoh', 'Indra Contoh', 'Kiki Contoh'] as $i => $name) {
             $leads[$name]->forceFill(['tracking_number' => 'DEMO000000000'.[1, 2, 4, 5][$i]])->save();

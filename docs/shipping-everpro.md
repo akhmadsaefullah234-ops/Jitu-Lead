@@ -160,6 +160,22 @@ memakai penyedia pengiriman memuat blok **📦 Pengiriman** yang sama.
 - Tab: **Belum dicetak** (bawaan, terlama dulu), **Sudah dicetak, menunggu dijemput**, **Dalam perjalanan**, **Perlu
   tindakan** (gagal antar, retur, label gagal, resi gagal), **Selesai**, **Dibatalkan**, masing-masing dengan jumlah.
   Filter tanggal, kurir, COD/transfer, produk; cari nama, HP, resi.
+- **Batalkan** (per baris, dan **Batalkan terpilih** untuk banyak baris) membatalkan kiriman baris itu, bukan kiriman
+  terbaru lead, lewat `Shipments::cancel()` dengan nomor order penyedia baris itu. Hanya bila `Shipment::cancellable()`:
+  belum diambil kurir (status kosong, resi terbit, atau gagal dijemput) atau masih menunggu saldo; bukan resi yang
+  ditautkan manual. Kolom **Alasan** (bawaan "Dibatalkan toko") dikirim ke penyedia dan dicatat di aktivitas lead.
+  Kiriman yang sudah diambil kurir tidak punya tombol ini; tooltip statusnya: "Sudah diambil kurir: hubungi penyedia".
+  Hak akses sama dengan **Batalkan kiriman** di lead dan Inbox: siapa pun yang bisa melihat kirimannya (agen hanya
+  kiriman lead miliknya).
+- **Hapus** (per baris, dan **Hapus terpilih**) hanya untuk admin dan team leader, dan hanya kiriman yang tidak lagi
+  aktif di penyedia (`Shipment::deletable()`): dibatalkan; gagal sebelum diterima penyedia (tanpa `order_id`, nomor
+  order penyedia, dan resi); atau resi yang ditautkan manual. Tidak memanggil API penyedia. Baris di-*soft delete*
+  (`deleted_at`, `deleted_by`): hilang dari semua tab, hitungan, laporan, pelacakan, `latestFor()`, dan resi otomatis,
+  tetapi tetap tersimpan sehingga nomor pesanannya (`client_order_no`) tidak pernah dipakai ulang. Pesan status
+  kiriman yang masih menunggu dilewati ("Kiriman dihapus"), dan aktivitas lead mencatat "Kiriman X dihapus dari daftar
+  oleh {nama}". Setelah itu lead bisa dibuatkan resi baru.
+- Aksi massal memproses tiap baris sendiri, paling banyak 50 sekali jalan; baris yang tidak memenuhi syarat atau gagal
+  dilewati tanpa menghentikan sisanya, dengan ringkasan seperti "3 dibatalkan, 2 dilewati (sudah diambil kurir)".
 - **Cetak semua yang belum dicetak (N)** membuat satu PDF urut tabel, opsional dengan halaman pertama daftar
   pengemasan, dan menandai `printed_at`/`printed_by`. Juga **Cetak label terpilih**, **Cetak**/**Cetak ulang** per baris
   (jumlah cetak dihitung) dan **Tandai sudah/belum dicetak**. **Riwayat cetak** menyimpan tiap cetakan dengan tautan
