@@ -1,7 +1,5 @@
 <?php
 
-use App\Filament\Pages\DataPrivacy;
-
 return [
     'title' => 'Data dan privasi',
     'group' => 'akun',
@@ -9,7 +7,6 @@ return [
     'admin' => true,
     'menu' => 'Pengaturan > Data & privasi',
     'intro' => '<p>Mengunduh semua data toko, atau menghapus akun beserta datanya.</p>',
-    'pages' => [DataPrivacy::class],
     'steps' => [
         [
             'text' => 'Klik <b>Unduh semua data (ZIP)</b>: satu berkas berisi CSV lead dan aktivitasnya, percakapan WhatsApp, {katalog}, landing page, aturan follow-up, pengetahuan AI, anggota tim, langganan, dan chat support. Kata sandi dan kunci integrasi tidak disertakan.',

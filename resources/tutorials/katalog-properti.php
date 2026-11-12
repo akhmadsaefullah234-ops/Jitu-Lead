@@ -1,7 +1,5 @@
 <?php
 
-use App\Filament\Resources\Properties\PropertyResource;
-
 return [
     'title' => 'Katalog properti',
     'group' => 'properti',
@@ -10,7 +8,6 @@ return [
     'leader' => true,
     'menu' => 'Properti, lalu klik nama properti',
     'intro' => '<p>Daftar proyek dan listing yang Anda pasarkan. Lead, AI, sambutan WhatsApp, follow-up, dan event iklan merujuk ke properti di sini. Admin dan team leader bisa mengubahnya; agen hanya melihat.</p>',
-    'pages' => [PropertyResource::class],
     'steps' => [
         [
             'text' => 'Buka <b>Properti</b>. Kolom <b>Jenis</b> membedakan <b>Primary (proyek developer)</b> dan <b>Secondary (listing)</b>. Saring dengan Jenis atau Status (Tersedia, Dibooking, Terjual). Klik <b>Buat properti</b> untuk menambah.',

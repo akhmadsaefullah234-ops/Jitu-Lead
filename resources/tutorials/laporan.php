@@ -1,14 +1,11 @@
 <?php
 
-use App\Filament\Pages\Reports;
-
 return [
     'title' => 'Laporan',
     'group' => 'iklan',
     'order' => 30,
     'menu' => 'Laporan',
     'intro' => '<p>Ringkasan kinerja pada periode yang dipilih: corong pipeline, hasil per sumber lead, dan hasil per agen. Agen melihat angka lead miliknya.</p>',
-    'pages' => [Reports::class],
     'steps' => [
         [
             'text' => 'Buka <b>Laporan</b> dan pilih <b>Periode</b> (bawaan 30 hari terakhir). Periode yang dipilih diingat untuk kunjungan berikutnya.',

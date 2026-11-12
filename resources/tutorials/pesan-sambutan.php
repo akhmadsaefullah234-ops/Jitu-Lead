@@ -1,7 +1,5 @@
 <?php
 
-use App\Filament\Resources\LeadForms\LeadFormResource;
-
 return [
     'title' => 'Pesan sambutan WhatsApp',
     'group' => 'lead',
@@ -9,7 +7,6 @@ return [
     'leader' => true,
     'menu' => 'Formulir > buka formulir > Pesan sambutan WhatsApp',
     'intro' => '<p>Begitu pembeli mengisi formulir, JITU LEAD menyapanya di WhatsApp walaupun pembeli tidak lanjut ke chat. Balasan pembeli masuk ke percakapan lead itu, lalu AI atau agen melanjutkan. Untuk toko, sambutan aktif sejak awal.</p>',
-    'pages' => [LeadFormResource::class],
     'steps' => [
         [
             'text' => 'Buka <b>Formulir</b>, klik formulirnya, lalu buka bagian <b>Pesan sambutan WhatsApp</b>. Nyalakan <b>Kirim pesan sambutan WhatsApp otomatis</b>.',

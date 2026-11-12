@@ -1,8 +1,5 @@
 <?php
 
-use App\Filament\Resources\AiKnowledge\AiKnowledgeResource;
-use App\Filament\Resources\AiSuggestions\AiSuggestionResource;
-
 return [
     'title' => 'Pengetahuan AI dan Usulan Q&A',
     'group' => 'percakapan',
@@ -10,7 +7,6 @@ return [
     'admin' => true,
     'menu' => 'AI Asisten > Pengetahuan AI, dan AI Asisten > Usulan Q&A',
     'intro' => '<p>AI hanya menjawab dari pengetahuan yang Anda tulis. Makin jelas isinya, makin sedikit chat yang diserahkan ke agen.</p>',
-    'pages' => [AiKnowledgeResource::class, AiSuggestionResource::class],
     'steps' => [
         [
             'text' => 'Buka <b>AI Asisten > Pengetahuan AI</b>. Daftar ini berisi pengetahuan umum yang berlaku untuk semua {item}. Kolom <b>Dipakai</b> menyalakan atau mematikan catatan tanpa menghapusnya.',

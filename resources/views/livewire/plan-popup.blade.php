@@ -17,7 +17,7 @@
         $blocking = in_array($state, ['trial_ended', 'read_only'], true);
     @endphp
     <div style="position:fixed;inset:0;z-index:60;background:rgba(17,24,39,.6);display:grid;place-items:center;padding:1rem;overflow:auto" role="dialog" aria-modal="true" aria-label="Pilih paket">
-        <div style="background:#fff;border-radius:1.1rem;max-width:56rem;width:100%;padding:1.4rem;box-shadow:0 25px 60px rgba(0,0,0,.35);max-height:94vh;overflow:auto">
+        <div style="background:#fff;border-radius:1.1rem;max-width:56rem;width:100%;padding:1.4rem;box-shadow:0 25px 60px rgba(0,0,0,.35);max-height:94vh;max-height:94dvh;overflow:auto">
             <h2 style="margin:0 0 .25rem;font-size:1.35rem;font-weight:800">{{ $title }}</h2>
             <p style="margin:0 0 1rem;color:#4b5563">{{ $text }}</p>
 

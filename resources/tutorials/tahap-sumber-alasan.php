@@ -1,9 +1,5 @@
 <?php
 
-use App\Filament\Resources\LeadSources\LeadSourceResource;
-use App\Filament\Resources\LostReasons\LostReasonResource;
-use App\Filament\Resources\Stages\StageResource;
-
 return [
     'title' => 'Tahap pipeline, sumber lead, dan alasan gugur',
     'group' => 'akun',
@@ -11,7 +7,6 @@ return [
     'admin' => true,
     'menu' => 'Pengaturan > Tahap pipeline / Sumber lead / Alasan gugur',
     'intro' => '<p>Tiga daftar yang membentuk pipeline dan laporan Anda.</p>',
-    'pages' => [StageResource::class, LeadSourceResource::class, LostReasonResource::class],
     'steps' => [
         [
             'text' => '<b>Tahap pipeline</b>: klik ikon panah atas-bawah di atas tabel, lalu seret baris untuk mengubah urutan. Klik <b>Ubah</b> untuk mengganti nama, <b>Jenis</b> (Terbuka, Menang, atau Gugur), <b>Syarat masuk tahap</b> (mis. Alasan gugur), serta <b>Tindak lanjut bawaan</b> dan batas waktunya dalam jam, yang otomatis mengisi tugas lead yang masuk tahap itu.',

@@ -1,7 +1,5 @@
 <?php
 
-use App\Filament\Pages\AiModes;
-
 return [
     'title' => 'Mode AI',
     'group' => 'percakapan',
@@ -12,7 +10,6 @@ return [
         .'<li><b>Saya balas sendiri</b>: AI tidak ikut campur. Bawaan untuk nomor baru.</li>'
         .'<li><b>AI menyiapkan, agen yang kirim</b>: AI menulis saran balasan di Inbox. Agen memilih memakainya atau tidak.</li>'
         .'<li><b>AI membalas otomatis</b>: AI langsung membalas bila jawabannya ada di pengetahuan Anda.</li></ul>',
-    'pages' => [AiModes::class],
     'steps' => [
         [
             'text' => 'Buka <b>AI Asisten > Mode AI</b>. Pada kolom <b>Pembalas</b>, pilih mode untuk tiap nomor. Pilihan tersimpan langsung, tanpa tombol simpan.',

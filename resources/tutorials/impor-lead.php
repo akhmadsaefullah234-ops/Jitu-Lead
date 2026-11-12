@@ -1,14 +1,11 @@
 <?php
 
-use App\Filament\Pages\ImportLeads;
-
 return [
     'title' => 'Impor lead',
     'group' => 'lead',
     'order' => 50,
     'menu' => 'Impor lead',
     'intro' => '<p>Memasukkan banyak lead sekaligus dari Excel atau Google Sheets, misalnya data pameran atau data lama.</p>',
-    'pages' => [ImportLeads::class],
     'steps' => [
         [
             'text' => 'Buka <b>Impor lead</b> dan klik <b>Unduh template</b>. Isi data di bawah judul kolom (nama, telepon, email, catatan) tanpa mengubah judulnya. Kolom wajib: nama, dan telepon atau email.',

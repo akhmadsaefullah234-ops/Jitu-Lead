@@ -91,12 +91,6 @@ final class Tutorials
         return [self::find($slugs[$i - 1] ?? '', $industry, $role), self::find($slugs[$i + 1] ?? '', $industry, $role)];
     }
 
-    /** The visible chapter a page links to with "Lihat tutorial", from its render hook scopes (page and resource). */
-    public static function forScopes(array $scopes): ?Chapter
-    {
-        return self::visible()->first(fn (Chapter $c) => array_intersect($c->pages, $scopes) !== []);
-    }
-
     /** @return array<string, string> group key => label, for the current agency */
     public static function groups(?Industry $industry = null): array
     {

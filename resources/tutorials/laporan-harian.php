@@ -1,14 +1,11 @@
 <?php
 
-use App\Filament\Pages\DailyReports;
-
 return [
     'title' => 'Laporan harian WhatsApp',
     'group' => 'iklan',
     'order' => 40,
     'menu' => 'Pengaturan > Laporan harian',
     'intro' => '<p>Ringkasan lead, penjualan, AI, dan hal yang perlu perhatian, dikirim ke WhatsApp Anda dari nomor resmi JITU LEAD (bukan nomor toko). Angkanya sama dengan Dasbor periode Kemarin dan tidak memuat nama atau nomor pembeli. Aktif sejak awal untuk admin, mati untuk team leader dan agen.</p>',
-    'pages' => [DailyReports::class],
     'steps' => [
         [
             'text' => 'Buka <b>Laporan harian</b>. Nomor penerima diambil dari profil Anda; nomor baru dikonfirmasi dengan kode 6 digit lewat WhatsApp (<b>Kirim kode</b>, lalu <b>Verifikasi</b>).',

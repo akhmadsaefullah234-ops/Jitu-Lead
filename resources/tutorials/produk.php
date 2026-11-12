@@ -1,7 +1,5 @@
 <?php
 
-use App\Filament\Resources\Properties\PropertyResource;
-
 return [
     'title' => 'Produk dan pengaturan per produk',
     'group' => 'lead',
@@ -10,7 +8,6 @@ return [
     'leader' => true,
     'menu' => 'Produk, lalu klik produknya',
     'intro' => '<p>Semua yang hanya berlaku untuk satu produk diatur di halaman produk itu. Admin dan team leader bisa mengubahnya; agen hanya melihat.</p>',
-    'pages' => [PropertyResource::class],
     'steps' => [
         [
             'text' => 'Buka <b>Produk</b>. Klik <b>Buat produk</b> untuk menambah, atau klik nama produk untuk mengubahnya.',

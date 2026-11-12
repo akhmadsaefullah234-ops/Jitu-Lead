@@ -9,7 +9,6 @@ use App\Filament\Pages\Tenancy\RegisterAgency;
 use App\Http\Middleware\LockExpiredTrial;
 use App\Http\Middleware\SetCurrentTenant;
 use App\Models\Tenant;
-use App\Tutorials\Tutorials;
 use Filament\Facades\Filament;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -71,9 +70,6 @@ class AppPanelProvider extends PanelProvider
             ->renderHook(PanelsRenderHook::AUTH_REGISTER_FORM_AFTER, fn () => view('filament.legal-links', ['register' => true]))
             ->renderHook(PanelsRenderHook::AUTH_LOGIN_FORM_AFTER, fn () => view('filament.legal-links'))
             ->renderHook(PanelsRenderHook::USER_MENU_BEFORE, fn () => Filament::getTenant() ? view('filament.plan-badge') : '')
-            // "Lihat tutorial" on a page a tutorial chapter is about (App\Tutorials\Tutorials::forScopes).
-            ->renderHook(PanelsRenderHook::PAGE_HEADER_ACTIONS_BEFORE, fn (array $scopes) => Filament::getTenant() && auth()->check() && ! TrialLock::applies()
-                && ($chapter = Tutorials::forScopes($scopes)) ? view('filament.tutorial-link', ['chapter' => $chapter]) : '')
             ->renderHook(PanelsRenderHook::SIDEBAR_NAV_END, fn () => Filament::getTenant() && auth()->check() ? view('filament.support-menu-item') : '')
             ->renderHook(PanelsRenderHook::BODY_END, fn () => Filament::getTenant() && auth()->check() && ! TrialLock::applies() ? view('filament.mobile-nav') : '')
             ->renderHook(PanelsRenderHook::BODY_END, fn () => Filament::getTenant() && auth()->check() && ! TrialLock::applies() ? Blade::render('@livewire(\\App\\Livewire\\PlanPopup::class)') : '')

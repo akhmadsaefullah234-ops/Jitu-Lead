@@ -7,7 +7,7 @@
             .wa-list, .wa-chat { max-height: none; }
             /* The chat fills the screen under the top bar: messages scroll, the compose box stays at the bottom,
                also while the keyboard is open (the viewport resizes with it, see pwa-head). */
-            .wa .wa-chat { height: calc(100vh - 4.9rem); height: calc(100dvh - 4.9rem); max-height: none; margin-inline: -.75rem; border-radius: 0; border-inline: 0; }
+            .wa .wa-chat { height: calc(100vh - 4.9rem); height: calc(var(--jl-vvh, 100dvh) - 4.9rem); max-height: none; margin-inline: -.75rem; border-radius: 0; border-inline: 0; }
             .fi-page:has(.wa--open) .fi-header { display: none; }
             .fi-page:has(.wa--open) .fi-page-header-main-ctn { padding-block: .3rem 0; row-gap: 0; }
             .wa .wa-compose { padding-bottom: calc(.7rem + env(safe-area-inset-bottom)); }
@@ -46,7 +46,7 @@
         .dark .wa-route.warn { background: #451a03; color: #fde68a; border-color: #78350f; }
         .dark .wa-chip { background: var(--gray-800); color: var(--gray-200); }
         .wa-list, .wa-chat { background: white; border: 1px solid var(--gray-200); border-radius: .75rem; overflow: hidden; }
-        .wa-list { overflow-y: auto; max-height: calc(100vh - 12rem); }
+        .wa-list { overflow-y: auto; max-height: calc(100vh - 12rem); max-height: calc(100dvh - 12rem); }
         .wa-item { display: block; width: 100%; text-align: left; padding: .7rem .9rem; border-bottom: 1px solid var(--gray-100); }
         .wa-item[aria-current="true"] { background: var(--gray-100); }
         .wa-item .n { display: flex; justify-content: space-between; font-weight: 600; font-size: .875rem; }
@@ -69,7 +69,7 @@
         .wa-print { background: #fef3c7; color: #92400e; font-weight: 600; border-radius: 9999px; padding: 0 .45rem; font-size: .7rem; white-space: nowrap; }
         .wa-spam { background: #fef3c7; color: #92400e; border-radius: 9999px; padding: 0 .45rem; font-size: .7rem; white-space: nowrap; }
         .wa-badge { background: var(--primary-600); color: white; border-radius: 9999px; padding: 0 .45rem; font-size: .7rem; }
-        .wa-chat { display: flex; flex-direction: column; max-height: calc(100vh - 12rem); }
+        .wa-chat { display: flex; flex-direction: column; max-height: calc(100vh - 12rem); max-height: calc(100dvh - 12rem); }
         .wa-proof { font-size: .75rem; font-weight: 600; color: #92400e; background: #fef3c7; border-radius: 9999px; padding: .15rem .55rem; }
         .wa-msgs { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: .4rem; background: var(--gray-50); }
         .wa-m { max-width: 75%; padding: .45rem .7rem; border-radius: .7rem; font-size: .875rem; word-break: break-word; background: white; border: 1px solid var(--gray-200); }
@@ -98,6 +98,8 @@
            so the send and attach buttons stay on screen. */
         .wa-compose { flex: none; padding: .6rem .7rem .7rem; border-top: 1px solid var(--gray-200); min-width: 0; }
         .wa-msgs { min-height: 2.5rem; }
+        /* A short chat sits just above the compose box, like WhatsApp, instead of leaving an empty band under it */
+        .wa-msgs > :first-child { margin-top: auto; }
         .ai-draft { flex: none; max-height: 22vh; overflow-y: auto; }
         .ai-draft-body { white-space: pre-wrap; margin: .35rem 0; }
         .wa-compose-row { display: flex; align-items: flex-start; gap: .35rem; min-width: 0; }
@@ -108,6 +110,12 @@
         .wa-compose-hint { margin: .25rem 0 0 2.6rem; font-size: .7rem; color: var(--gray-500); }
         @media (hover: none) and (pointer: coarse) { .wa-compose-hint { display: none; } }
         .wa-empty { padding: 2rem 1rem; text-align: center; color: var(--gray-500); font-size: .875rem; }
+        /* No chat open (desktop): the panel shows a centred prompt instead of one line at the top of an empty box */
+        .wa-empty--chat { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .4rem; color: var(--gray-500); }
+        .wa-empty--chat strong { color: var(--gray-800); font-size: 1rem; }
+        .wa-empty--chat span { max-width: 18rem; }
+        .wa-empty--chat .fi-icon { color: var(--gray-400); }
+        .dark .wa-empty--chat strong { color: var(--gray-200); }
         .dark .wa-list, .dark .wa-chat, .dark .wa-m { background: var(--gray-900); border-color: var(--gray-700); }
         .dark .wa-msgs { background: var(--gray-950); }
         .dark .wa-m.out { background: #14532d; } .dark .wa-m.out.gw { background: #1e3a8a; }
@@ -322,7 +330,11 @@
                     @endif
                 </div>
             @else
-                <div class="wa-empty">Pilih percakapan dari daftar.</div>
+                <div class="wa-empty wa-empty--chat">
+                    <x-filament::icon icon="heroicon-o-chat-bubble-left-right" class="h-10 w-10" />
+                    <strong>Pilih percakapan</strong>
+                    <span>Klik salah satu chat di daftar kiri untuk membaca dan membalasnya di sini.</span>
+                </div>
             @endif
         </section>
     </div>

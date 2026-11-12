@@ -1,14 +1,11 @@
 <?php
 
-use App\Filament\Pages\Tasks;
-
 return [
     'title' => 'Tugas',
     'group' => 'penjualan',
     'order' => 40,
     'menu' => 'Tugas',
     'intro' => '<p>Daftar tindak lanjut semua lead yang masih terbuka, dari isian <b>Aksi berikutnya</b> dan <b>Tenggat aksi</b> di lead. Setiap tahap mengisi tindak lanjut bawaannya sendiri. Agen melihat lead miliknya saja.</p>',
-    'pages' => [Tasks::class],
     'steps' => [
         [
             'text' => 'Buka <b>Tugas</b>. Tindak lanjut yang paling mendesak ada di atas; batas yang sudah lewat berwarna merah. Saring dengan <b>Terlambat</b> atau <b>Hari ini</b>.',

@@ -17,7 +17,6 @@ final class Chapter
      * @param  list<string>  $industries  keys of config/industries.php
      * @param  list<array{text: string, image: ?string, alt: string, mobile: ?string, shot: array}>  $steps
      * @param  array<string, list<string>>  $notes  tips / perhatian / penting
-     * @param  list<class-string>  $pages  Filament pages or resources whose header links here ("Lihat tutorial")
      */
     public function __construct(
         public readonly string $slug,
@@ -31,7 +30,6 @@ final class Chapter
         public readonly string $intro,
         public readonly array $steps,
         public readonly array $notes,
-        public readonly array $pages,
     ) {}
 
     public static function fromArray(string $slug, array $data): self
@@ -67,7 +65,6 @@ final class Chapter
                 'perhatian' => array_values((array) ($data['perhatian'] ?? [])),
                 'penting' => array_values((array) ($data['penting'] ?? [])),
             ]),
-            array_values((array) ($data['pages'] ?? [])),
         );
     }
 

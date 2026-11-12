@@ -1,7 +1,5 @@
 <?php
 
-use App\Filament\Pages\ImportResi;
-
 return [
     'title' => 'Hubungkan dan impor resi',
     'group' => 'pengiriman',
@@ -9,7 +7,6 @@ return [
     'industries' => ['retail'],
     'menu' => 'Pengiriman > Hubungkan resi di lead, dan Impor resi di daftar Lead',
     'intro' => '<p>Untuk resi yang dibuat di luar JITU LEAD, misalnya langsung di Everpro. Resi itu ikut dilacak, tetapi tidak bisa dibatalkan dari JITU LEAD.</p>',
-    'pages' => [ImportResi::class],
     'steps' => [
         [
             'text' => 'Satu lead: buka lead, klik <b>Pengiriman</b> lalu <b>Hubungkan resi</b>. Isi nomor resi dan kurir (bawaan JNE). <b>Kirim nomor resi ke pembeli sekarang</b> bawaannya mati; <b>Bila paket sudah diterima, pindahkan lead ke Selesai</b> bawaannya nyala.',

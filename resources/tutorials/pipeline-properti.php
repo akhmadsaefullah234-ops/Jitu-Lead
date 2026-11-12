@@ -1,7 +1,5 @@
 <?php
 
-use App\Filament\Pages\Pipeline;
-
 return [
     'title' => 'Tahap pipeline properti',
     'group' => 'penjualan',
@@ -9,7 +7,6 @@ return [
     'industries' => ['properti'],
     'menu' => 'Pipeline',
     'intro' => '<p>Papan tahap penjualan properti, dari lead baru sampai closing. Seret kartu lead dari satu kolom ke kolom lain. Setiap kolom menampilkan jumlah lead dan nilai transaksinya.</p>',
-    'pages' => [Pipeline::class],
     'steps' => [
         [
             'text' => 'Buka <b>Pipeline</b>. Tahap bawaan: Lead baru, Dihubungi, Terkualifikasi, Jadwal survei, Sudah survei, Negosiasi, Booking, Closing, dan Gugur. Kartu bergaris merah berarti aksinya sudah terlambat. Di HP, satu tahap tampil sekali dan dipilih lewat tab di atas papan.',

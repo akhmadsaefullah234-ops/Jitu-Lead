@@ -37,7 +37,13 @@
     .lf [aria-invalid=true] { border-color: #dc2626; }
     .lf-if { font-weight: inherit; }
     .lf-warn { margin: 0; color: #b45309; font-size: .8rem; font-weight: 600; }
-    .lf-rtk .lf-seg { display: grid; grid-template-columns: 1fr 1fr; gap: .45rem; }
+    .lf-rtk { min-width: 0; }
+    /* minmax(0, 1fr): a long choice ("Dusun/kampung") never pushes the form past the screen; under 360px the two
+       choices stack */
+    .lf-rtk .lf-seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .45rem; }
+    .lf-rtk .lf-o { min-width: 0; }
+    .lf-rtk .lf-o span { min-width: 0; overflow-wrap: break-word; }
+    @media (max-width: 359px) { .lf-rtk .lf-seg { grid-template-columns: minmax(0, 1fr); } }
     .lf-qty { display: grid; grid-template-columns: 3rem 1fr 3rem; gap: .4rem; align-items: stretch; }
     .lf-qty input { text-align: center; -moz-appearance: textfield; }
     .lf-qty input::-webkit-outer-spin-button, .lf-qty input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }

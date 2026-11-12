@@ -1,7 +1,5 @@
 <?php
 
-use App\Filament\Pages\Subscription;
-
 return [
     'title' => 'Langganan',
     'group' => 'akun',
@@ -9,7 +7,6 @@ return [
     'admin' => true,
     'menu' => 'Pengaturan > Langganan',
     'intro' => '<p>Paket aktif, masa berlaku, pemakaian terhadap batas paket, dan pilihan paket.</p>',
-    'pages' => [Subscription::class],
     'steps' => [
         [
             'text' => 'Buka <b>Langganan</b>. <b>Paket Anda</b> menampilkan status dan masa berlaku; <b>Pemakaian</b> menampilkan batas paket, misalnya jumlah halaman landing dan aturan follow-up.',
