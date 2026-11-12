@@ -11,9 +11,11 @@ use App\Enums\AiMode;
 use App\Enums\MessageStatus;
 use App\Enums\WaChannelStatus;
 use App\Enums\WaChannelType;
+use App\LeadForms\FormFields;
 use App\Models\AiDraft;
 use App\Models\Lead;
 use App\Models\LeadActivity;
+use App\Models\LeadForm;
 use App\Models\MediaAsset;
 use App\Models\MediaFolder;
 use App\Models\Property;
@@ -581,6 +583,32 @@ class AiRetailRepliesTest extends TestCase
         $this->ai = [$this->text('Siap kak. Bayarnya mau transfer atau COD?')];
         $this->says('Ok');
         $this->assertStringContainsString('Pembeli menyetujui ringkasan pesanan, tetapi cara bayar belum diketahui', $this->asked()[2]['system']);
+    }
+
+    public function test_the_forms_summary_switch_off_changes_nothing_the_ai_sends(): void
+    {
+        // "Tampilkan rincian harga dan ongkir" is only the box on the form page: the AI prices from the lead (LeadQuote).
+        $form = $this->inShop(fn () => LeadForm::create([
+            'name' => 'Order Kaos', 'slug' => 'order-kaos', 'status' => 'active', 'design' => ['title' => 'Order', 'show_summary' => false], 'property_id' => $this->kaos->id,
+            'fields' => FormFields::normalize([
+                ['key' => 'nama', 'type' => 'text', 'label' => 'Nama', 'required' => true, 'maps_to' => 'name'],
+                ['key' => 'wa', 'type' => 'phone', 'label' => 'WhatsApp', 'required' => true, 'maps_to' => 'phone'],
+                ['key' => 'alamat', 'type' => 'address', 'label' => 'Alamat', 'required' => true, 'maps_to' => 'shipping_address'],
+            ]),
+        ]));
+        $this->assertFalse($form->showsSummary());
+        $lead = $this->buyer($this->manado() + ['lead_form_id' => $form->id]);
+        $this->ai = [$this->cut(), $this->cut()];
+
+        $this->says(self::FORM_MESSAGE);
+
+        $this->assertStringContainsString('PESANAN DRAFT SUDAH DICATAT', $this->asked()[0]['system']);
+        $sent = collect($this->sent())->last();
+        $this->assertStringContainsString('Pesanan sudah kami catat sebagai draft', $sent);
+        $this->assertStringContainsString('Kaos Lari Hitam x 2', $sent);
+        $this->assertStringContainsString('Ongkir JNE REG: Rp 62.000', $sent);
+        $this->assertStringContainsString('Total: Rp 240.000', $sent);
+        $this->assertSame('Order masuk', $this->stageOf($lead));
     }
 
     public function test_internal_text_twice_on_a_form_message_sends_the_summary_not_a_person(): void

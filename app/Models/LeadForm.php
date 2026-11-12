@@ -72,6 +72,18 @@ class LeadForm extends Model
         return ! empty($this->design['two_step']) && FormFields::stepSplit($this->fieldList()) !== null;
     }
 
+    /**
+     * "Tampilkan rincian harga dan ongkir": the order summary box above the send button (App\LeadForms\FormQuote).
+     * On unless turned off (design.show_summary false), so forms saved before the switch keep their summary. The
+     * only place that reads the setting. It is about the form page only: the AI's order summary does not read it.
+     */
+    public function showsSummary(): bool
+    {
+        $value = ((array) $this->design)['show_summary'] ?? null;
+
+        return $value === null || filter_var($value, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) !== false;
+    }
+
     public function design(string $key, mixed $default = null): mixed
     {
         $value = $this->design[$key] ?? null;
