@@ -1,15 +1,11 @@
 <?php
 
-use App\Filament\Resources\MediaAssets\MediaAssetResource;
-use App\Filament\Resources\MediaFolders\MediaFolderResource;
-
 return [
     'title' => 'Pustaka media',
     'group' => 'percakapan',
     'order' => 50,
     'menu' => 'Pustaka media > Pustaka media dan Folder media',
     'intro' => '<p>Tempat menyimpan foto, brosur, dan link yang boleh dikirim lewat chat, sambutan, follow-up, atau oleh AI. Semua peran bisa melihat; admin dan team leader yang menambah.</p>',
-    'pages' => [MediaAssetResource::class, MediaFolderResource::class],
     'steps' => [
         [
             'text' => 'Buka <b>Folder media</b> untuk mengatur folder, misalnya per {item} atau per jenis berkas. Klik <b>Folder baru</b> untuk menambah, <b>Ubah</b> untuk mengganti nama.',

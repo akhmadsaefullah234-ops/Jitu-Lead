@@ -1,7 +1,5 @@
 <?php
 
-use App\Filament\Resources\LandingPages\LandingPageResource;
-
 return [
     'title' => 'Halaman landing properti',
     'group' => 'lead',
@@ -10,7 +8,6 @@ return [
     'leader' => true,
     'menu' => 'Halaman landing',
     'intro' => '<p>Halaman penjualan untuk satu proyek atau listing, disusun dari bagian-bagian: harga, tipe unit, fasilitas, lokasi, simulasi KPR, legalitas, dan formulir. Halaman terbit di /p/{akun}/{halaman} dan bisa dipasang sebagai tujuan iklan.</p>',
-    'pages' => [LandingPageResource::class],
     'steps' => [
         [
             'text' => 'Buka <b>Halaman landing</b>, klik <b>Buat halaman</b>, lalu pilih template: <b>Rumah KPR / subsidi</b>, <b>Cluster / perumahan premium</b>, <b>Villa / properti investasi</b>, <b>Kavling / tanah</b>, <b>Listing rumah second</b>, <b>Properti – konversi tinggi</b> (versi formulir atau WhatsApp), <b>Layanan – konversi tinggi</b>, atau <b>Halaman kosong</b>. Isi Judul halaman dan Alamat halaman, lalu klik <b>Buat</b>. Halaman baru berstatus Draf.',

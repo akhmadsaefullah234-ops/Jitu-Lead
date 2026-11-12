@@ -1,7 +1,5 @@
 <?php
 
-use App\Filament\Resources\FollowUpRules\FollowUpRuleResource;
-
 return [
     'title' => 'Follow-up otomatis',
     'group' => 'percakapan',
@@ -9,7 +7,6 @@ return [
     'admin' => true,
     'menu' => 'Follow-up otomatis, dan tab Follow-up di halaman {item}',
     'intro' => '<p>Pesan lanjutan yang terkirim sendiri pada hari dan jam tertentu setelah lead masuk sebuah tahap. Pesan dikirim sekali per lead di tahap itu; lead yang sudah pindah tahap tidak lagi menerimanya.</p>',
-    'pages' => [FollowUpRuleResource::class],
     'steps' => [
         [
             'text' => 'Buka <b>Follow-up otomatis</b>. Kotak di atas menjelaskan apakah <b>follow-up umum</b> sedang dipakai dan alasannya. Klik <b>Ubah pengaturan</b> untuk memilih: <b>Otomatis</b> (dipakai bila toko punya paling banyak 1 {item} aktif), <b>Selalu dipakai</b>, atau <b>Tidak dipakai</b>.',

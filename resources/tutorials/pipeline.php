@@ -1,7 +1,5 @@
 <?php
 
-use App\Filament\Pages\Pipeline;
-
 return [
     'title' => 'Pipeline',
     'group' => 'penjualan',
@@ -9,7 +7,6 @@ return [
     'industries' => ['retail'],
     'menu' => 'Pipeline',
     'intro' => '<p>Papan tahap penjualan. Seret kartu lead dari satu kolom ke kolom lain. Setiap kolom menampilkan jumlah lead, nilai, dan langkah yang disarankan untuk tahap itu.</p>',
-    'pages' => [Pipeline::class],
     'steps' => [
         [
             'text' => 'Buka <b>Pipeline</b>. Tahap toko: Tanya produk, Order masuk, Menunggu pembayaran, Dikemas & dikirim, Selesai, dan Batal. Toko yang terhubung ke Everpro melihat Dikemas & dikirim sebagai dua kolom, <b>Dikemas</b> dan <b>Dikirim</b> (lihat langkah 5). Kartu bergaris merah berarti aksinya sudah terlambat. Di HP, satu tahap tampil sekali dan dipilih lewat tab di atas papan.',

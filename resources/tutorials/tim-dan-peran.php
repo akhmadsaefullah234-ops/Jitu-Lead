@@ -1,7 +1,5 @@
 <?php
 
-use App\Filament\Resources\Team\TeamResource;
-
 // Bab "Masuk dan peran pengguna". Format: docs/tutorial.md.
 return [
     'title' => 'Masuk dan peran pengguna',
@@ -13,7 +11,6 @@ return [
         .'<li><b>Admin</b>: semua data dan semua pengaturan, termasuk Koneksi WhatsApp, Mode AI, Pengiriman, dan Langganan.</li>'
         .'<li><b>Team leader</b>: semua lead, chat, dan kiriman, ditambah Formulir dan Halaman landing.</li>'
         .'<li><b>Agen</b>: hanya lead miliknya, chat lead itu, dan kiriman lead itu.</li></ul>',
-    'pages' => [TeamResource::class],
     'steps' => [
         [
             'text' => 'Buka <b>Pengaturan > Tim</b>. Tabel menampilkan nama, email, peran, porsi lead, dan status tiap anggota.',

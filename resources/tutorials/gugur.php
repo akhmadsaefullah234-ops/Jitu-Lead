@@ -1,14 +1,11 @@
 <?php
 
-use App\Filament\Resources\LostReasons\LostReasonResource;
-
 return [
     'title' => 'Lead gugur dan alasannya',
     'group' => 'penjualan',
     'order' => 24,
     'industries' => ['properti'],
     'menu' => 'Pipeline, dan Pengaturan > Alasan gugur',
-    'pages' => [LostReasonResource::class],
     'intro' => '<p>Lead yang tidak jadi membeli dipindah ke tahap <b>Gugur</b> dengan satu alasan. Alasan yang konsisten membuat laporan menunjukkan di mana penjualan paling sering lepas.</p>',
     'steps' => [
         [

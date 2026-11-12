@@ -1,14 +1,11 @@
 <?php
 
-use App\Filament\Resources\Leads\LeadResource;
-
 return [
     'title' => 'Daftar Lead',
     'group' => 'penjualan',
     'order' => 10,
     'menu' => 'Lead',
     'intro' => '<p>Semua lead dalam satu tabel. Agen hanya melihat lead miliknya.</p>',
-    'pages' => [LeadResource::class],
     'steps' => [
         [
             'text' => 'Buka <b>Lead</b>. Cari berdasarkan nama atau nomor di kotak <b>Cari</b>. Nomor tersimpan dalam format +62, jadi ketik angka setelah 0 di depan, misalnya 812345 untuk 0812345....',

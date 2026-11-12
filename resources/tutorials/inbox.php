@@ -1,14 +1,11 @@
 <?php
 
-use App\Filament\Pages\Inbox;
-
 return [
     'title' => 'Inbox',
     'group' => 'percakapan',
     'order' => 20,
     'menu' => 'Inbox',
     'intro' => '<p>Semua chat WhatsApp lead di satu tempat. Agen hanya melihat chat lead miliknya. Daftar diperbarui sendiri tiap 10 detik.</p>',
-    'pages' => [Inbox::class],
     'steps' => [
         [
             'text' => 'Pilih percakapan di daftar kiri. Tiap baris menampilkan nama, nomor, pesan terakhir, agen pemilik, dan {item} yang ditanyakan. Angka merah adalah pesan belum dibaca.',

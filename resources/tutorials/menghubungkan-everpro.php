@@ -1,7 +1,5 @@
 <?php
 
-use App\Filament\Pages\ShippingSettingsPage;
-
 return [
     'title' => 'Menghubungkan Everpro',
     'group' => 'pengiriman',
@@ -10,7 +8,6 @@ return [
     'admin' => true,
     'menu' => 'Pengaturan > Pengiriman > Pengiriman otomatis',
     'intro' => '<p>Dengan Everpro, toko membuat resi, mencetak label, meminta jemput paket, dan melacak kiriman langsung dari JITU LEAD. Setelah tersambung, menu <b>Pengiriman</b> muncul di samping.</p>',
-    'pages' => [ShippingSettingsPage::class],
     'steps' => [
         [
             'text' => 'Buka <b>Pengaturan > Pengiriman</b>, gulir ke <b>Pengiriman otomatis</b>, pilih <b>Penyedia</b> Everpro. Isi <b>Client key</b>, <b>Client secret</b>, dan <b>Callback key (x-everpro-key)</b> dari dashboard Everpro. Ketiganya tersimpan terenkripsi dan tidak ditampilkan lagi.',

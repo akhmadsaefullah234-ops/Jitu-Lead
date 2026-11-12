@@ -1,7 +1,5 @@
 <?php
 
-use App\Filament\Resources\Shipments\ShipmentResource;
-
 return [
     'title' => 'Menu Pengiriman dan cetak label',
     'group' => 'pengiriman',
@@ -9,7 +7,6 @@ return [
     'industries' => ['retail'],
     'menu' => 'Pengiriman',
     'intro' => '<p>Semua kiriman yang dibuat lewat penyedia pengiriman. Menu ini tampil bila akun sudah terhubung ke Everpro.</p>',
-    'pages' => [ShipmentResource::class],
     'steps' => [
         [
             'text' => 'Buka <b>Pengiriman</b>. Tab yang tersedia: Menunggu resi, Menunggu saldo, <b>Belum dicetak</b> (terbuka pertama, resi terlama di atas), Sudah dicetak menunggu dijemput, Dalam perjalanan, Perlu tindakan, Selesai, dan Dibatalkan.',

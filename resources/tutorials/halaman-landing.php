@@ -1,7 +1,5 @@
 <?php
 
-use App\Filament\Resources\LandingPages\LandingPageResource;
-
 return [
     'title' => 'Halaman landing',
     'group' => 'lead',
@@ -9,7 +7,6 @@ return [
     'leader' => true,
     'menu' => 'Halaman landing',
     'intro' => '<p>Halaman penjualan yang disusun dari bagian-bagian. Halaman terbit di /p/{akun}/{halaman} dan bisa dipasang sebagai tujuan iklan.</p>',
-    'pages' => [LandingPageResource::class],
     'steps' => [
         [
             'text' => 'Buka <b>Halaman landing</b>, klik <b>Buat halaman</b>, pilih template (misalnya Produk dengan varian warna), isi Judul halaman dan Alamat halaman, lalu klik <b>Buat</b>. Halaman baru berstatus Draf.',

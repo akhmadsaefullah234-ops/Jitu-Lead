@@ -1,7 +1,5 @@
 <?php
 
-use App\Filament\Resources\WaChannels\WaChannelResource;
-
 return [
     'title' => 'Koneksi WhatsApp',
     'group' => 'percakapan',
@@ -9,7 +7,6 @@ return [
     'admin' => true,
     'menu' => 'Pengaturan > Koneksi WhatsApp',
     'intro' => '<p>Ada dua jenis nomor. <b>WhatsApp Business API resmi</b>: menerima chat dari iklan Klik ke WhatsApp lewat Meta. <b>Gateway (scan QR)</b>: nomor WhatsApp biasa atau WhatsApp Business yang ditautkan dengan memindai QR, dipakai untuk chat, sambutan, follow-up, dan pesan status kiriman.</p>',
-    'pages' => [WaChannelResource::class],
     'steps' => [
         [
             'text' => 'Buka <b>Koneksi WhatsApp</b>. Tiap nomor menampilkan jenis, mode AI, dan statusnya. Di ujung kanan baris ada tombol <b>Tes koneksi</b>, <b>Scan QR</b> (atau <b>Scan QR ulang</b> bila terputus), dan <b>Putuskan</b>. Klik <b>Buat nomor WhatsApp</b> untuk menambah.',

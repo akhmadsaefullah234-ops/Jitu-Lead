@@ -1,7 +1,5 @@
 <?php
 
-use App\Filament\Resources\LeadForms\LeadFormResource;
-
 return [
     'title' => 'Formulir pemesanan',
     'group' => 'lead',
@@ -10,7 +8,6 @@ return [
     'leader' => true,
     'menu' => 'Formulir',
     'intro' => '<p>Formulir menangkap nama, WhatsApp, {item}, varian, jumlah, dan alamat pembeli. Pembeli membukanya lewat halaman landing atau tautan langsung /f/{akun}/{formulir}.</p>',
-    'pages' => [LeadFormResource::class],
     'steps' => [
         [
             'text' => 'Buka <b>Formulir</b>, klik <b>Buat formulir</b>, lalu pilih template <b>Order produk</b> (satu produk: varian, jumlah, alamat kirim, dan Transfer/COD). Isi Nama formulir dan Alamat formulir, lalu klik <b>Buat</b>.',

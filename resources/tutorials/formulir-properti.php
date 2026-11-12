@@ -1,7 +1,5 @@
 <?php
 
-use App\Filament\Resources\LeadForms\LeadFormResource;
-
 return [
     'title' => 'Formulir properti',
     'group' => 'lead',
@@ -10,7 +8,6 @@ return [
     'leader' => true,
     'menu' => 'Formulir',
     'intro' => '<p>Formulir menangkap nama, WhatsApp, dan minat calon pembeli: tipe unit, perkiraan budget, dan rencana cara bayar. Calon pembeli membukanya lewat halaman landing, iklan, atau tautan langsung /f/{akun}/{formulir}.</p>',
-    'pages' => [LeadFormResource::class],
     'steps' => [
         [
             'text' => 'Buka <b>Formulir</b>, klik <b>Buat formulir</b>, lalu pilih template <b>Minat properti</b> (tipe yang diminati, perkiraan budget, rencana cara bayar, dan pertanyaan). Ada juga <b>Janji temu / survei</b> bila pengunjung boleh memilih tanggal dan waktu kunjungan sendiri. Isi Nama formulir dan Alamat formulir, lalu klik <b>Buat</b>.',

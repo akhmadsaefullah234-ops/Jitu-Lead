@@ -23,6 +23,7 @@ use Database\Seeders\TokoDemoSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
+use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -120,12 +121,6 @@ class TutorialTest extends TestCase
 
         $this->actingInTenant($this->adminOf($agency), $agency);
         $base = '/app/'.$agency->slug;
-        $this->get($base.'/pipeline')->assertOk()->assertSee('tutorial?bab=pipeline-properti', false);
-        $this->get($base.'/lead-forms')->assertOk()->assertSee('tutorial?bab=formulir-properti', false);
-        $this->get($base.'/properties')->assertOk()->assertSee('tutorial?bab=katalog-properti', false);
-        $this->get($base.'/landing-pages')->assertOk()->assertSee('tutorial?bab=landing-properti', false);
-        $this->get($base.'/lost-reasons')->assertOk()->assertSee('tutorial?bab=gugur', false);
-
         foreach ($property as $slug) {
             $this->get($base.'/tutorial?bab='.$slug)->assertOk()->assertSee(Tutorials::all()[$slug]->title)->assertSee('tutorial/'.$slug.'/', false);
         }
@@ -260,21 +255,28 @@ class TutorialTest extends TestCase
 
         foreach (Tutorials::all() as $chapter) {
             $this->assertArrayHasKey($chapter->group, Tutorials::GROUPS, $chapter->slug);
-
-            foreach ($chapter->pages as $page) {
-                $this->assertTrue(class_exists($page), $chapter->slug.': '.$page);
-            }
         }
     }
 
-    public function test_pages_link_to_their_chapter(): void
+    /** Tutorials are reached only through the "Tutorial" sidebar item, never through a link in a page header. */
+    #[DataProvider('kindsOfBusiness')]
+    public function test_feature_pages_have_no_tutorial_link_and_the_tutorial_opens_from_the_menu(string $kind): void
     {
-        $shop = $this->shop();
-        $this->actingInTenant($this->adminOf($shop), $shop);
+        $tenant = $kind === 'shop' ? $this->shop() : $this->agency();
+        $this->actingInTenant($this->adminOf($tenant), $tenant);
+        $base = '/app/'.$tenant->slug;
 
-        $this->get('/app/'.$shop->slug.'/inbox')->assertOk()->assertSee('Lihat tutorial')->assertSee('tutorial?bab=inbox', false);
-        $this->get('/app/'.$shop->slug.'/pipeline')->assertOk()->assertSee('tutorial?bab=pipeline', false);
-        $this->get('/app/'.$shop->slug.'/lead-forms')->assertOk()->assertSee('tutorial?bab=formulir-pemesanan', false);
+        foreach (['', '/pipeline', '/leads', '/inbox', '/tasks', '/lead-forms', '/landing-pages', '/properties', '/reports', '/lost-reasons'] as $page) {
+            $this->get($base.$page)->assertOk()->assertDontSee('Lihat tutorial')->assertDontSee('tutorial?bab=', false);
+        }
+
+        $this->get($base)->assertSee($base.'/tutorial"', false);
+        $this->get($base.'/tutorial')->assertOk()->assertSee('Tutorial');
+    }
+
+    public static function kindsOfBusiness(): array
+    {
+        return ['toko' => ['shop'], 'properti' => ['agency']];
     }
 
     public function test_demo_seeders_and_capture_refuse_to_run_in_production(): void

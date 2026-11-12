@@ -1,14 +1,11 @@
 <?php
 
-use App\Filament\Pages\Dashboard;
-
 return [
     'title' => 'Dasbor dan pemilih periode',
     'group' => 'mulai',
     'order' => 20,
     'menu' => 'Dasbor',
     'intro' => '<p>Dasbor merangkum angka akun pada satu periode. Agen hanya melihat angka lead miliknya.</p>',
-    'pages' => [Dashboard::class],
     'steps' => [
         [
             'text' => 'Pilih periode di dropdown atas halaman: Hari ini, Kemarin, 7 hari terakhir (bawaan), 30 hari terakhir, Bulan ini, Bulan lalu, atau Kustom. Di sebelahnya tertulis tanggal periode dan periode pembandingnya.',

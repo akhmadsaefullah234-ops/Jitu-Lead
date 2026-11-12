@@ -1,7 +1,5 @@
 <?php
 
-use App\Filament\Pages\StageAutomationPage;
-
 return [
     'title' => 'Otomatisasi tahap',
     'group' => 'penjualan',
@@ -10,7 +8,6 @@ return [
     'admin' => true,
     'menu' => 'Pengaturan > Otomatisasi tahap',
     'intro' => '<p>Delapan aturan yang memindahkan lead toko antar tahap sendiri, misalnya pindah ke Selesai beberapa hari setelah resi dikirim. Setiap perpindahan otomatis tercatat di aktivitas lead.</p>',
-    'pages' => [StageAutomationPage::class],
     'steps' => [
         [
             'text' => 'Buka <b>Otomatisasi tahap</b>. Tiap aturan punya sakelar <b>Aktif</b>: 1. Format order lengkap ke Order masuk; 2. Pembeli konfirmasi ke Menunggu pembayaran (transfer) atau Dikemas & dikirim (COD); 3. Gambar saat Menunggu pembayaran ditandai "Bukti transfer masuk"; 4. Nomor resi diisi: kirim WhatsApp resi dan pindah ke Dikemas & dikirim.',
