@@ -10,6 +10,7 @@ use App\Regions\RegionDirectory;
 use App\Shipping\Regions;
 use App\Shipping\Shipping;
 use App\Shipping\ShippingQuote;
+use Closure;
 use Illuminate\Support\Facades\Cache;
 use Throwable;
 
@@ -20,6 +21,10 @@ use Throwable;
  */
 class FormQuote
 {
+    public const KEY_PREFIX = 'form-quote.v2.';
+
+    public const CACHE_SECONDS = 600;
+
     /** The product a form sells, when it has a price and the shop prices shipping; otherwise no summary. */
     public static function product(LeadForm $form, ?int $pageId = null): ?Property
     {
@@ -62,11 +67,12 @@ class FormQuote
         $province = isset($parts['codes']['provinsi']) ? RegionDirectory::shippingProvince((string) $parts['provinsi'])
             : (Regions::province((string) ($parts['provinsi'] ?? '')) ?? Regions::provinceOfCity($city));
 
-        $key = 'form-quote.'.$tenant->getKey().'.'.$form->getKey().'.'.$product->getKey().'.'.$form->updated_at?->timestamp.'.'
+        // v2: the entry is ShippingQuote::toData(). Entries before it held the object, which the cache cannot read back.
+        $key = self::KEY_PREFIX.$tenant->getKey().'.'.$form->getKey().'.'.$product->getKey().'.'.$form->updated_at?->timestamp.'.'
             .md5(json_encode([$city, $province, $parts['kecamatan'] ?? null, $parts['kelurahan'] ?? null, $parts['kode_pos'] ?? null, $quantity]));
 
         try {
-            $quote = Cache::remember($key, 600, fn () => Shipping::quote($tenant, $city, $province, [['product_id' => $product->getKey(), 'jumlah' => $quantity]],
+            $quote = self::cached($key, fn () => Shipping::quote($tenant, $city, $province, [['product_id' => $product->getKey(), 'jumlah' => $quantity]],
                 filled($parts['kecamatan'] ?? null) ? (string) $parts['kecamatan'] : null, null,
                 filled($parts['kode_pos'] ?? null) ? (string) $parts['kode_pos'] : null, filled($parts['kelurahan'] ?? null) ? (string) $parts['kelurahan'] : null));
         } catch (Throwable $e) {
@@ -88,6 +94,33 @@ class FormQuote
             'promo' => $option->discount() > 0 ? $option->promo : null,
             'total' => $subtotal + $option->price,
         ], fn ($v) => $v !== null);
+    }
+
+    /**
+     * The quote kept for 10 minutes as plain data (ShippingQuote::toData), never as an object: the cache reads no
+     * classes back (cache.serializable_classes is false, against gadget chains). An entry that is not valid data
+     * (an object from before v2, or anything fromData refuses) counts as a miss: it is dropped and priced again.
+     */
+    private static function cached(string $key, Closure $quote): ShippingQuote
+    {
+        $data = Cache::get($key);
+
+        if ($data !== null) {
+            try {
+                if (is_array($data)) {
+                    return ShippingQuote::fromData($data);
+                }
+            } catch (Throwable) {
+                // not valid data: priced again below
+            }
+
+            Cache::forget($key);
+        }
+
+        $fresh = $quote();
+        Cache::put($key, $fresh->toData(), self::CACHE_SECONDS);
+
+        return $fresh;
     }
 
     /** The same with the amounts written out ("Rp 150.000"), for the page. */

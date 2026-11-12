@@ -2,6 +2,9 @@
 
 namespace App\Shipping;
 
+use App\Models\Property;
+use App\Support\PlainData;
+
 /**
  * The answer to a shipping question. Either prices per courier, or the reason there are none: the destination
  * is not clear enough yet, or the agency wants an admin to confirm the cost for that area.
@@ -110,6 +113,53 @@ final class ShippingQuote
         }
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * Every constructor value as plain data (scalars, null and arrays), options and items included, for a cache
+     * that keeps no objects (cache.serializable_classes is false). fromData() builds the same quote back. Not
+     * toArray(), which is the AI tool's answer and leaves values out.
+     *
+     * @return array<string, mixed>
+     */
+    public function toData(): array
+    {
+        return [
+            'status' => $this->status, 'message' => $this->message,
+            'options' => array_map(fn (ShippingOption $o) => $o->toData(), $this->options),
+            'city' => $this->city, 'province' => $this->province, 'zone' => $this->zone,
+            'actualGrams' => $this->actualGrams, 'volumeGrams' => $this->volumeGrams, 'billableKg' => $this->billableKg,
+            'items' => array_map(fn (ShippingItem $i) => $i->toData(), $this->items),
+            'source' => $this->source, 'sourceNote' => $this->sourceNote, 'primaryCourier' => $this->primaryCourier,
+        ];
+    }
+
+    /**
+     * The quote toData() wrote. Products are looked up again in the current tenant's catalogue (one query).
+     *
+     * @throws \InvalidArgumentException when a value is missing or of another type
+     */
+    public static function fromData(array $data): self
+    {
+        $items = PlainData::rows($data, 'items');
+        $ids = array_values(array_unique(array_filter(array_map(fn (array $i) => PlainData::nullableInt($i, 'product_id'), $items), fn ($id) => $id !== null)));
+        $products = $ids === [] ? [] : Property::query()->whereKey($ids)->get()->keyBy(fn (Property $p) => $p->getKey())->all();
+
+        return new self(
+            status: PlainData::string($data, 'status'),
+            message: PlainData::string($data, 'message'),
+            options: array_map(fn (array $o) => ShippingOption::fromData($o), PlainData::rows($data, 'options')),
+            city: PlainData::nullableString($data, 'city'),
+            province: PlainData::nullableString($data, 'province'),
+            zone: PlainData::nullableString($data, 'zone'),
+            actualGrams: PlainData::int($data, 'actualGrams'),
+            volumeGrams: PlainData::int($data, 'volumeGrams'),
+            billableKg: PlainData::int($data, 'billableKg'),
+            items: array_map(fn (array $i) => ShippingItem::fromData($i, $products), $items),
+            source: PlainData::string($data, 'source'),
+            sourceNote: PlainData::nullableString($data, 'sourceNote'),
+            primaryCourier: PlainData::nullableString($data, 'primaryCourier'),
+        );
     }
 
     /** What the AI tool returns. Every amount the AI may quote is in here, already added up. */
