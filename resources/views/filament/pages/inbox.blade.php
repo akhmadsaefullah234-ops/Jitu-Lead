@@ -19,12 +19,12 @@
         .wa-back { display: none; flex: none; width: 2rem; height: 2rem; align-items: center; justify-content: center; border-radius: 9999px; color: var(--gray-700); }
         .wa-back:hover { background: var(--gray-100); }
         @media (max-width: 800px) { .wa-back { display: inline-flex; } }
-        .wa-name { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: .3rem; text-align: left; padding: .2rem 0; }
+        .wa-name { flex: 1 1 auto; min-width: 0; min-height: 2.75rem; display: flex; align-items: center; gap: .3rem; text-align: left; padding: .2rem 0; }
         .wa-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .95rem; }
         .wa-name .chev { flex: none; width: 1rem; height: 1rem; color: var(--gray-400); transition: transform .15s; }
         .wa-name[aria-expanded="true"] .chev { transform: rotate(180deg); }
         .wa-dot { flex: none; width: .55rem; height: .55rem; border-radius: 9999px; background: #f59e0b; }
-        .wa-chip { flex: 0 1 auto; min-width: 0; max-width: 6rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .68rem; font-weight: 600; color: var(--gray-700); background: var(--gray-100); border-radius: 9999px; padding: .1rem .5rem; }
+        .wa-chip { flex: 0 1 auto; min-width: 0; max-width: 6rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .75rem; font-weight: 600; color: var(--gray-700); background: var(--gray-100); border-radius: 9999px; padding: .1rem .5rem; }
         .wa-chip-prod { flex: 0 1 auto; min-width: 0; max-width: 6rem; display: flex; }
         .wa-chip-prod .fi-badge { max-width: 100%; min-width: 0; }
         .wa-chip-prod .fi-badge-label-ctn, .wa-chip-prod .fi-badge-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -35,14 +35,14 @@
         .wa-details { padding: .3rem 0 .15rem; font-size: .75rem; color: var(--gray-500); line-height: 1.5; overflow-wrap: anywhere; }
         .wa-details a { text-decoration: underline; }
         /* What the route means for this message: a quiet line, or a warning that opens to the full explanation. */
-        .wa-route { flex: none; margin: 0 .7rem; padding: .3rem 0 0; font-size: .72rem; color: var(--gray-500); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .wa-route { flex: none; margin: 0 .7rem; padding: .3rem 0 0; font-size: .75rem; color: var(--gray-500); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .wa-route.warn { padding: 0; margin: .35rem .7rem 0; white-space: normal; border-radius: .45rem; background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
         .wa-route.warn summary { cursor: pointer; list-style: none; padding: .3rem .55rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .wa-route.warn summary::-webkit-details-marker { display: none; }
         .wa-route.warn summary::before { content: "⚠ "; }
         .wa-route.warn[open] summary { white-space: normal; }
         .wa-route.warn p { margin: 0; padding: 0 .55rem .4rem; }
-        .wa-paused { flex: none; margin: .3rem .7rem 0; font-size: .72rem; color: var(--gray-500); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .wa-paused { flex: none; margin: .3rem .7rem 0; font-size: .75rem; color: var(--gray-500); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .dark .wa-route.warn { background: #451a03; color: #fde68a; border-color: #78350f; }
         .dark .wa-chip { background: var(--gray-800); color: var(--gray-200); }
         .wa-list, .wa-chat { background: white; border: 1px solid var(--gray-200); border-radius: .75rem; overflow: hidden; }
@@ -51,24 +51,24 @@
         .wa-item[aria-current="true"] { background: var(--gray-100); }
         .wa-item .n { display: flex; justify-content: space-between; font-weight: 600; font-size: .875rem; }
         .wa-item .p { font-size: .75rem; color: var(--gray-500); }
-        .wa-prod { display: inline-block; margin-top: .2rem; font-size: .68rem; font-weight: 600; color: var(--primary-700); background: var(--primary-50); border-radius: 9999px; padding: .05rem .5rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .wa-prod { display: inline-block; margin-top: .2rem; font-size: .75rem; font-weight: 600; color: var(--primary-700); background: var(--primary-50); border-radius: 9999px; padding: .05rem .5rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .wa-prod.none { color: var(--gray-500); background: var(--gray-100); }
         .dark .wa-prod { background: var(--gray-800); color: var(--primary-300); }
-        .wa-act { background: #ffe4e6; color: #9f1239; font-weight: 600; border-radius: 9999px; padding: 0 .45rem; font-size: .7rem; white-space: nowrap; }
+        .wa-act { background: #ffe4e6; color: #9f1239; font-weight: 600; border-radius: 9999px; padding: 0 .45rem; font-size: .75rem; white-space: nowrap; }
         .wa-filter { display: flex; flex-wrap: wrap; gap: .35rem; padding: .5rem .6rem; border-bottom: 1px solid var(--gray-200); }
         .wa-fchip { display: inline-flex; align-items: center; gap: .3rem; border: 1px solid var(--gray-300); border-radius: 9999px; padding: .2rem .65rem; font-size: .75rem; font-weight: 500; background: transparent; }
         .wa-fchip[aria-pressed="true"] { background: var(--primary-600); border-color: var(--primary-600); color: white; }
         .dark .wa-filter { border-color: var(--gray-700); }
         /* The one shipping mark on a chat card: an unhandled closing. Same size as the unread badge, so the card keeps its height. */
         .wa-item .n .wa-tags { display: inline-flex; gap: .25rem; align-items: center; flex: none; }
-        .wa-ok { background: #15803d; color: white; border-radius: 9999px; padding: 0 .45rem; font-size: .7rem; font-weight: 700; }
+        .wa-ok { background: #15803d; color: white; border-radius: 9999px; padding: 0 .45rem; font-size: .75rem; font-weight: 700; }
         .dark .wa-ok { background: #22c55e; color: #052e16; }
         .wa-okline { color: #166534; font-weight: 600; }
         .wa-okline span { color: var(--gray-600); font-weight: 400; }
         .dark .wa-okline { color: #86efac; } .dark .wa-okline span { color: var(--gray-400); }
-        .wa-print { background: #fef3c7; color: #92400e; font-weight: 600; border-radius: 9999px; padding: 0 .45rem; font-size: .7rem; white-space: nowrap; }
-        .wa-spam { background: #fef3c7; color: #92400e; border-radius: 9999px; padding: 0 .45rem; font-size: .7rem; white-space: nowrap; }
-        .wa-badge { background: var(--primary-600); color: white; border-radius: 9999px; padding: 0 .45rem; font-size: .7rem; }
+        .wa-print { background: #fef3c7; color: #92400e; font-weight: 600; border-radius: 9999px; padding: 0 .45rem; font-size: .75rem; white-space: nowrap; }
+        .wa-spam { background: #fef3c7; color: #92400e; border-radius: 9999px; padding: 0 .45rem; font-size: .75rem; white-space: nowrap; }
+        .wa-badge { background: var(--primary-600); color: white; border-radius: 9999px; padding: 0 .45rem; font-size: .75rem; }
         .wa-chat { display: flex; flex-direction: column; max-height: calc(100vh - 12rem); max-height: calc(100dvh - 12rem); }
         .wa-proof { font-size: .75rem; font-weight: 600; color: #92400e; background: #fef3c7; border-radius: 9999px; padding: .15rem .55rem; }
         .wa-msgs { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: .4rem; background: var(--gray-50); }
@@ -76,7 +76,7 @@
         .wa-m.out { align-self: flex-end; background: #dcfce7; border-color: #bbf7d0; }
         .wa-m.out.gw { background: #dbeafe; border-color: #bfdbfe; }
         .wa-m .b { white-space: pre-wrap; }
-        .wa-m .meta { font-size: .68rem; color: var(--gray-500); margin-top: .15rem; }
+        .wa-m .meta { font-size: .75rem; color: var(--gray-500); margin-top: .15rem; }
         .wa-m.failed { border-color: var(--danger-600); }
         .wa-m { position: relative; }
         /* A sticker stands on its own, without a bubble behind it. */
@@ -107,7 +107,7 @@
         .wa-compose-row > .wa-compose-btn { flex: none; margin-top: .1rem; }
         /* 3 lines to start, grows with the text (see grow() below) up to 28% of the screen or 10 lines, then scrolls */
         .wa-compose textarea { flex: 1 1 auto; min-width: 0; width: 100%; box-sizing: border-box; border: 1px solid var(--gray-300); border-radius: .5rem; padding: .45rem .7rem; font-size: .875rem; line-height: 1.5; resize: none; overflow-y: auto; max-height: min(28vh, calc(15em + .9rem + 2px)); max-height: min(28dvh, calc(15em + .9rem + 2px)); }
-        .wa-compose-hint { margin: .25rem 0 0 2.6rem; font-size: .7rem; color: var(--gray-500); }
+        .wa-compose-hint { margin: .25rem 0 0 2.6rem; font-size: .75rem; color: var(--gray-500); }
         @media (hover: none) and (pointer: coarse) { .wa-compose-hint { display: none; } }
         .wa-empty { padding: 2rem 1rem; text-align: center; color: var(--gray-500); font-size: .875rem; }
         /* No chat open (desktop): the panel shows a centred prompt instead of one line at the top of an empty box */

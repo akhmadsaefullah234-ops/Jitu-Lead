@@ -6,6 +6,7 @@ use App\Billing\TrialLock;
 use App\Filament\Pages\Auth\Register;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\Tenancy\RegisterAgency;
+use App\Filament\Support\InitialsAvatarProvider;
 use App\Http\Middleware\LockExpiredTrial;
 use App\Http\Middleware\SetCurrentTenant;
 use App\Models\Tenant;
@@ -37,6 +38,7 @@ class AppPanelProvider extends PanelProvider
             ->id('app')
             ->path('app')
             ->brandName('JITU LEAD')
+            ->defaultAvatarProvider(InitialsAvatarProvider::class)
             ->login()
             ->registration(config('jitu.registration') === 'closed' ? null : Register::class)
             ->passwordReset()

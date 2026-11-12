@@ -10,7 +10,7 @@
         .sb-card { border: 1px solid var(--gray-200); border-radius: .9rem; padding: 1.1rem; background: #fff; display: flex; flex-direction: column; gap: .6rem; position: relative; }
         .sb-card.pop { border-color: var(--primary-600); box-shadow: 0 0 0 2px var(--primary-600) inset; }
         .sb-card.now { background: var(--gray-50); }
-        .sb-tag { position: absolute; top: -.7rem; right: 1rem; background: var(--primary-600); color: #fff; font-size: .72rem; font-weight: 700; padding: .15rem .65rem; border-radius: 9999px; }
+        .sb-tag { position: absolute; top: -.7rem; right: 1rem; background: var(--primary-600); color: #fff; font-size: .75rem; font-weight: 700; padding: .15rem .65rem; border-radius: 9999px; }
         .sb-price { font-size: 1.6rem; font-weight: 800; }
         .sb-price small { font-size: .8rem; font-weight: 500; color: var(--gray-500); }
         .sb-list { list-style: none; padding: 0; margin: 0; display: grid; gap: .3rem; font-size: .875rem; }

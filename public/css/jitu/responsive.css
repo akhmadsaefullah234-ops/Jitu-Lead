@@ -44,13 +44,13 @@ html, body { max-width: 100%; overflow-x: hidden; }
         -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border-top: 1px solid #fecaca;
         padding: .3rem .25rem calc(.3rem + env(safe-area-inset-bottom)); box-shadow: 0 -6px 18px rgba(17,24,39,.07); }
     .jl-tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: .1rem; min-height: 3.4rem; justify-content: center;
-        font-size: .68rem; font-weight: 600; color: #6b7280; border-radius: .8rem; background: none; border: 0; text-decoration: none; -webkit-tap-highlight-color: transparent; }
+        font-size: .75rem; font-weight: 600; color: #6b7280; border-radius: .8rem; background: none; border: 0; text-decoration: none; -webkit-tap-highlight-color: transparent; }
     .jl-tab:active { background: #fef2f2; }
     .jl-tab.is-active { color: var(--jl-red); }
     .jl-tab-icon { position: relative; display: inline-flex; padding: .1rem .9rem; border-radius: 9999px; }
     .jl-tab.is-active .jl-tab-icon { background: #fee2e2; }
     .jl-tab-badge { position: absolute; top: -.15rem; right: .35rem; min-width: 1.1rem; height: 1.1rem; padding: 0 .28rem; border-radius: 9999px;
-        background: var(--jl-red); color: #fff; font-size: .65rem; line-height: 1.1rem; text-align: center; font-weight: 700; }
+        background: var(--jl-red); color: #fff; font-size: .75rem; line-height: 1.1rem; text-align: center; font-weight: 700; }
     .jl-fab { display: flex; align-items: center; justify-content: center; position: fixed; right: 1rem; z-index: 39;
         bottom: calc(5rem + env(safe-area-inset-bottom)); width: 3.5rem; height: 3.5rem; border-radius: 9999px; background: var(--jl-red); color: #fff;
         box-shadow: 0 8px 20px rgba(220,38,38,.4); -webkit-tap-highlight-color: transparent; }
@@ -92,7 +92,7 @@ html, body { max-width: 100%; overflow-x: hidden; }
         padding-bottom: env(safe-area-inset-bottom); }
     .fi-modal-window:has(> .fi-modal-footer) { padding-bottom: 0; }
     /* The buttons (Batal among them) stay in sight at the bottom while a long form scrolls above them */
-    .fi-modal-window > .fi-modal-footer { position: sticky; bottom: 0; z-index: 10; background: #fff; border-top: 1px solid var(--gray-200);
+    .fi-modal-window > .fi-modal-footer { position: sticky; bottom: 0; z-index: 10; background: var(--color-white); border-top: 1px solid var(--gray-200);
         padding-block: .75rem calc(.75rem + env(safe-area-inset-bottom)); }
     .fi-modal-window > .fi-modal-content:last-child { padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)); }
     /* Buttons share one row (main action on the right) and wrap when there are more than fit */
@@ -200,3 +200,39 @@ html, body { max-width: 100%; overflow-x: hidden; }
     .wa-bar > .wa-chip, .wa-bar > .wa-chip-prod { max-width: calc(50% - 1.6rem); font-size: .75rem; }
     .wa-bar > .wa-name { min-width: 0; }
 }
+
+/* Dashboard figures on phones: two cards per row, the figure on one line and sized to the card ("1.5 menit"), while
+   long figures (Nilai penjualan in rupiah, Konversi with two rates) take a full row (.jl-stat-wide, PeriodStats). */
+@media (max-width: 767px) {
+    .fi-wi-stats-overview-stat { container-type: inline-size; padding: 1rem; }
+    .fi-wi-stats-overview-stat-value { white-space: nowrap; font-size: min(1.875rem, 18cqi); }
+    .fi-grid-col:has(> .fi-sc-component > .jl-stat-wide) { grid-column: 1 / -1; }
+}
+
+/* Touch targets: on phones and tablets everything that is tapped is at least 44 x 44 px (WCAG 2.5.5, Apple HIG).
+   Icon buttons (row actions, top bar menu and bell, section collapse), link actions in tables ("Ubah", "Hapus"),
+   fields, selects and sidebar items. */
+@media (max-width: 1023px) {
+    .fi-icon-btn { min-width: 2.75rem; min-height: 2.75rem; }
+    .fi-ac-link-action { display: inline-flex; align-items: center; min-height: 2.75rem; }
+    .fi-ac-link-action > .fi-link-label { align-self: center; line-height: 1.25rem; }
+    .fi-input, select.fi-select-input { min-height: 2.75rem; }
+    .fi-sidebar-item-btn { min-height: 2.75rem; }
+    .fi-btn { min-width: 2.75rem; min-height: 2.75rem; }
+    .fi-select-input-btn, .fi-tabs-item, .fi-dropdown-list-item { min-height: 2.75rem; }
+    /* Row ticks: bigger than Filament's 16px, still inside the card's corner */
+    .fi-ta-record-checkbox, .fi-ta-page-checkbox { width: 1.375rem; height: 1.375rem; }
+}
+
+/* Page header with three or more buttons (Lead: Impor resi, Ekspor CSV, Pengaturan agensi, Buat lead) on phones: one
+   row, the main (coloured) button keeps its label and fills the row, the grey buttons show their icon only. Their
+   label stays in the button for screen readers (font-size 0, not hidden). Two buttons keep their labels. */
+@media (max-width: 640px) {
+    .fi-header .fi-ac:has(> .fi-btn ~ .fi-btn ~ .fi-btn) { flex-wrap: nowrap; }
+    .fi-header .fi-ac:has(> .fi-btn ~ .fi-btn ~ .fi-btn) > .fi-btn:not(.fi-color-primary):has(> svg) {
+        flex: none; font-size: 0; gap: 0; min-width: 2.75rem; padding-inline: .7rem; justify-content: center; }
+    .fi-header .fi-ac:has(> .fi-btn ~ .fi-btn ~ .fi-btn) > .fi-btn.fi-color-primary { flex: 1 1 auto; justify-content: center; }
+}
+
+/* Table "Filter" button: no count badge while no filter is on (Filament would show "0") */
+.fi-btn[data-active-filters="0"] > .fi-btn-badge-ctn { display: none; }

@@ -10,7 +10,7 @@
     .fi-sidebar-item-button, .fi-sidebar-group-button { border-radius: .6rem; }
     .fi-sidebar-item-label, .fi-sidebar-item-icon, .fi-sidebar-group-label, .fi-sidebar-group-collapse-button,
     .fi-sidebar-item-grouped-border { color: rgba(255,255,255,.88); }
-    .fi-sidebar-group-label { text-transform: uppercase; letter-spacing: .06em; font-size: .6875rem; color: rgba(255,255,255,.62); }
+    .fi-sidebar-group-label { text-transform: uppercase; letter-spacing: .06em; font-size: .75rem; color: rgba(255,255,255,.62); }
     .fi-sidebar-item:not(.fi-active) .fi-sidebar-item-button:hover { background: rgba(255,255,255,.14); }
     .fi-sidebar-item.fi-active .fi-sidebar-item-button { background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.15); }
     .fi-sidebar-item.fi-active .fi-sidebar-item-label, .fi-sidebar-item.fi-active .fi-sidebar-item-icon { color: var(--jl-red-dark); font-weight: 700; }

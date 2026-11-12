@@ -49,9 +49,12 @@ class PeriodStats extends StatsOverviewWidget
                 $this->stat('Dibayar / dikirim', $s['paid']),
                 $this->stat('Selesai', $s['done']),
                 $this->stat('Batal', $s['cancelled'], lowerIsBetter: true),
-                $this->stat('Nilai penjualan', $s['sales'], fn ($v) => self::rupiah($v), hint: $s['average']['now'] ? 'Rata-rata order '.self::rupiah($s['average']['now']) : null),
+                // Long figures (rupiah, two rates) take the full width of a phone instead of breaking over lines.
+                $this->stat('Nilai penjualan', $s['sales'], fn ($v) => self::rupiah($v), hint: $s['average']['now'] ? 'Rata-rata order '.self::rupiah($s['average']['now']) : null)
+                    ->extraAttributes(['class' => 'jl-stat-wide']),
                 Stat::make('Konversi', ($orderRate ?? 0).'% → '.($paidRate ?? 0).'%')
-                    ->description('Lead → order → dibayar')->color('primary'),
+                    ->description('Lead → order → dibayar')->color('primary')
+                    ->extraAttributes(['class' => 'jl-stat-wide']),
             ];
         }
 

@@ -3,6 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Admin\Pages\Dashboard;
+use App\Filament\Support\InitialsAvatarProvider;
 use App\Http\Middleware\NoCurrentTenant;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -32,6 +33,7 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->brandName('JITU LEAD Admin')
+            ->defaultAvatarProvider(InitialsAvatarProvider::class)
             ->login()
             ->brandLogo(asset('images/logo.svg'))
             ->brandLogoHeight('2.25rem')

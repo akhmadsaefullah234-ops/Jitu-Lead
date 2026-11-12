@@ -8,7 +8,7 @@
             <div style="padding:.8rem;overflow:auto;flex:1;display:flex;flex-direction:column;gap:.5rem;min-height:8rem">
                 @forelse ($messages as $m)
                     <div style="align-self:{{ $m->from_staff ? 'flex-start' : 'flex-end' }};max-width:85%;background:{{ $m->from_staff ? '#f3f4f6' : '#fee2e2' }};border-radius:.8rem;padding:.5rem .7rem">
-                        <div style="font-size:.68rem;color:#6b7280">{{ $m->from_staff ? 'Tim support' : 'Anda' }} · {{ $m->created_at->timezone(config('app.timezone'))->format('d M H:i') }}</div>
+                        <div style="font-size:.75rem;color:#6b7280">{{ $m->from_staff ? 'Tim support' : 'Anda' }} · {{ $m->created_at->timezone(config('app.timezone'))->format('d M H:i') }}</div>
                         <div style="white-space:pre-wrap;word-break:break-word;font-size:.9rem">{{ $m->body }}</div>
                     </div>
                 @empty
@@ -30,7 +30,7 @@
     @else
         <button type="button" wire:click="toggle" aria-label="Buka chat bantuan" style="position:relative;background:#dc2626;color:#fff;font-weight:700;border-radius:9999px;padding:.65rem 1.1rem;box-shadow:0 8px 20px rgba(220,38,38,.4)">
             Bantuan
-            @if ($unread)<span style="position:absolute;top:-.3rem;right:-.2rem;background:#111827;color:#fff;border-radius:9999px;font-size:.7rem;padding:0 .4rem">!</span>@endif
+            @if ($unread)<span style="position:absolute;top:-.3rem;right:-.2rem;background:#111827;color:#fff;border-radius:9999px;font-size:.75rem;padding:0 .4rem">!</span>@endif
         </button>
     @endif
 </div>
