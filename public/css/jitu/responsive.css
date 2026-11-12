@@ -136,3 +136,34 @@ html, body { max-width: 100%; overflow-x: hidden; }
 @media (max-width: 639px) {
     .fi-tabs:not(.product-tabs > .fi-tabs) { flex-wrap: wrap; overflow-x: visible; row-gap: .25rem; }
 }
+
+/* "Lihat detail" in table cards (App\Filament\Support\MobileDetails): on phones a card shows its main fields; the
+   rest (cells marked .jl-detail) open under the toggle. Tablets and desktops show every column, without the toggle. */
+.jl-detail-btn { display: inline-flex; align-items: center; gap: .35rem; min-height: 2.75rem; padding-inline: .25rem;
+    font-size: .875rem; font-weight: 600; color: var(--primary-600); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.jl-detail-btn::after { content: ""; width: .45rem; height: .45rem; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+    transform: translateY(-.15rem) rotate(45deg); transition: transform .15s; }
+.jl-detail-btn:has(.jl-detail-check:checked)::after { transform: translateY(.1rem) rotate(-135deg); }
+.jl-detail-check { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.jl-detail-btn:has(.jl-detail-check:focus-visible) { outline: 2px solid var(--primary-500); outline-offset: 2px; border-radius: .4rem; }
+.jl-detail-check:checked ~ .jl-detail-more, .jl-detail-check:not(:checked) ~ .jl-detail-less { display: none; }
+@media (min-width: 640px) {
+    .jl-detail-toggle { display: none !important; }
+}
+@media (max-width: 639px) {
+    .fi-ta-table-stacked-on-mobile > tbody > tr:not(:has(.jl-detail-check:checked)) > td.jl-detail { display: none !important; }
+    .fi-ta-table-stacked-on-mobile > tbody > tr > td.jl-detail-toggle { display: block !important; padding-block: 0 !important; }
+    .fi-ta-table-stacked-on-mobile > tbody > tr > td.jl-detail-toggle > .fi-ta-cell-label { display: none !important; }
+}
+
+/* Table filters on phones: the dropdown (up to 48rem wide and taller than the screen, partly under the tab bar and
+   the add button) opens as a sheet from the bottom that scrolls on its own. The page behind is dimmed; tapping it
+   closes the sheet as before. */
+@media (max-width: 639px) {
+    .fi-ta-filters-dropdown > .fi-dropdown-panel {
+        position: fixed !important; inset: auto 0 0 0 !important; width: auto !important; max-width: none !important;
+        max-height: calc(var(--jl-vvh, 100dvh) - 3.5rem); overflow-y: auto; overscroll-behavior: contain; z-index: 45;
+        border-radius: 1.25rem 1.25rem 0 0; padding-bottom: env(safe-area-inset-bottom);
+        box-shadow: 0 0 0 100vmax rgba(17, 24, 39, .45); }
+    body:has(.fi-ta-filters-dropdown > .fi-dropdown-panel:not([style*="display: none"])) :is(.jl-tabbar, .jl-fab) { display: none; }
+}

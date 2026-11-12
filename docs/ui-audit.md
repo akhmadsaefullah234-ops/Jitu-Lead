@@ -78,6 +78,24 @@ Area sentuh kecil terbanyak di lebar 375px (satu putaran, terang): tombol ikon a
 kolom tabel setinggi 21-24px, kotak Cari di top bar setinggi 36px, tombol lonceng 36 x 44 dan tombol menu 28 x 44,
 aksi tautan tabel ("Ubah", "Hapus") setinggi 20px, kotak centang baris 16 x 16.
 
+### Putaran PR 2
+
+806 layar, 12 November 2026. "Sebelum" = `main` setelah PR 1, "sesudah" = setelah PR 2.
+
+| Ukuran | Sebelum PR 2 | Sesudah PR 2 | Target |
+| --- | --- | --- | --- |
+| Layar dengan scroll horizontal | 0 | **0** | 0 |
+| Elemen meluber dari layar | 0 | **0** | 0 |
+| Elemen tertutup | 0 | **0** | 0 |
+| Area kosong besar | 0 | **0** | 0 |
+| Area sentuh < 44px, HP dan tablet | 14.232 | 13.804 | mendekati 0, PR 4 |
+| Teks < 14px | 14.046 | 15.252 | PR 4 |
+
+Area sentuh kecil turun 428, terbanyak di daftar Lead (-362): kolom sekunder pindah ke balik "Lihat detail" dan chip
+Pipeline setinggi 44px. Kenaikan teks kecil seluruhnya dari Pipeline di HP (+1.206): sebelumnya hanya kolom tahap yang
+aktif yang ditampilkan, sekarang semua kolom ada berdampingan di area geser dan ikut dihitung walau berada di luar
+layar. Jumlahnya sama dengan Pipeline di desktop (140 per layar); ukuran huruf kartu ditangani di PR 4.
+
 ## Temuan dan status
 
 Tingkat keparahan: **tinggi** = isi tidak bisa dilihat atau dipakai; **sedang** = bisa dipakai tetapi sulit atau
@@ -98,13 +116,23 @@ terlihat rusak; **rendah** = kerapian.
 | Modal (sheet bawah di HP), chat Bantuan, popup paket | HP | Tinggi maksimum memakai `vh`, yang tidak memperhitungkan bar browser dan keyboard | sedang | `dvh` / `--jl-vvh`; isi modal yang lebih tinggi digulir di dalam jendela modal | - |
 | Sidebar di HP | HP | Diperiksa: sidebar menutup sendiri setelah menu dipilih (bawaan Filament, `$store.sidebar.close()` pada lebar 1024px ke bawah) | - | Tidak perlu diubah | - |
 
+### Diperbaiki di PR 2
+
+| Halaman | Lebar | Masalah | Keparahan | Perbaikan | Tangkapan layar |
+| --- | --- | --- | --- | --- | --- |
+| Pipeline | 320-414 | Saringan cepat, pilihan agen, periode, dan produk mengisi setengah layar sebelum chip tahap dan kartu | sedang | Satu baris: kotak Cari dan tombol "Filter" (dengan jumlah saringan aktif) yang membuka panel saringan | [sebelum](screenshots/ui-audit/pr2/pipeline-hp-sebelum.png), [sesudah](screenshots/ui-audit/pr2/pipeline-hp-sesudah.png) |
+| Pipeline | 320-414 | Chip tahap memenuhi empat baris; pindah tahap hanya lewat chip | sedang | Chip tahap satu baris yang bisa digeser; satu kolom tahap per layar, bisa digeser ke kiri dan kanan, chip mengikuti kolom yang tampil | [sebelum](screenshots/ui-audit/pr2/pipeline-geser-hp-sebelum.png), [sesudah](screenshots/ui-audit/pr2/pipeline-geser-hp-sesudah.png) |
+| Lead | 320-414 | Kartu memuat semua kolom (agen, aksi berikutnya, sumber, resi, waktu masuk) | sedang | Kartu menampilkan nama, nomor, tahap, minat, tenggat; sisanya di balik "Lihat detail" / "Tutup detail" | [sebelum](screenshots/ui-audit/pr2/lead-kartu-hp-sebelum.png), [sesudah](screenshots/ui-audit/pr2/lead-detail-hp-sesudah.png) |
+| Kiriman | 320-414 | Kartu sampai 14 baris (kurir, biaya, lokasi, waktu lacak, penjemputan, waktu cetak) | sedang | Kolom tersebut di balik "Lihat detail" | [sebelum](screenshots/ui-audit/pr2/kiriman-kartu-hp-sebelum.png), [sesudah](screenshots/ui-audit/pr2/kiriman-kartu-hp-sesudah.png) |
+| Semua tabel | HP | Panel filter membuka ke bawah di tengah halaman dan tertutup tombol + | sedang | Tombol bertulisan "Filter"; di HP panel filter tampil sebagai lembar dari bawah layar dengan latar gelap, isinya digulir di dalam lembar | [sebelum](screenshots/ui-audit/pr2/filter-hp-sebelum.png), [sesudah](screenshots/ui-audit/pr2/filter-hp-sesudah.png) |
+| Tugas | 320-414 | Diperiksa: kartu hanya tiga baris | - | Tidak perlu "Lihat detail" | - |
+
 ### Belum dikerjakan (PR berikutnya)
 
 | Halaman | Lebar | Masalah | Keparahan | PR |
 | --- | --- | --- | --- | --- |
-| Lead, Kiriman, Tugas | 320-414 | Kartu tabel memuat semua kolom (Kiriman sampai 14 baris per kartu), belum ada "Lihat detail"; pencarian, filter, dan "Urutkan menurut" memakan tiga baris | sedang | 2 |
-| Lead | 320-414 | Empat tombol header (Impor resi, Ekspor CSV, Pengaturan agensi, Buat lead) turun ke dua baris | sedang | 2 |
-| Pipeline | 320-414 | Saringan cepat, pilihan agen, periode, dan produk mengisi setengah layar sebelum chip tahap dan kartu | sedang | 2 |
+| Lead, Kiriman, Tugas | 320-414 | Kotak Cari dan "Urutkan menurut" masih dua baris di atas kartu; lencana jumlah filter menampilkan "0" walau tidak ada saringan | rendah | 4 |
+| Lead | 320-414 | Empat tombol header (Impor resi, Ekspor CSV, Pengaturan agensi, Buat lead) turun ke dua baris; digarap bersama aturan "satu tombol utama per layar" | sedang | 4 |
 | Inbox, header chat | 320-414 | Chip tahap dan produk terpotong menjadi "Tanya pr…", "Tas Rak…"; tooltip "Aksi lain" tetap tampil menutupi avatar setelah ⋯ disentuh | sedang | 3 |
 | Modal di HP | HP | Tombol aksi modal belum menempel di bawah (sticky footer) untuk formulir panjang | sedang | 3 |
 | Semua halaman panel | HP dan tablet | Area sentuh di bawah 44px: tombol ikon aksi baris (32 x 44), aksi tautan tabel (tinggi 20px), tombol menu dan lonceng di top bar (28-36px), kotak centang (16px), kotak Cari (tinggi 36px) | tinggi | 4 |

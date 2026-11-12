@@ -33,16 +33,39 @@
             .jl-bar .jl-input[type="search"] { flex: 1 1 100% !important; max-width: none !important; }
             .jl-card { cursor: default; }
         }
-        /* Phones: one stage at a time, picked from tabs that wrap, so the board never scrolls sideways */
-        .jl-tabs { display: none; }
+        /* Phones: one stage per screen. The board swipes sideways and snaps to a stage; the stage chips above it
+           show where you are and jump to a stage when tapped. Agent, period and product sit behind "Filter". */
+        .jl-tabs, .jl-filter-btn, .jl-filters .jl-quick { display: none; }
+        .jl-quick { display: contents; }
         @media (max-width: 640px) {
             .jl-tabs { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .75rem; }
-            .jl-tabs .jl-chip { display: inline-flex; gap: .35rem; align-items: center; min-height: 2.25rem; }
+            .jl-tabs .jl-chip { display: inline-flex; gap: .35rem; align-items: center; min-height: 2.75rem; }
             .jl-tabs .jl-chip span { font-size: .75rem; opacity: .75; }
-            .jl-board { display: block; overflow: visible; padding-bottom: 0; }
-            .jl-col { display: none; }
-            .jl-col.is-current { display: flex; }
+            .jl-board { position: relative; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain;
+                margin-inline: -.75rem; padding: 0 .75rem .75rem; scroll-padding-inline: .75rem; scrollbar-width: none; }
+            .jl-board::-webkit-scrollbar { display: none; }
+            .jl-col, .jl-col.is-closed { flex: 0 0 100%; max-height: none; scroll-snap-align: start; scroll-snap-stop: always; }
+            .jl-filter-btn { display: inline-flex; gap: .35rem; align-items: center; min-height: 2.75rem; }
+            .jl-filter-btn b { min-width: 1.15rem; height: 1.15rem; border-radius: 9999px; background: var(--primary-600); color: white; font-size: .7rem; line-height: 1.15rem; text-align: center; }
+            .jl-filters:not(.is-open) { display: none; }
+            /* The quick filters live in the Filter panel too: one row (search + Filter) above the board */
+            .jl-bar { flex-wrap: nowrap; }
+            .jl-bar .jl-input[type="search"] { flex: 1 1 auto !important; min-width: 0; min-height: 2.75rem; }
+            .jl-bar .jl-quick { display: none; }
+            .jl-filters .jl-quick { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .75rem; }
+            /* Stage chips: one row that scrolls; the chip of the stage on screen is kept in sight */
+            .jl-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-inline: -.75rem; padding-inline: .75rem; scroll-padding-inline: .75rem; }
+            .jl-tabs::-webkit-scrollbar { display: none; }
+            .jl-tabs .jl-chip { flex: none; }
+            .jl-filters { margin-top: .5rem; padding: .75rem; border: 1px solid var(--gray-200); border-radius: .75rem; background: white; }
+            .jl-filters .jl-period { margin: .75rem 0 0; }
+            .jl-filters select.jl-input { width: 100%; min-height: 2.75rem; }
+            .jl-bar .jl-chip { min-height: 2.75rem; }
+            .jl-card .acts .jl-link { display: inline-flex; align-items: center; min-height: 2.75rem; }
+            .jl-card .acts > span { gap: 1.25rem !important; }
+            .jl-period { margin: .75rem 0; }
         }
+        .dark .jl-filters { background: var(--gray-900); border-color: var(--gray-700); }
         .jl-tag { display: inline-block; border: 1px solid var(--gray-200); border-radius: .375rem; padding: 0 .35rem; font-size: .6875rem; color: var(--gray-700); font-variant-numeric: tabular-nums; }
         .dark .jl-tag { border-color: var(--gray-700); color: var(--gray-300); }
         .jl-empty { font-size: .75rem; color: var(--gray-500); padding: .5rem .25rem; }
@@ -56,11 +79,26 @@
         .dark .jl-link { color: var(--primary-400); }
     </style>
 
+    @php($activeFilters = ($filter !== array_key_first($filters) ? 1 : 0) + ($agent ? 1 : 0) + ($this->period() ? 1 : 0) + (filled($this->produk) ? 1 : 0))
+    <div x-data="{ open: false }">
     <div class="jl-bar">
         <input type="search" class="jl-input" style="flex: 1 1 14rem; max-width: 20rem" placeholder="Cari nama, nomor, email" aria-label="Cari lead" wire:model.live.debounce.400ms="search">
-        @foreach ($filters as $key => $label)
-            <button type="button" class="jl-chip" aria-pressed="{{ $filter === $key ? 'true' : 'false' }}" wire:click="$set('filter', '{{ $key }}')">{{ $label }}</button>
-        @endforeach
+        <button type="button" class="jl-chip jl-filter-btn" x-on:click="open = ! open" x-bind:aria-expanded="open ? 'true' : 'false'" aria-controls="jl-filters">
+            <x-filament::icon icon="heroicon-m-funnel" class="h-4 w-4" /> Filter @if ($activeFilters)<b>{{ $activeFilters }}</b>@endif
+        </button>
+        <span class="jl-quick" role="group" aria-label="Saring cepat">
+            @foreach ($filters as $key => $label)
+                <button type="button" class="jl-chip" aria-pressed="{{ $filter === $key ? 'true' : 'false' }}" wire:click="$set('filter', '{{ $key }}')">{{ $label }}</button>
+            @endforeach
+        </span>
+    </div>
+
+    <div class="jl-filters" id="jl-filters" x-bind:class="{ 'is-open': open }">
+        <div class="jl-quick" role="group" aria-label="Saring cepat">
+            @foreach ($filters as $key => $label)
+                <button type="button" class="jl-chip" aria-pressed="{{ $filter === $key ? 'true' : 'false' }}" wire:click="$set('filter', '{{ $key }}')">{{ $label }}</button>
+            @endforeach
+        </div>
         @if ($agents->isNotEmpty())
             <select class="jl-input" aria-label="Filter agen" wire:model.live="agent">
                 <option value="">Semua agen</option>
@@ -69,19 +107,40 @@
                 @endforeach
             </select>
         @endif
+        <div class="jl-period">{{ $this->periodForm }}</div>
+    </div>
     </div>
 
-    <div class="jl-period">{{ $this->periodForm }}</div>
-
-    <div x-data="{ stage: @js(collect($columns)->first()['key'] ?? null) }">
-    <div class="jl-tabs" role="tablist" aria-label="Tahap">
+    {{-- stage: the stage on screen (phones). go() scrolls the board to a stage; sync() follows a swipe. --}}
+    <div x-data="{
+        stage: @js(collect($columns)->first()['key'] ?? null),
+        dragging: null,
+        keys: @js(collect($columns)->pluck('key')->values()),
+        go(key) {
+            this.stage = key;
+            const board = this.$refs.board, col = board.children[this.keys.indexOf(key)];
+            if (col && board.scrollWidth > board.clientWidth) board.scrollTo({ left: col.offsetLeft - parseFloat(getComputedStyle(board).paddingLeft), behavior: 'smooth' });
+        },
+        sync() {
+            const board = this.$refs.board;
+            if (board.scrollWidth <= board.clientWidth) return;
+            const pad = parseFloat(getComputedStyle(board).paddingLeft);
+            let best = 0;
+            [...board.children].forEach((col, i) => { if (Math.abs(col.offsetLeft - pad - board.scrollLeft) < Math.abs(board.children[best].offsetLeft - pad - board.scrollLeft)) best = i; });
+            this.stage = this.keys[best] ?? this.stage;
+        },
+        init() {
+            this.$watch('stage', (key) => this.$nextTick(() => this.$refs.tabs?.children[this.keys.indexOf(key)]?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' })));
+        },
+    }">
+    <div class="jl-tabs" role="tablist" aria-label="Tahap" x-ref="tabs">
         @foreach ($columns as $column)
             <button type="button" class="jl-chip" role="tab" wire:key="tab-{{ $column['key'] }}"
                 x-bind:aria-pressed="stage === @js($column['key']) ? 'true' : 'false'" x-bind:aria-selected="stage === @js($column['key'])"
-                x-on:click="stage = @js($column['key'])">{{ $column['name'] }} <span>{{ $column['count'] }}</span></button>
+                x-on:click="go(@js($column['key']))">{{ $column['name'] }} <span>{{ $column['count'] }}</span></button>
         @endforeach
     </div>
-    <div class="jl-board" x-data="{ dragging: null }">
+    <div class="jl-board" x-ref="board" x-on:scroll.debounce.80ms="sync()">
         @foreach ($columns as $column)
             @php($stage = $column['stage'])
             <section
