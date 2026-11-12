@@ -90,8 +90,14 @@ html, body { max-width: 100%; overflow-x: hidden; }
     .fi-modal-window { width: 100% !important; max-width: 100% !important; margin: 0 !important; border-radius: 1.25rem 1.25rem 0 0 !important;
         max-height: 92dvh; max-height: calc(var(--jl-vvh, 100dvh) - 2rem); overflow-y: auto; overscroll-behavior: contain;
         padding-bottom: env(safe-area-inset-bottom); }
-    .fi-modal-footer-actions { flex-direction: column-reverse; align-items: stretch; }
-    .fi-modal-footer-actions > * { width: 100%; }
+    .fi-modal-window:has(> .fi-modal-footer) { padding-bottom: 0; }
+    /* The buttons (Batal among them) stay in sight at the bottom while a long form scrolls above them */
+    .fi-modal-window > .fi-modal-footer { position: sticky; bottom: 0; z-index: 10; background: #fff; border-top: 1px solid var(--gray-200);
+        padding-block: .75rem calc(.75rem + env(safe-area-inset-bottom)); }
+    .fi-modal-window > .fi-modal-content:last-child { padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)); }
+    /* Buttons share one row (main action on the right) and wrap when there are more than fit */
+    .fi-modal-footer-actions { flex-direction: row-reverse; flex-wrap: wrap; align-items: stretch; }
+    .fi-modal-footer-actions > * { flex: 1 1 8rem; width: auto; }
 
     /* Sidebar drawer */
     .fi-sidebar { padding-top: env(safe-area-inset-top); }
@@ -166,4 +172,31 @@ html, body { max-width: 100%; overflow-x: hidden; }
         border-radius: 1.25rem 1.25rem 0 0; padding-bottom: env(safe-area-inset-bottom);
         box-shadow: 0 0 0 100vmax rgba(17, 24, 39, .45); }
     body:has(.fi-ta-filters-dropdown > .fi-dropdown-panel:not([style*="display: none"])) :is(.jl-tabbar, .jl-fab) { display: none; }
+}
+
+/* Create and edit pages: Filament's sticky form actions (BasePage::stickyFormActions in AppServiceProvider) float at
+   the bottom while the form's own buttons are out of sight. Under 1024px the bar sits above the tab bar, spans the
+   screen, and the add button steps aside. */
+@media (max-width: 1023px) {
+    .fi-sc-actions.fi-sticky .fi-ac { left: .5rem; right: .5rem; width: auto; margin-inline: 0;
+        bottom: calc(4.6rem + env(safe-area-inset-bottom)); z-index: 41; padding: .6rem; }
+    body:has(.fi-sc-actions.fi-sticky) .jl-fab { display: none; }
+}
+@media (max-width: 639px) {
+    .fi-sc-actions.fi-sticky .fi-ac { flex-wrap: wrap; gap: .4rem; }
+    .fi-sc-actions.fi-sticky .fi-ac > * { flex: 1 0 auto; }
+    .fi-sc-actions.fi-sticky .fi-ac .fi-btn { padding-inline: .7rem; white-space: nowrap; }
+}
+
+/* Inbox chat header on phones: back, name and the ⋯ menu on the first row; the stage and product chips get a row of
+   their own under the name instead of being cut to "Tanya pr…" and "Tas Rak…". */
+@media (max-width: 640px) {
+    .wa-bar { flex-wrap: wrap; row-gap: .35rem; }
+    .wa-bar::after { content: ""; order: 2; flex-basis: 100%; }
+    .wa-bar > .wa-more { order: 1; }
+    .wa-bar > .wa-chip, .wa-bar > .wa-chip-prod, .wa-bar > .wa-print { order: 3; }
+    .wa-bar > .wa-back { width: 2.75rem; height: 2.75rem; margin-inline-start: -.35rem; }
+    .wa-bar > :is(.wa-chip, .wa-chip-prod, .wa-print):first-of-type { margin-inline-start: 2.4rem; }
+    .wa-bar > .wa-chip, .wa-bar > .wa-chip-prod { max-width: calc(50% - 1.6rem); font-size: .75rem; }
+    .wa-bar > .wa-name { min-width: 0; }
 }

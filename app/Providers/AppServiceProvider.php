@@ -8,6 +8,7 @@ use App\Support\CurrentTenant;
 use App\Tutorials\CaptureFakes;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
+use Filament\Pages\BasePage;
 use Filament\Tables\Table;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -42,6 +43,10 @@ class AppServiceProvider extends ServiceProvider
         // The filter button is labelled "Filter" (not a bare funnel), so search and filters read as one short row on phones.
         Table::configureUsing(fn (Table $table) => $table->stackedOnMobile()
             ->filtersTriggerAction(fn (Action $action) => $action->button()->label('Filter')));
+
+        // Save and cancel stay in reach at the bottom of the screen while a long form is scrolled
+        // (create and edit pages, settings pages); responsive.css lifts the bar above the phone tab bar.
+        BasePage::stickyFormActions();
 
         RateLimiter::for('webhooks', fn (Request $request) => Limit::perMinute(300)->by($request->route('token') ?? $request->ip()));
         RateLimiter::for('ipaymu-notify', fn (Request $request) => Limit::perMinute(60)->by($request->ip()));
