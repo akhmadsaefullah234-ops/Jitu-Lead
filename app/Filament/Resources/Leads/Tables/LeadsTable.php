@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Leads\Tables;
 use App\Actions\ReassignLead;
 use App\Enums\Interest;
 use App\Filament\Resources\Leads\Schemas\LeadForm;
+use App\Filament\Support\MobileDetails;
 use App\Filament\Support\ShipmentActions;
 use App\Models\Lead;
 use App\Models\Property;
@@ -72,13 +73,13 @@ class LeadsTable
                 TextColumn::make('interest')
                     ->label('Minat')
                     ->badge(),
-                TextColumn::make('owner.name')
+                MobileDetails::secondary(TextColumn::make('owner.name'))
                     ->label('Agen')
                     ->visibleFrom('lg')
                     ->toggleable()
                     ->description(fn (Lead $record) => self::isUnattended($record) ? 'Belum ditanggapi' : null)
                     ->color(fn (Lead $record) => self::isUnattended($record) ? 'danger' : null),
-                TextColumn::make('next_action')
+                MobileDetails::secondary(TextColumn::make('next_action'))
                     ->label('Aksi berikutnya')
                     ->limit(40)
                     ->visibleFrom('lg')
@@ -89,21 +90,22 @@ class LeadsTable
                     ->sortable()
                     ->color(fn (Lead $record) => $record->isOverdue() && $record->stage?->isOpen() ? 'danger' : null)
                     ->weight(fn (Lead $record) => $record->isOverdue() && $record->stage?->isOpen() ? 'bold' : null),
-                TextColumn::make('source.name')
+                MobileDetails::secondary(TextColumn::make('source.name'))
                     ->label('Sumber')
                     ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('resi_check')
+                MobileDetails::secondary(TextColumn::make('resi_check'))
                     ->label('Resi')
                     ->state(fn (Lead $record) => self::resiCheck($record))
                     ->color(fn (?string $state) => $state === 'Siap resi' ? 'success' : 'warning')
                     ->wrap()
                     ->visible(fn () => ShipmentActions::available())
                     ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('created_at')
+                MobileDetails::secondary(TextColumn::make('created_at'))
                     ->label('Masuk')
                     ->since()
                     ->sortable()
                     ->toggleable(),
+                MobileDetails::toggle(),
             ])
             ->filtersFormColumns(['default' => 1, 'md' => 2])
             ->filtersFormWidth(Width::ThreeExtraLarge)

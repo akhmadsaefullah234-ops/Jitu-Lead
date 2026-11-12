@@ -35,7 +35,28 @@ class MobileLayoutTest extends TestCase
 
     public function test_the_pipeline_shows_stage_tabs_for_phones(): void
     {
-        Livewire::test(Pipeline::class)->assertSeeHtml('class="jl-tabs"')->assertSeeHtml("'is-current': stage ===");
+        Livewire::test(Pipeline::class)
+            ->assertSeeHtml('class="jl-tabs"')
+            ->assertSeeHtml("'is-current': stage ===")
+            ->assertSeeHtml('x-ref="board"')
+            ->assertSeeHtml('x-on:click="go(')
+            ->assertSeeHtml('aria-controls="jl-filters"');
+    }
+
+    public function test_lead_cards_keep_secondary_fields_behind_a_detail_toggle(): void
+    {
+        Livewire::test(ListLeads::class)
+            ->assertSeeHtml('jl-detail-check')
+            ->assertSee('Lihat detail')
+            ->assertSeeHtml('jl-detail');
+    }
+
+    public function test_the_table_filter_button_carries_a_label(): void
+    {
+        $action = Livewire::test(ListLeads::class)->instance()->getTable()->getFiltersTriggerAction();
+
+        $this->assertSame('Filter', $action->getLabel());
+        $this->assertTrue($action->isButton());
     }
 
     public function test_report_tables_label_each_figure_for_the_card_view(): void

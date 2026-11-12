@@ -6,6 +6,7 @@ use App\Ai\Transcriber;
 use App\Ai\WhisperTranscriber;
 use App\Support\CurrentTenant;
 use App\Tutorials\CaptureFakes;
+use Filament\Actions\Action;
 use Filament\Facades\Filament;
 use Filament\Tables\Table;
 use Illuminate\Auth\Notifications\ResetPassword;
@@ -38,7 +39,9 @@ class AppServiceProvider extends ServiceProvider
         ResetPassword::createUrlUsing(fn ($user, string $token) => Filament::getPanel('app')->getResetPasswordUrl($token, $user));
 
         // On phones every table row becomes a card with its fields stacked, so no table needs sideways scrolling.
-        Table::configureUsing(fn (Table $table) => $table->stackedOnMobile());
+        // The filter button is labelled "Filter" (not a bare funnel), so search and filters read as one short row on phones.
+        Table::configureUsing(fn (Table $table) => $table->stackedOnMobile()
+            ->filtersTriggerAction(fn (Action $action) => $action->button()->label('Filter')));
 
         RateLimiter::for('webhooks', fn (Request $request) => Limit::perMinute(300)->by($request->route('token') ?? $request->ip()));
         RateLimiter::for('ipaymu-notify', fn (Request $request) => Limit::perMinute(60)->by($request->ip()));

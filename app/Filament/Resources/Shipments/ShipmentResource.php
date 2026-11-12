@@ -6,6 +6,7 @@ use App\Filament\Pages\Inbox;
 use App\Filament\Resources\Leads\LeadResource;
 use App\Filament\Resources\Shipments\Pages\ListShipments;
 use App\Filament\Support\LocationActions;
+use App\Filament\Support\MobileDetails;
 use App\Filament\Support\ShipmentActions;
 use App\Models\CarrierAccount;
 use App\Models\Property;
@@ -162,12 +163,12 @@ class ShipmentResource extends Resource
                     ->url(fn (Shipment $r) => $r->lead ? Inbox::getUrl(['lead' => $r->lead_id]) : null)
                     ->description(fn (Shipment $r) => $r->lead ? new HtmlString('<a href="'.e(LeadResource::getUrl('edit', ['record' => $r->lead_id])).'" style="text-decoration:underline">Buka lead</a>') : null),
                 TextColumn::make('items')->label('Produk')->state(fn (Shipment $r) => self::items($r))->wrap(),
-                TextColumn::make('courier')->label('Kurir')->toggleable(),
+                MobileDetails::secondary(TextColumn::make('courier'))->label('Kurir')->toggleable(),
                 TextColumn::make('awb')->label('Nomor resi')->searchable(['awb', 'provider_order_no'])->copyable()->copyMessage('Nomor resi disalin')->placeholder('-')
                     ->description(fn (Shipment $r) => filled($r->provider_order_no) ? 'No. order Everpro: '.$r->provider_order_no : null),
                 TextColumn::make('is_cod')->label('Bayar')->state(fn (Shipment $r) => $r->is_cod ? 'COD '.$rp($r->cod_amount) : 'Transfer')
                     ->badge()->color(fn (Shipment $r) => $r->is_cod ? 'warning' : 'gray'),
-                TextColumn::make('fees')->label('Biaya')->toggleable()
+                MobileDetails::secondary(TextColumn::make('fees'))->label('Biaya')->toggleable()
                     ->state(fn (Shipment $r) => self::fees($r))->placeholder('-')->listWithLineBreaks(),
                 TextColumn::make('status')->label('Status')->badge()
                     ->state(fn (Shipment $r) => self::status($r))
@@ -180,19 +181,20 @@ class ShipmentResource extends Resource
                         default => 'info',
                     })
                     ->description(fn (Shipment $r) => $r->waitingBalance() ? $r->error : (($t = self::statusTime($r)) ? $t->timezone($tz())->format('d M H:i') : null)),
-                TextColumn::make('location')->label('Lokasi '.config('carriers.labels.everpro'))->toggleable()->badge()
+                MobileDetails::secondary(TextColumn::make('location'))->label('Lokasi '.config('carriers.labels.everpro'))->toggleable()->badge()
                     ->state(fn (Shipment $r) => ProviderLocations::LABELS[$r->lead?->provider_location_state] ?? null)->placeholder('-')
                     ->color(fn (?string $state) => $state === ProviderLocations::LABELS[ProviderLocations::EXACT] ? 'success' : 'warning')
                     ->tooltip(fn (Shipment $r) => $r->lead?->provider_location_note ?: $r->lead?->provider_location_label),
-                TextColumn::make('tracked_at')->label('Terakhir diperbarui')->toggleable()
+                MobileDetails::secondary(TextColumn::make('tracked_at'))->label('Terakhir diperbarui')->toggleable()
                     ->state(fn (Shipment $r) => $r->state === Shipment::SHIPPED && filled($r->awb) ? $r->lastUpdatedAt()?->timezone($tz())->format('d M H:i') : null)->placeholder('-')
                     ->color(fn (Shipment $r) => $r->trackingStale() ? 'danger' : null)->weight(fn (Shipment $r) => $r->trackingStale() ? 'bold' : null)
                     ->description(fn (Shipment $r) => $r->trackingStale() ? '⚠ Lebih dari '.Shipment::STALE_TRACKING_HOURS.' jam tanpa pembaruan' : null),
-                TextColumn::make('pickup')->label('Jadwal jemput')->toggleable()
+                MobileDetails::secondary(TextColumn::make('pickup'))->label('Jadwal jemput')->toggleable()
                     ->state(fn (Shipment $r) => ($at = data_get($r->request, 'pickup_time')) ? Carbon::parse($at)->timezone($tz())->format('d M H:i')
                         : (data_get($r->request, 'shipment_type') === 'DROP' ? 'Antar ke agen' : null))->placeholder('-'),
-                TextColumn::make('printed_at')->label('Dicetak')->dateTime('d M H:i')->timezone($tz())->placeholder('Belum')->sortable()
+                MobileDetails::secondary(TextColumn::make('printed_at'))->label('Dicetak')->dateTime('d M H:i')->timezone($tz())->placeholder('Belum')->sortable()
                     ->description(fn (Shipment $r) => $r->printed_at ? trim(($r->printer?->name ?? '').($r->print_count > 1 ? ' · '.$r->print_count.'x' : '')) ?: null : null),
+                MobileDetails::toggle(),
             ])
             ->filters([
                 Filter::make('tanggal')->schema([
