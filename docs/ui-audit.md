@@ -96,6 +96,14 @@ Pipeline setinggi 44px. Kenaikan teks kecil seluruhnya dari Pipeline di HP (+1.2
 aktif yang ditampilkan, sekarang semua kolom ada berdampingan di area geser dan ikut dihitung walau berada di luar
 layar. Jumlahnya sama dengan Pipeline di desktop (140 per layar); ukuran huruf kartu ditangani di PR 4.
 
+### Putaran PR 3
+
+806 layar, 12 November 2026. "Sebelum" = `main` setelah PR 2, "sesudah" = setelah PR 3. Scroll horizontal, meluber,
+tertutup, dan area kosong tetap 0. Area sentuh kecil 13.808 menjadi 13.772: tombol kembali di header chat Inbox kini
+44 x 44 (-12 di tiap halaman Inbox yang membuka chat). Teks kecil tetap 15.270. Baris tombol yang menempel di modal
+dan di halaman buat/ubah tidak terukur oleh audit (audit tidak membuka modal panjang dan tidak menggulir formulir);
+hasilnya terlihat di tangkapan layar.
+
 ## Temuan dan status
 
 Tingkat keparahan: **tinggi** = isi tidak bisa dilihat atau dipakai; **sedang** = bisa dipakai tetapi sulit atau
