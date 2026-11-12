@@ -193,18 +193,18 @@ async function measure({ touchCheck }) {
         }
     };
     const settle = () => new Promise((resolve) => setTimeout(resolve, 250));
-    window.scrollTo(0, 0);
+    window.scrollTo({ top: 0, behavior: 'instant' });
     await settle();
     checkCovered('atas');
     // Lazy widgets (the dashboard) load as they come into view: scroll down until the page stops growing.
     for (let i = 0, last = -1; i < 12 && doc.scrollHeight !== last; i++) {
         last = doc.scrollHeight;
-        window.scrollTo(0, doc.scrollHeight);
+        window.scrollTo({ top: doc.scrollHeight, behavior: 'instant' });
         await new Promise((resolve) => setTimeout(resolve, 500));
     }
     await settle();
     checkCovered('bawah');
-    window.scrollTo(0, 0);
+    window.scrollTo({ top: 0, behavior: 'instant' });
     await settle();
 
     // touch targets
@@ -358,7 +358,8 @@ async function audit({ tenant, def, scheme, width }) {
             if (step.wait) await page.waitForTimeout(step.wait);
             await page.waitForLoadState('networkidle').catch(() => {});
         }
-        await page.waitForTimeout(300);
+        // A link to an anchor (/#harga) scrolls there smoothly; let that finish before measuring.
+        await page.waitForTimeout(String(def.path).includes('#') ? 2000 : 300);
         row.url = page.url().replace(BASE, '');
         Object.assign(row, await page.evaluate(measure, { touchCheck: phone }));
         if (SHOTS) {
