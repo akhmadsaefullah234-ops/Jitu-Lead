@@ -9,6 +9,7 @@ use App\Filament\Resources\LeadForms\Pages\ListLeadForms;
 use App\LandingPages\Buttons;
 use App\LandingPages\Sections;
 use App\LeadForms\FormFields;
+use App\LeadForms\FormQuote;
 use App\LeadForms\FormTemplates;
 use App\Models\LandingPage;
 use App\Models\LeadForm;
@@ -33,6 +34,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Components\View;
@@ -82,6 +84,11 @@ class LeadFormResource extends Resource
     public static function form(Schema $schema): Schema
     {
         $isAfter = fn (string $type) => fn (Get $get) => $get('after_submit.type') === $type;
+        // The form as it is in the editor (unsaved fields and product included) could show the order summary.
+        $summaryPossible = fn (Get $get, ?LeadForm $record) => $record !== null && ($tenant = app(CurrentTenant::class)->get()) !== null
+            && FormQuote::eligibleAnywhere($tenant, tap($record->replicate()->forceFill([
+                'fields' => FormFields::normalize((array) ($get('fields') ?? [])), 'property_id' => $get('property_id') ?: null,
+            ]))->setAttribute('id', $record->getKey()));
 
         return $schema->components([
             Section::make('Buat formulir baru')->columnSpanFull()->visibleOn('create')
@@ -120,6 +127,13 @@ class LeadFormResource extends Resource
                             FormFields::repeater()->hiddenLabel(),
                             Toggle::make('design.two_step')->label('Formulir dua langkah')->inline(false)
                                 ->helperText('Langkah 1: kolom sebelum alamat (nama, WhatsApp, warna, jumlah); lead tersimpan saat pembeli menekan Lanjut dan ditandai "alamat belum lengkap" bila berhenti. Langkah 2: alamat dan seterusnya.'),
+                            // design.show_summary, read only through LeadForm::showsSummary(). Kept when hidden, so a form
+                            // that loses its address for a while does not come back with the summary on again.
+                            Toggle::make('design.show_summary')->label('Tampilkan rincian harga dan ongkir')->inline(false)->default(true)
+                                ->helperText('Ringkasan harga, ongkir, dan total yang dilihat pembeli sebelum menekan kirim. Bila dimatikan, formulir tetap mengumpulkan alamat dan pesanan; hanya kotak ringkasannya yang disembunyikan.')
+                                ->visible($summaryPossible)->dehydratedWhenHidden(),
+                            Text::make('Rincian tampil otomatis setelah formulir punya produk berharga dan kolom Alamat pengiriman.')
+                                ->key('show_summary_hint')->color('gray')->hidden($summaryPossible),
                         ]),
                     Section::make('Tombol kirim')->collapsible()->collapsed()->columns(['default' => 1, 'sm' => 2])->schema([
                         TextInput::make('submit.label')->label('Teks tombol')->required()->maxLength(40)->default('Kirim'),

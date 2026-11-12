@@ -152,12 +152,14 @@
     @endif
     @if ($quoteUrl)
         {{-- Price, shipping (with the product's promo) and total for the address picked so far: App\LeadForms\FormQuote. --}}
-        <div class="lf-sum" data-sum hidden aria-live="polite">
-            <p><span data-sum-item>Harga</span><b data-sum-subtotal></b></p>
+        {{-- Off under "Tampilkan rincian harga dan ongkir" (LeadForm::showsSummary): then no box and no quoteUrl. --}}
+        @php($sp = $sumPreview ?? null)
+        <div class="lf-sum" data-sum{{ $sp ? '' : ' hidden' }} aria-live="polite">
+            <p><span data-sum-item>{{ $sp ? 'Harga '.$sp['jumlah'].' x '.$sp['harga_teks'] : 'Harga' }}</span><b data-sum-subtotal>{{ $sp['subtotal_teks'] ?? '' }}</b></p>
             <p><span>Ongkir <small data-sum-courier></small></span><b><s data-sum-normal hidden></s> <span data-sum-ship>-</span></b></p>
             <p class="lf-sum-promo" data-sum-promo hidden></p>
-            <p class="lf-sum-total"><span>Total</span><b data-sum-total>-</b></p>
-            <small class="lf-note" data-sum-note hidden></small>
+            <p class="lf-sum-total"><span>Total</span><b data-sum-total>{{ $sp ? $sp['subtotal_teks'].' + ongkir' : '-' }}</b></p>
+            <small class="lf-note" data-sum-note{{ $sp ? '' : ' hidden' }}>{{ $sp ? 'Ongkir dihitung setelah kota/kabupaten dipilih.' : '' }}</small>
         </div>
     @endif
     {{-- Robot trap (App\LeadForms\SpamGuard): a meaningless name per page view, hidden with display:none so autofill skips it. --}}

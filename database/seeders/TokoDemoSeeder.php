@@ -59,6 +59,8 @@ class TokoDemoSeeder extends DemoSeeder
         $tenant->forceFill(['shipping' => [
             'enabled' => true, 'provider' => 'zone', 'origin' => 'Kota Bandung, Jawa Barat',
             'couriers' => ['JNE REG', 'SiCepat REG'], 'primary_courier' => 'JNE REG',
+            // Zone prices (the same table as the starting preset), so forms show their order summary.
+            'zones' => (array) config('shipping.presets.quicker-sport.zones'),
         ] + (array) $tenant->shipping])->save();
 
         // Fake keys: the demo never reaches Everpro or Meta.
