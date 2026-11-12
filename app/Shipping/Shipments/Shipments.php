@@ -13,6 +13,7 @@ use App\Models\CarrierAccount;
 use App\Models\Lead;
 use App\Models\Property;
 use App\Models\Shipment;
+use App\Models\ShipmentNotice;
 use App\Models\User;
 use App\Shipping\Carriers\CallbackEvent;
 use App\Shipping\Carriers\CarrierException;
@@ -437,7 +438,8 @@ class Shipments
             }
 
             $retry = Shipment::query()->where('lead_id', $lead->getKey())->where('state', Shipment::FAILED)->whereNull('order_id')->latest('id')->first();
-            $sequence = (int) Shipment::query()->where('lead_id', $lead->getKey())->max('sequence') + 1;
+            // Deleted parcels count too: an order number is never given out twice.
+            $sequence = (int) Shipment::withTrashed()->where('lead_id', $lead->getKey())->max('sequence') + 1;
             $attributes = [
                 'provider' => $account->provider, 'courier' => $draft->rate->name(), 'rate_code' => $draft->rate->code, 'state' => Shipment::PENDING, 'error' => null,
                 'is_cod' => $draft->cod, 'cod_amount' => $draft->cod ? $draft->codAmount : null, 'price' => $draft->rate->price, 'charged' => $draft->charged,
@@ -1019,6 +1021,26 @@ class Shipments
         $shipment->lead->activities()->create(['user_id' => $actor->getKey(), 'type' => 'note', 'body' => 'Kiriman '.($shipment->awb ?? $shipment->client_order_no).' dibatalkan: '.$reason]);
     }
 
+    /**
+     * "Hapus": takes a parcel that is no longer live at the provider off the lists (soft delete). Nothing is sent to
+     * the provider. Messages about it still waiting are dropped, and the lead can get a new parcel.
+     */
+    public function delete(Shipment $shipment, User $actor): void
+    {
+        if (! $shipment->deletable()) {
+            throw new CarrierException('Kiriman ini masih aktif di penyedia. Batalkan dulu sebelum menghapusnya.');
+        }
+
+        DB::transaction(function () use ($shipment, $actor) {
+            ShipmentNotice::query()->where('shipment_id', $shipment->getKey())->where('state', ShipmentNotice::PENDING)
+                ->update(['state' => ShipmentNotice::SKIPPED, 'note' => 'Kiriman dihapus', 'updated_at' => now()]);
+            $shipment->forceFill(['deleted_by' => $actor->getKey()])->save();
+            $shipment->delete();
+            $shipment->lead?->activities()->create(['user_id' => $actor->getKey(), 'type' => 'note',
+                'body' => 'Kiriman '.($shipment->awb ?: $shipment->client_order_no).' dihapus dari daftar oleh '.$actor->name.'.']);
+        });
+    }
+
     // ---- Tracking ------------------------------------------------------------------------------------------
 
     /** A provider callback for this agency: a tracking number, or a status. */
@@ -1197,7 +1219,8 @@ class Shipments
                 throw new CarrierException('Lead ini sudah punya kiriman aktif'.($open->awb ? ' (resi '.$open->awb.')' : '').'. Batalkan dulu bila resinya berbeda.');
             }
 
-            $sequence = (int) Shipment::query()->where('lead_id', $lead->getKey())->max('sequence') + 1;
+            // Deleted parcels count too: an order number is never given out twice.
+            $sequence = (int) Shipment::withTrashed()->where('lead_id', $lead->getKey())->max('sequence') + 1;
 
             return Shipment::query()->create([
                 'lead_id' => $lead->getKey(), 'provider' => $account->provider, 'source' => Shipment::MANUAL, 'sequence' => $sequence,

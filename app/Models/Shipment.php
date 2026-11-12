@@ -9,11 +9,14 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 
 /**
  * One parcel booked with a courier aggregator for a lead (App\Shipping\Shipments\Shipments). client_order_no is
  * stable per order ("JL-{tenant}-{lead}-{n}"), so a double click or a retry never books twice. events holds the
- * parcel's journey, newest last.
+ * parcel's journey, newest last. "Hapus" (Shipments::delete) soft deletes a parcel that is no longer live at the
+ * provider: it leaves every list, tab, count and check, and its order number is never reused.
  */
 #[Fillable(['lead_id', 'provider', 'client_order_no', 'sequence', 'order_id', 'awb', 'courier', 'rate_code', 'state', 'status', 'raw_status', 'status_reason',
     'is_cod', 'cod_amount', 'price', 'charged', 'weight_grams', 'label_url', 'request', 'events', 'error', 'attempts', 'awb_notified_at', 'tracked_at', 'final_at', 'cancelled_at',
@@ -22,6 +25,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Shipment extends Model
 {
     use BelongsToTenant;
+    use SoftDeletes;
 
     /** Being booked (the order call is queued or running). */
     public const PENDING = 'pending';
@@ -110,6 +114,25 @@ class Shipment extends Model
             || ($this->state === self::PENDING && $this->waitingBalance()));
     }
 
+    /**
+     * "Hapus" (off the lists only, nothing is sent to the provider): allowed only when no order of this parcel is
+     * live at the provider. Cancelled; refused before the provider took it (no order, no tracking number); or a
+     * number linked from the provider's own app, which has no order here. A live order is cancelled first.
+     */
+    public function deletable(): bool
+    {
+        return $this->state === self::CANCELLED
+            || ($this->state === self::FAILED && blank($this->order_id) && blank($this->provider_order_no) && blank($this->awb))
+            || $this->manual();
+    }
+
+    /** Collected by the courier and still on its way: only the provider can stop it now. */
+    public function pickedUp(): bool
+    {
+        return ! $this->manual() && $this->state === self::SHIPPED && $this->final_at === null
+            && in_array($this->status, [ShipmentStatus::PICKED_UP, ShipmentStatus::IN_TRANSIT, ShipmentStatus::OUT_FOR_DELIVERY], true);
+    }
+
     public function manual(): bool
     {
         return $this->source === self::MANUAL;
@@ -130,7 +153,7 @@ class Shipment extends Model
     public const STALE_TRACKING_HOURS = 6;
 
     /** When the parcel's status was last read from the provider (tracking or callback), else when it got its number. */
-    public function lastUpdatedAt(): ?\Illuminate\Support\Carbon
+    public function lastUpdatedAt(): ?Carbon
     {
         return $this->tracked_at ?? $this->awb_notified_at ?? ($this->awb ? $this->updated_at : null);
     }

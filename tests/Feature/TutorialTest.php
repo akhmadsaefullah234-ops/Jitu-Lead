@@ -307,7 +307,7 @@ class TutorialTest extends TestCase
         app(CurrentTenant::class)->run($toko, function () {
             $this->assertSame(12, Lead::query()->count());
             $this->assertSame(3, Property::query()->count());
-            $this->assertSame(5, Shipment::query()->count());
+            $this->assertSame(6, Shipment::query()->count());
             $this->assertSame(['Foto produk', 'Price list', 'Testimoni', 'Lainnya'], MediaFolder::query()->orderBy('position')->pluck('name')->all());
             Lead::query()->pluck('phone')->each(fn ($p) => $this->assertMatchesRegularExpression('/^\+?(62|0)899000\d{4}$/', $p));
         });

@@ -634,24 +634,189 @@ class ShipmentActions
             });
     }
 
-    /** @param  Closure(): ?Lead  $lead */
+    /** "Batalkan kiriman" on the lead page and in the Inbox: the lead's newest active parcel. */
     public static function cancel(Closure $lead, string $name = 'cancelShipment'): Action
     {
+        return self::cancelShipment(fn () => ($l = $lead()) !== null ? Shipment::latestFor($l) : null, $name);
+    }
+
+    /** Most parcels one bulk "Batalkan" or "Hapus" handles; the rest are left for another run. */
+    public const BULK_LIMIT = 50;
+
+    /** Shown where a parcel can no longer be cancelled here. */
+    public const PICKED_UP_HINT = 'Sudah diambil kurir: hubungi penyedia';
+
+    /**
+     * "Batalkan kiriman" for one parcel: the row of the Pengiriman table, or the lead's newest one. The rules are
+     * Shipment::cancellable() and Shipments::cancel(), which also writes the lead's activity and the parcel's history.
+     *
+     * @param  Closure(Action): ?Shipment  $shipment
+     */
+    public static function cancelShipment(Closure $shipment, string $name = 'cancelShipment'): Action
+    {
         return Action::make($name)->label('Batalkan kiriman')->icon(Heroicon::OutlinedXCircle)->color('danger')
-            ->visible(fn () => self::available() && ($l = $lead()) !== null && (Shipment::latestFor($l)?->cancellable() ?? false))
+            ->visible(fn (Action $action) => self::available() && ($shipment($action)?->cancellable() ?? false))
             ->requiresConfirmation()->modalHeading('Batalkan kiriman?')
-            ->modalDescription('Hanya bisa sebelum paket diambil kurir. Resi lama tidak berlaku lagi; buat resi baru bila perlu.')
-            ->action(function () use ($lead) {
+            ->modalDescription(fn (Action $action) => ($s = $shipment($action)) ? self::cancelDescription($s) : null)
+            ->modalSubmitActionLabel('Batalkan kiriman')
+            ->schema([
+                TextInput::make('reason')->label('Alasan')->default('Dibatalkan toko')->maxLength(200)
+                    ->helperText('Opsional. Dikirim ke penyedia dan dicatat di aktivitas lead.'),
+            ])
+            ->action(function (Action $action, array $data) use ($shipment) {
+                $parcel = $shipment($action);
+
+                if ($parcel === null) {
+                    return;
+                }
+
                 try {
-                    app(Shipments::class)->cancel(Shipment::latestFor($lead()), auth()->user());
+                    app(Shipments::class)->cancel($parcel, auth()->user(), self::reason($data));
                 } catch (CarrierException $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
+                    Notification::make()->title('Kiriman belum dibatalkan')->body($e->getMessage())->danger()->send();
 
                     return;
                 }
 
                 Notification::make()->title('Kiriman dibatalkan')->success()->send();
             });
+    }
+
+    public static function cancelDescription(Shipment $shipment): string
+    {
+        return 'Kiriman '.self::parcelName($shipment).' untuk '.($shipment->lead?->name ?? 'pembeli').' dibatalkan di '
+            .config('carriers.labels.'.$shipment->provider, 'penyedia').'. Hanya bisa sebelum paket diambil kurir. Resi lama tidak berlaku lagi; buat resi baru bila perlu.';
+    }
+
+    /** "resi JNE0001234", or "pesanan TRD…" / "pesanan JL-…" before the tracking number. */
+    public static function parcelName(Shipment $shipment): string
+    {
+        return filled($shipment->awb) ? 'resi '.$shipment->awb : 'pesanan '.($shipment->provider_order_no ?: $shipment->client_order_no);
+    }
+
+    private static function reason(array $data): string
+    {
+        return trim((string) ($data['reason'] ?? '')) ?: 'Dibatalkan toko';
+    }
+
+    /** "Hapus" (off the lists only) is for admins and team leaders. */
+    public static function canDelete(): bool
+    {
+        return app(CurrentTenant::class)->roleOf(auth()->user())?->seesAllLeads() ?? false;
+    }
+
+    /** "Hapus" for one row of the Pengiriman table: Shipment::deletable() and Shipments::delete(). */
+    public static function deleteShipment(string $name = 'deleteShipment'): Action
+    {
+        return Action::make($name)->label('Hapus')->icon(Heroicon::OutlinedTrash)->color('danger')
+            ->visible(fn (Shipment $record) => self::available() && self::canDelete() && $record->deletable())
+            ->requiresConfirmation()->modalHeading('Hapus kiriman dari daftar?')
+            ->modalDescription(fn (Shipment $record) => 'Ini tidak membatalkan pesanan di penyedia. Kiriman '.self::parcelName($record).' untuk '
+                .($record->lead?->name ?? 'pembeli').' hilang dari semua tab Pengiriman; lead bisa dibuatkan resi baru.')
+            ->modalSubmitActionLabel('Hapus dari daftar')
+            ->action(function (Shipment $record) {
+                try {
+                    app(Shipments::class)->delete($record, auth()->user());
+                } catch (CarrierException $e) {
+                    Notification::make()->title('Kiriman belum dihapus')->body($e->getMessage())->danger()->send();
+
+                    return;
+                }
+
+                Notification::make()->title('Kiriman dihapus dari daftar')->success()->send();
+            });
+    }
+
+    /** Bulk "Batalkan terpilih": each parcel on its own; one that cannot be cancelled or fails does not stop the rest. */
+    public static function bulkCancel(): BulkAction
+    {
+        return BulkAction::make('cancelSelected')->label('Batalkan terpilih')->icon(Heroicon::OutlinedXCircle)->color('danger')
+            ->visible(fn () => self::available())
+            ->requiresConfirmation()->modalHeading('Batalkan kiriman terpilih?')
+            ->modalDescription('Tiap kiriman dibatalkan di penyedia, paling banyak '.self::BULK_LIMIT.' sekali jalan. Kiriman yang sudah diambil kurir atau sudah selesai dilewati.')
+            ->modalSubmitActionLabel('Batalkan')
+            ->schema([TextInput::make('reason')->label('Alasan')->default('Dibatalkan toko')->maxLength(200)])
+            ->action(function (Collection $records, array $data) {
+                $reason = self::reason($data);
+
+                self::bulk($records, 'dibatalkan', function (Shipment $s) use ($reason) {
+                    if (! $s->cancellable()) {
+                        return $s->pickedUp() ? 'sudah diambil kurir' : ($s->state === Shipment::CANCELLED ? 'sudah dibatalkan' : 'tidak bisa dibatalkan');
+                    }
+
+                    app(Shipments::class)->cancel($s, auth()->user(), $reason);
+
+                    return null;
+                });
+            })
+            ->deselectRecordsAfterCompletion();
+    }
+
+    /** Bulk "Hapus terpilih" (admins and team leaders): only parcels no longer live at the provider. */
+    public static function bulkDelete(): BulkAction
+    {
+        return BulkAction::make('deleteSelected')->label('Hapus terpilih')->icon(Heroicon::OutlinedTrash)->color('danger')
+            ->visible(fn () => self::available() && self::canDelete())
+            ->requiresConfirmation()->modalHeading('Hapus kiriman terpilih dari daftar?')
+            ->modalDescription('Ini tidak membatalkan pesanan di penyedia. Hanya kiriman yang dibatalkan, gagal sebelum diterima penyedia, atau resi yang ditautkan manual yang dihapus; paling banyak '.self::BULK_LIMIT.' sekali jalan. Kiriman yang masih aktif dilewati: batalkan dulu.')
+            ->modalSubmitActionLabel('Hapus dari daftar')
+            ->action(fn (Collection $records) => self::bulk($records, 'dihapus', function (Shipment $s) {
+                if (! $s->deletable()) {
+                    return 'masih aktif di penyedia, batalkan dulu';
+                }
+
+                app(Shipments::class)->delete($s, auth()->user());
+
+                return null;
+            }))
+            ->deselectRecordsAfterCompletion();
+    }
+
+    /**
+     * Runs $each on every parcel (at most BULK_LIMIT) and sends one summary: "3 dibatalkan, 2 dilewati (sudah diambil
+     * kurir)". $each returns why a parcel was skipped, or null when it was done; an error skips only that parcel.
+     *
+     * @param  Closure(Shipment): ?string  $each
+     */
+    private static function bulk(Collection $records, string $done, Closure $each): void
+    {
+        $count = 0;
+        $skipped = [];
+        $lines = [];
+
+        foreach ($records->values() as $i => $shipment) {
+            $name = ($shipment->lead?->name ?? 'Kiriman').' ('.($shipment->awb ?: $shipment->provider_order_no ?: $shipment->client_order_no).')';
+
+            if ($i >= self::BULK_LIMIT) {
+                $skipped[] = 'lebih dari '.self::BULK_LIMIT.', jalankan lagi';
+
+                continue;
+            }
+
+            try {
+                $why = $each($shipment);
+            } catch (CarrierException $e) {
+                $why = $e->getMessage();
+            } catch (\Throwable $e) {
+                report($e);
+                $why = 'gagal, coba lagi';
+            }
+
+            if ($why === null) {
+                $count++;
+            } else {
+                $skipped[] = $why;
+                $lines[] = '• '.e($name).': '.e($why);
+            }
+        }
+
+        $reasons = collect($skipped)->countBy()->map(fn ($n, $why) => count(array_unique($skipped)) > 1 ? $n.' '.$why : $why)->implode(', ');
+        $title = $count.' '.$done.($skipped !== [] ? ', '.count($skipped).' dilewati ('.$reasons.')' : '');
+
+        $notification = Notification::make()->title($title)->body($lines === [] ? null : new HtmlString(implode('<br>', array_slice($lines, 0, 20))))
+            ->{$count === 0 ? 'warning' : ($skipped === [] ? 'success' : 'warning')}();
+
+        ($skipped === [] ? $notification : $notification->persistent())->send();
     }
 
     /** @param  Closure(): ?Lead  $lead */

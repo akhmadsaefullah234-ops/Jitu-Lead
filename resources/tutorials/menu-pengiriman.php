@@ -24,8 +24,20 @@ return [
         ],
         [
             'text' => 'Untuk sebagian saja, centang barisnya lalu pilih <b>Tindakan > Cetak label terpilih</b>, atau klik <b>Cetak</b> di satu baris. <b>Tandai sudah dicetak</b> memindahkan baris tanpa mencetak.',
-            'alt' => 'Tombol Cetak dan Tandai sudah dicetak di baris kiriman',
+            'alt' => 'Tombol Cetak, Tandai sudah dicetak, dan Batalkan di baris kiriman',
             'shot' => ['page' => 'kiriman', 'highlight' => ['.fi-ta-row >> nth=0 >> .fi-ta-actions']],
+        ],
+        [
+            'text' => 'Klik <b>Batalkan</b> di baris kiriman untuk membatalkan pesanan itu di penyedia (hanya sebelum paket diambil kurir). Jendela konfirmasi menyebut resi atau nomor pesanan dan nama pembeli; isi <b>Alasan</b> bila perlu (bawaan: Dibatalkan toko). Kiriman langsung pindah ke tab Dibatalkan. Kiriman yang sudah diambil kurir tidak bisa dibatalkan dari sini: arahkan kursor ke statusnya, lalu hubungi penyedia.',
+            'alt' => 'Jendela Batalkan kiriman dengan nomor resi, nama pembeli, dan kolom Alasan',
+            'shot' => ['page' => 'kiriman', 'steps' => [['click' => '.fi-ta-row >> nth=0 >> button:has-text("Batalkan")'], ['waitFor' => '.fi-modal-window:visible']],
+                'highlight' => ['.fi-modal-window:visible .fi-modal-content']],
+        ],
+        [
+            'text' => 'Admin dan team leader bisa <b>Hapus</b> kiriman dari daftar bila kiriman itu tidak lagi aktif di penyedia: sudah dibatalkan, gagal sebelum diterima penyedia, atau resi yang ditautkan manual. Hapus tidak membatalkan apa pun di penyedia; kiriman yang masih aktif harus dibatalkan dulu. Setelah dihapus, lead bisa dibuatkan resi baru. Untuk banyak kiriman sekaligus, centang barisnya lalu pilih <b>Tindakan > Batalkan terpilih</b> atau <b>Hapus terpilih</b> (paling banyak 50 sekali jalan; yang tidak memenuhi syarat dilewati dan disebutkan).',
+            'alt' => 'Tab Dibatalkan dengan tombol Hapus di baris kiriman',
+            'shot' => ['page' => 'kiriman', 'steps' => [['click' => '.fi-tabs-item:has-text("Dibatalkan")'], ['wait' => 800], ['scroll' => '.fi-ta-row >> nth=0 >> button:has-text("Hapus")']],
+                'highlight' => ['.fi-ta-row >> nth=0 >> button:has-text("Hapus")', '.fi-tabs-item:has-text("Dibatalkan")']],
         ],
         [
             'text' => '<b>Riwayat cetak</b> menyimpan setiap cetakan beserta tautan unduhnya.',
