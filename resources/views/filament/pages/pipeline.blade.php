@@ -1,7 +1,7 @@
 <x-filament-panels::page>
     <style>
         .jl-bar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
-        .jl-chip { border: 1px solid var(--gray-300); background: white; border-radius: 9999px; padding: .3rem .8rem; font-size: .8125rem; font-weight: 500; }
+        .jl-chip { border: 1px solid var(--gray-300); background: white; border-radius: 9999px; padding: .3rem .8rem; font-size: .875rem; font-weight: 500; }
         .jl-chip[aria-pressed="true"] { background: var(--primary-600); border-color: var(--primary-600); color: white; }
         .jl-input { border: 1px solid var(--gray-300); background: white; border-radius: .5rem; padding: .4rem .7rem; font-size: .875rem; min-width: 0; }
         .jl-board { display: flex; gap: .75rem; overflow-x: auto; padding-bottom: .75rem; align-items: flex-start; }
@@ -25,7 +25,7 @@
         .jl-card .next .d { margin-left: auto; white-space: nowrap; color: var(--gray-500); font-variant-numeric: tabular-nums; }
         .jl-card .next .d.late { color: var(--danger-600); font-weight: 600; }
         .jl-card .acts { display: flex; justify-content: space-between; align-items: center; }
-        .jl-link { font-size: .75rem; font-weight: 600; color: var(--primary-600); }
+        .jl-link { font-size: .875rem; font-weight: 600; color: var(--primary-600); }
         .jl-board { scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
         .jl-col { scroll-snap-align: start; }
         @media (max-width: 640px) {
@@ -61,12 +61,11 @@
             .jl-filters .jl-period { margin: .75rem 0 0; }
             .jl-filters select.jl-input { width: 100%; min-height: 2.75rem; }
             .jl-bar .jl-chip { min-height: 2.75rem; }
-            .jl-card .acts .jl-link { display: inline-flex; align-items: center; min-height: 2.75rem; }
             .jl-card .acts > span { gap: 1.25rem !important; }
             .jl-period { margin: .75rem 0; }
         }
         .dark .jl-filters { background: var(--gray-900); border-color: var(--gray-700); }
-        .jl-tag { display: inline-block; border: 1px solid var(--gray-200); border-radius: .375rem; padding: 0 .35rem; font-size: .6875rem; color: var(--gray-700); font-variant-numeric: tabular-nums; }
+        .jl-tag { display: inline-block; border: 1px solid var(--gray-200); border-radius: .375rem; padding: 0 .35rem; font-size: .75rem; color: var(--gray-700); font-variant-numeric: tabular-nums; }
         .dark .jl-tag { border-color: var(--gray-700); color: var(--gray-300); }
         .jl-empty { font-size: .75rem; color: var(--gray-500); padding: .5rem .25rem; }
         .dark .jl-chip, .dark .jl-input { background: var(--gray-900); border-color: var(--gray-700); color: var(--gray-100); }
@@ -77,6 +76,8 @@
         .dark .jl-card .next { border-color: var(--gray-700); }
         .dark .jl-card .next .d.late { color: var(--danger-400); }
         .dark .jl-link { color: var(--primary-400); }
+        /* Phones and tablets: the card's Buka, Chat and Pindah tahap are 44px touch targets */
+        @media (max-width: 1023px) { .jl-card .acts .jl-link { display: inline-flex; align-items: center; justify-content: center; min-height: 2.75rem; min-width: 2.75rem; } }
     </style>
 
     @php($activeFilters = ($filter !== array_key_first($filters) ? 1 : 0) + ($agent ? 1 : 0) + ($this->period() ? 1 : 0) + (filled($this->produk) ? 1 : 0))

@@ -18,9 +18,9 @@
     .jl-funnel .bar span { display: block; height: 100%; background: var(--primary-500); border-radius: 9999px; }
     .jl-funnel .bar span.won { background: var(--success-500); }
     .jl-funnel .n { font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; min-width: 4.5rem; }
-    .jl-funnel .n small { color: var(--gray-500); font-weight: 500; }
+    .jl-funnel .n small { font-size: .75rem; color: var(--gray-500); font-weight: 500; }
     .jl-status { display: flex; flex-wrap: wrap; gap: .5rem; }
-    .jl-status .pill { display: inline-flex; align-items: center; gap: .4rem; border: 1px solid var(--gray-200); border-radius: .6rem; padding: .45rem .7rem; font-size: .8125rem; background: white; }
+    .jl-status .pill { display: inline-flex; align-items: center; min-height: 2.75rem; gap: .4rem; border: 1px solid var(--gray-200); border-radius: .6rem; padding: .45rem .7rem; font-size: .8125rem; background: white; }
     .jl-status .dot { width: .55rem; height: .55rem; border-radius: 9999px; background: var(--gray-400); }
     .jl-status .dot.ok { background: var(--success-500); }
     .jl-status .dot.bad { background: var(--danger-500); }
@@ -31,6 +31,7 @@
     .dark .jl-funnel .bar { background: var(--gray-800); }
     .dark .jl-status .pill { background: var(--gray-900); border-color: var(--gray-700); }
     .dark .jl-dash-link { color: var(--primary-400); }
+    @media (max-width: 1023px) { .jl-dash-link { display: inline-flex; align-items: center; min-height: 2.75rem; } }
     .dark .jl-dash-list dt { color: var(--gray-400); }
     @media (max-width: 640px) {
         .jl-funnel .row { grid-template-columns: 1fr auto; }
@@ -42,7 +43,7 @@
         .jl-dash-table td { padding: 0; border: 0; }
         .jl-dash-table td:first-child { grid-column: 1 / -1; font-weight: 600; }
         .jl-dash-table td.num { text-align: left; }
-        .jl-dash-table td.num::before { content: attr(data-label); display: block; font-size: .6875rem; color: var(--gray-500); font-weight: 400; }
+        .jl-dash-table td.num::before { content: attr(data-label); display: block; font-size: .75rem; color: var(--gray-500); font-weight: 400; }
         .dark .jl-dash-table tr { border-color: var(--gray-800); }
     }
 </style>

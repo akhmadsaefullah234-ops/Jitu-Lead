@@ -5,13 +5,13 @@
         @media (min-width: 1024px) { .tu { grid-template-columns: 16rem minmax(0, 1fr); } }
         .tu-toc { align-self: start; background: white; border: 1px solid var(--gray-200); border-radius: .75rem; padding: .75rem; font-size: .85rem; }
         @media (min-width: 1024px) { .tu-toc { position: sticky; top: 5rem; max-height: calc(100vh - 6rem); overflow-y: auto; } }
-        .tu-toc summary { font-weight: 600; cursor: pointer; list-style: none; }
+        .tu-toc summary { display: flex; align-items: center; min-height: 2.75rem; font-weight: 600; cursor: pointer; list-style: none; }
         .tu-toc summary::-webkit-details-marker { display: none; }
-        .tu-toc h4 { margin: .75rem 0 .25rem; font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: var(--gray-500); }
+        .tu-toc h4 { margin: .75rem 0 .25rem; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: var(--gray-500); }
         .tu-toc a { display: flex; gap: .35rem; align-items: center; padding: .2rem .4rem; border-radius: .4rem; color: var(--gray-700); }
         .tu-toc a[aria-current="page"] { background: var(--primary-50); color: var(--primary-700); font-weight: 600; }
-        .tu-search { width: 100%; box-sizing: border-box; border: 1px solid var(--gray-300); border-radius: .5rem; padding: .45rem .7rem; font-size: .875rem; background: white; }
-        .tu-admin { flex: none; margin-left: auto; font-size: .62rem; font-weight: 700; color: #92400e; background: #fef3c7; border-radius: 9999px; padding: 0 .4rem; }
+        .tu-search { width: 100%; box-sizing: border-box; border: 1px solid var(--gray-300); border-radius: .5rem; padding: .45rem .7rem; min-height: 2.75rem; font-size: 1rem; background: white; }
+        .tu-admin { flex: none; margin-left: auto; font-size: .75rem; font-weight: 700; color: #92400e; background: #fef3c7; border-radius: 9999px; padding: 0 .4rem; }
         .tu-main { min-width: 0; display: grid; gap: 1rem; }
         .tu-group h3 { font-weight: 700; margin: 0 0 .5rem; }
         .tu-cards { display: grid; gap: .6rem; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); }
@@ -40,7 +40,7 @@
         .tu-note.penting { background: #fef2f2; border-color: #fecaca; color: #7f1d1d; }
         .tu-nav { display: flex; justify-content: space-between; gap: .75rem; flex-wrap: wrap; border-top: 1px solid var(--gray-200); padding-top: .9rem; }
         .tu-nav a { display: block; max-width: 48%; font-size: .85rem; }
-        .tu-nav a small { display: block; color: var(--gray-500); }
+        .tu-nav a small { display: block; font-size: .75rem; color: var(--gray-500); }
         .tu-nav a b { color: var(--primary-700); }
         .tu-empty { color: var(--gray-600); }
         .dark .tu-toc, .dark .tu-card, .dark .tu-search { background: var(--gray-900); border-color: var(--gray-700); }

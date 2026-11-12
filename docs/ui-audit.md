@@ -48,8 +48,8 @@ Ukuran yang diukur di tiap layar:
 | Scroll horizontal | `scrollWidth > innerWidth`, diukur dengan `overflow-x: hidden` milik tema dimatikan sebentar, karena aturan itu menyembunyikan scroll tetapi memotong isi yang meluber |
 | Meluber | elemen yang keluar dari tepi layar dan tidak berada di dalam wadah yang memang bisa digeser |
 | Tertutup | titik tengah elemen (tombol, tautan, kolom, teks) ditimpa elemen lain menurut `elementFromPoint`; diperiksa di puncak halaman (header sticky) dan di akhir halaman (bar bawah, tombol melayang, gelembung Bantuan), setelah widget lazy selesai dimuat |
-| Area sentuh kecil | tombol, tautan, dan kolom di bawah 44 x 44 px, hanya di lebar HP dan tablet; tautan di tengah kalimat tidak dihitung |
-| Teks kecil | elemen yang memuat teks di bawah 14px |
+| Area sentuh kecil | tombol, tautan, dan kolom di bawah 44 x 44 px, hanya di lebar HP dan tablet; tautan di tengah kalimat tidak dihitung. Sejak PR 4 sel tabel yang membuka data barisnya (`.fi-ta-col`) diukur sebagai seluruh baris atau kartu: sel-sel itu bersambung dan semuanya membuka data yang sama |
+| Teks kecil | elemen yang memuat teks di bawah 14px; ringkasan juga menghitung teks di bawah 12px (batas untuk keterangan dan lencana). Label yang sengaja disembunyikan dengan `font-size: 0` (tetap terbaca pembaca layar) tidak dihitung |
 | Area kosong | panel (berlatar, bergaris, atau berbayang) setinggi minimal 250px yang kosong, atau yang isinya berakhir jauh di atas tepi bawahnya |
 
 Catatan: panel `/app` memakai `darkMode(false)`, jadi tangkapan layar mode gelap di panel sama dengan mode terang.
@@ -104,6 +104,26 @@ tertutup, dan area kosong tetap 0. Area sentuh kecil 13.808 menjadi 13.772: tomb
 dan di halaman buat/ubah tidak terukur oleh audit (audit tidak membuka modal panjang dan tidak menggulir formulir);
 hasilnya terlihat di tangkapan layar.
 
+### Putaran PR 4
+
+806 layar, 12 November 2026. "Sebelum" = `main` setelah PR 3 dan "sesudah" = setelah PR 4, keduanya diukur dengan
+skrip audit versi PR 4 (aturan sel tabel dan hitungan teks di bawah 12px, lihat "Yang diperiksa").
+
+| Ukuran | Sebelum PR 4 | Sesudah PR 4 | Target |
+| --- | --- | --- | --- |
+| Layar dengan scroll horizontal | 0 | **0** | 0 |
+| Elemen meluber dari layar | 0 | **0** | 0 |
+| Elemen tertutup | 0 | **0** | 0 |
+| Area kosong besar | 0 | **0** | 0 |
+| Area sentuh < 44px, HP dan tablet | 11.818 | **1.896** | mendekati 0 |
+| Teks < 12px | 5.938 | **1.508** | 0 di panel |
+| Teks < 14px | 15.252 | 14.398 | - |
+
+Sisa area sentuh kecil: kotak centang baris dan sakelar Filament, tombol hapus di kotak pilihan, tombol urut kolom dan
+breadcrumb di tablet, serta beberapa tautan di dalam teks (lihat "Sisa temuan"). Teks di bawah 12px yang tersisa
+seluruhnya ada di gambar contoh aplikasi pada beranda dan halaman harga publik (1.488) dan di navigasi bab Tutorial
+(20, sudah diperbaiki setelah putaran ini; diperiksa ulang: 0). Teks 12-13px yang tersisa adalah keterangan dan lencana.
+
 ## Temuan dan status
 
 Tingkat keparahan: **tinggi** = isi tidak bisa dilihat atau dipakai; **sedang** = bisa dipakai tetapi sulit atau
@@ -144,14 +164,28 @@ terlihat rusak; **rendah** = kerapian.
 | Modal panjang (mis. Buat resi di Inbox) | HP | Tombol Batal dan aksi utama ada di ujung formulir; formulir Buat resi setinggi 2.700px, tombol baru terlihat setelah digulir sampai habis. Tombol bertumpuk tiga baris | sedang | Baris tombol menempel di bawah jendela modal; tombol berdampingan (aksi utama di kanan) dan turun baris bila tidak muat | [sebelum](screenshots/ui-audit/pr3/modal-resi-hp-sebelum.png), [sesudah](screenshots/ui-audit/pr3/modal-resi-hp-sesudah.png) |
 | Halaman buat dan ubah (Lead, Properti/Produk, Formulir, pengaturan) | semua, utamanya HP | Tombol Simpan/Buat dan Batal hanya ada di bawah formulir panjang | sedang | `BasePage::stickyFormActions()`: selama tombol asli di luar layar, tombol yang sama melayang di bawah. Di bawah 1024px bar itu berada di atas tab bar dan tombol + disembunyikan | [sebelum](screenshots/ui-audit/pr3/lead-buat-hp-sebelum.png), [sesudah](screenshots/ui-audit/pr3/lead-buat-hp-sesudah.png) |
 
-### Belum dikerjakan (PR berikutnya)
+### Diperbaiki di PR 4
 
-| Halaman | Lebar | Masalah | Keparahan | PR |
+| Halaman | Lebar | Masalah | Keparahan | Perbaikan | Tangkapan layar |
+| --- | --- | --- | --- | --- | --- |
+| Dasbor | 320-414 | Angka besar pecah ke beberapa baris ("1.5 / menit", "Rp / 1.074.000", "16.7% → / 250%") | sedang | Angka satu baris dengan ukuran yang menyesuaikan lebar kartu; Nilai penjualan dan Konversi mengisi satu baris penuh (`.jl-stat-wide`) | [sebelum](screenshots/ui-audit/pr4/dasbor-hp-sebelum.png), [sesudah](screenshots/ui-audit/pr4/dasbor-hp-sesudah.png) |
+| Lead (dan halaman lain dengan tiga tombol header atau lebih) | 320-640 | Tombol header turun ke dua baris; tiga tombol abu-abu sejajar dengan "Buat lead" | sedang | Satu baris: tombol utama berlabel mengisi baris, tombol abu-abu hanya ikon (label tetap ada untuk pembaca layar). Dua tombol tetap berlabel | [sebelum](screenshots/ui-audit/pr4/lead-header-hp-sebelum.png), [sesudah](screenshots/ui-audit/pr4/lead-header-hp-sesudah.png) |
+| Semua tabel | semua | Lencana tombol Filter menampilkan "0" saat tidak ada saringan | rendah | Lencana disembunyikan saat 0 (`data-active-filters`) | sama dengan Lead |
+| Semua halaman panel | HP dan tablet | Area sentuh di bawah 44px: tombol ikon aksi baris, tautan aksi tabel ("Ubah", "Hapus"), tombol menu dan lonceng, kotak isian dan pilihan, tab, item dropdown dan sidebar, tautan kartu Pipeline, pil status Dasbor, kotak cari dan daftar isi Tutorial | tinggi | Minimal 44 x 44 px di bawah 1024px (`responsive.css` dan CSS halaman masing-masing); kotak centang baris 22px | [sebelum](screenshots/ui-audit/pr4/tim-hp-sebelum.png), [sesudah](screenshots/ui-audit/pr4/tim-hp-sesudah.png) |
+| Semua halaman panel | semua | Teks di bawah 12px: label tab bar (10.9px), lencana "Admin" Tutorial (9.9px), produk di daftar Inbox (10.9px), tag kurir Pipeline (11px), persen corong Dasbor (10.4px), label grup sidebar (11px) | sedang | Minimal 12px untuk keterangan dan lencana; tautan dan chip yang disentuh 14px | - |
+| Top bar dan menu agensi | semua | Avatar dari ui-avatars.com; tanpa jaringan ke layanan itu tampil gambar rusak "Ava" | rendah | Inisial digambar sendiri sebagai SVG dengan warna utama panel (`InitialsAvatarProvider`) | semua tangkapan layar sesudah |
+| Tutorial | semua | Gambar bab masih menampilkan tautan "Lihat tutorial" dan tata letak lama | sedang | 160 gambar diambil ulang (`php artisan tutorial:capture`) | [sebelum](screenshots/ui-audit/pr4/tutorial-bab-hp-sebelum.png), [sesudah](screenshots/ui-audit/pr4/tutorial-bab-hp-sesudah.png) |
+| Halaman publik (beranda, harga, daftar, masuk, formulir, landing) | 320-1280 | Diperiksa: tidak ada scroll samping, elemen tertutup, atau area kosong | - | Tidak diubah | - |
+
+Konsistensi: aturan baru memakai token Filament (`--gray-*`, `--primary-*`, `--color-white`) dan satuan rem. Tidak
+ada warna hex baru selain putih teks pada avatar SVG.
+
+### Sisa temuan setelah PR 4
+
+| Halaman | Lebar | Masalah | Keparahan | Catatan |
 | --- | --- | --- | --- | --- |
-| Lead, Kiriman, Tugas | 320-414 | Kotak Cari dan "Urutkan menurut" masih dua baris di atas kartu; lencana jumlah filter menampilkan "0" walau tidak ada saringan | rendah | 4 |
-| Lead | 320-414 | Empat tombol header (Impor resi, Ekspor CSV, Pengaturan agensi, Buat lead) turun ke dua baris; digarap bersama aturan "satu tombol utama per layar" | sedang | 4 |
-| Semua halaman panel | HP dan tablet | Area sentuh di bawah 44px: tombol ikon aksi baris (32 x 44), aksi tautan tabel (tinggi 20px), tombol menu dan lonceng di top bar (28-36px), kotak centang (16px), kotak Cari (tinggi 36px) | tinggi | 4 |
-| Semua halaman | semua | Teks di bawah 14px: lencana (12px), keterangan kartu angka Dasbor (10.9px), lencana "Admin" di Tutorial (9.9px), baris "Menu:" di Tutorial (12px) | sedang | 4 |
-| Dasbor | 320-414 | Angka besar ("Rp 1.074.000", "16.7% → 250%") pecah ke beberapa baris di kartu dua kolom | sedang | 4 |
-| Tutorial | semua | Gambar bab masih menampilkan tautan "Lihat tutorial" yang sudah dihapus; perlu `php artisan tutorial:capture` setelah perubahan tata letak PR 2-4 selesai | sedang | 4 |
-| Top bar | semua | Avatar memakai ui-avatars.com; bila layanan itu tidak bisa dijangkau tampil gambar rusak dengan teks "Ava" | rendah | 4 |
+| Tabel | HP dan tablet | Kotak centang baris 22px, tombol hapus pilihan di kotak pilihan (16px), sakelar (44 x 24) | rendah | Kontrol bawaan Filament; ukurannya bagian dari bentuknya. Untuk kotak centang, seluruh kartu tetap bisa disentuh untuk membuka data |
+| Tabel di tablet | 768 | Tombol urut di judul kolom dan breadcrumb di bawah 44px tingginya | rendah | Hanya di tablet, saat tabel tampil sebagai tabel (bukan kartu) |
+| Lead, Kiriman, Tugas | 320-414 | Kotak Cari dan "Urutkan menurut" tetap dua baris di atas kartu | rendah | Disengaja: tanpa judul kolom, "Urutkan menurut" satu-satunya cara mengurutkan di HP |
+| Halaman publik beranda dan harga | semua | Teks di bawah 12px di dalam gambar contoh aplikasi (tiruan layar Pipeline) | - | Ilustrasi, bukan teks untuk dibaca; dibiarkan |
+| Semua halaman | semua | Lencana dan keterangan 12px masih dihitung di "Teks < 14px" | - | 12px adalah ukuran keterangan Filament; teks isi dan semua yang disentuh 14px atau lebih |

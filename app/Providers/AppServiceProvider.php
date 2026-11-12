@@ -42,7 +42,9 @@ class AppServiceProvider extends ServiceProvider
         // On phones every table row becomes a card with its fields stacked, so no table needs sideways scrolling.
         // The filter button is labelled "Filter" (not a bare funnel), so search and filters read as one short row on phones.
         Table::configureUsing(fn (Table $table) => $table->stackedOnMobile()
-            ->filtersTriggerAction(fn (Action $action) => $action->button()->label('Filter')));
+            ->filtersTriggerAction(fn (Action $action, Table $table) => $action->button()->label('Filter')
+                // The button's count badge would read "0" with no filter on; responsive.css hides it then.
+                ->extraAttributes(['data-active-filters' => $table->getActiveFiltersCount()])));
 
         // Save and cancel stay in reach at the bottom of the screen while a long form is scrolled
         // (create and edit pages, settings pages); responsive.css lifts the bar above the phone tab bar.

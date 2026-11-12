@@ -8,7 +8,7 @@
         <div style="display:flex;flex-direction:column;gap:.6rem;margin-bottom:1rem">
             @foreach ($this->messages() as $m)
                 <div style="align-self:{{ $m->from_staff ? 'flex-end' : 'flex-start' }};max-width:80%;background:{{ $m->from_staff ? '#fee2e2' : '#f3f4f6' }};border-radius:.8rem;padding:.6rem .8rem">
-                    <div style="font-size:.72rem;color:#6b7280;margin-bottom:.15rem">{{ $m->from_staff ? 'Tim support' : ($m->author?->name ?? 'Pengguna') }} · {{ $m->created_at->timezone(config('app.timezone'))->format('d M H:i') }}</div>
+                    <div style="font-size:.75rem;color:#6b7280;margin-bottom:.15rem">{{ $m->from_staff ? 'Tim support' : ($m->author?->name ?? 'Pengguna') }} · {{ $m->created_at->timezone(config('app.timezone'))->format('d M H:i') }}</div>
                     <div style="white-space:pre-wrap;word-break:break-word">{{ $m->body }}</div>
                 </div>
             @endforeach

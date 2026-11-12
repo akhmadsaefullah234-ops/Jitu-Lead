@@ -7,7 +7,7 @@
 //   covered   an element whose middle is under another element (a sticky header, the tab bar, a floating button,
 //             a toast), checked with the page scrolled to the top and to the bottom (elementFromPoint)
 //   touch     a button, link or field under 44 x 44 px (phones and tablets only; links inside running text skipped)
-//   smalltext text under 14px
+//   smalltext text under 14px (the summary also counts text under 12px, the floor for captions and badges)
 //   blank     a panel at least 250px tall that is empty, or whose content ends far above its bottom edge
 //
 //   npm run ui:audit                       # every page, 320 375 414 768 1280, light and dark
@@ -219,6 +219,10 @@ async function measure({ touchCheck }) {
             // A checkbox or radio counts with the label wrapped around it
             const wrap = el.matches('input[type=checkbox], input[type=radio]') ? el.closest('label') : null;
             if (wrap) r = wrap.getBoundingClientRect();
+            // A table cell that opens the row's record (Filament's .fi-ta-col link or button) is one part of a
+            // target as big as the whole row or card: the cells of a row sit edge to edge and all open the same record
+            const row = el.matches('.fi-ta-col') ? el.closest('tr') : null;
+            if (row) r = row.getBoundingClientRect();
             if (r.width < 44 || r.height < 44) {
                 result.touch.push({ el: label(el), w: Math.round(r.width), h: Math.round(r.height) });
             }
@@ -231,7 +235,8 @@ async function measure({ touchCheck }) {
         const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim().length > 1);
         if (!own) continue;
         const fs = parseFloat(getComputedStyle(el).fontSize);
-        if (fs < 14) result.smalltext.push({ el: label(el), px: fs });
+        // font-size 0 hides a label on purpose (it stays readable for screen readers): not small text
+        if (fs > 0 && fs < 14) result.smalltext.push({ el: label(el), px: fs });
     }
 
     // blank: a visible panel (background, border or shadow) at least 250px tall with nothing in it, or whose content
@@ -395,6 +400,7 @@ const totals = {
     covered: ok.reduce((s, r) => s + r.covered.length, 0),
     touch: ok.reduce((s, r) => s + r.touch.length, 0),
     smalltext: ok.reduce((s, r) => s + r.smalltext.length, 0),
+    tinytext: ok.reduce((s, r) => s + r.smalltext.filter((t) => t.px < 12).length, 0),
     blank: ok.reduce((s, r) => s + r.blank.length, 0),
 };
 writeFileSync(join(OUT, 'report.json'), JSON.stringify({ base: BASE, widths: WIDTHS, schemes: SCHEMES, totals, rows }, null, 2));
@@ -411,6 +417,7 @@ const lines = [
     `| Elemen tertutup | ${totals.covered} |`,
     `| Area sentuh < 44px (HP dan tablet) | ${totals.touch} |`,
     `| Teks < 14px | ${totals.smalltext} |`,
+    `| Teks < 12px | ${totals.tinytext} |`,
     `| Area kosong besar | ${totals.blank} |`,
     '',
     '| Halaman | Akun | Lebar | Mode | Scroll samping | Meluber | Tertutup | Sentuh kecil | Teks kecil | Kosong |',
