@@ -49,6 +49,12 @@ sudo -u www-data php artisan up
 
 Opsi: `-y` melewati pertanyaan konfirmasi.
 
+## Pemantauan kesehatan untuk operator (heartbeat)
+
+Isi `OPS_HEARTBEAT_URL` dengan URL heartbeat Better Stack (periode 3 menit, grace 5 menit). Tiap menit server mengirim
+ping hanya bila database, antrean, gateway WhatsApp, job gagal, dan ruang disk sehat. Bila ping berhenti, operator
+mendapat email. Setelah deploy, jalankan `php artisan ops:check`. Rinciannya ada di [ops-monitoring.md](ops-monitoring.md).
+
 ## Kebijakan privasi dan syarat layanan
 
 Halaman publik `/kebijakan-privasi` dan `/syarat-layanan` sudah ada dan ditautkan di footer halaman depan, halaman daftar dan masuk, serta landing page agensi. Isinya disusun dari cara kerja aplikasi menurut UU No. 27 Tahun 2022 (data yang disimpan, tujuan, pihak penerima termasuk penyedia AI di luar negeri, lama simpan, hak subjek data, peran pengendali dan prosesor).
