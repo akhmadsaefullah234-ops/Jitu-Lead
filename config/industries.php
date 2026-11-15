@@ -52,6 +52,8 @@ return [
             // Lead fields this business uses, in form order, with their labels
             'lead_fields' => [
                 'need' => 'Kebutuhan',
+                'purpose' => 'Tujuan',
+                'domicile' => 'Domisili',
                 'property_type' => 'Tipe properti',
                 'location' => 'Lokasi incaran',
                 'payment_method' => 'Cara bayar',

@@ -7,6 +7,7 @@ use App\Enums\MessageStatus;
 use App\Enums\Role;
 use App\FollowUps\AskProduct;
 use App\FollowUps\GeneralFollowUps;
+use App\FollowUps\SurveyReminder;
 use App\Models\FollowUpLog;
 use App\Models\FollowUpRule;
 use App\Models\Lead;
@@ -81,13 +82,20 @@ class RunFollowUps
             $rules = FollowUpRule::query()->where('active', true)
                 ->when(
                     $general,
-                    fn (Builder $q) => $q->where(fn ($q) => $q->whereNull('kind')->orWhere('kind', '!=', AskProduct::KIND)),
+                    fn (Builder $q) => $q->where(fn ($q) => $q->whereNull('kind')->orWhereNotIn('kind', [AskProduct::KIND, SurveyReminder::KIND])),
                     fn (Builder $q) => $q->where(fn ($q) => $q->whereNotNull('property_id')->orWhere('kind', AskProduct::KIND)),
                 )
                 ->orderBy('delay_days')->orderBy('send_time')->get();
 
+            // The survey reminder (H-1) goes first: on the day before a visit it matters more than a sequence step.
+            if ($tenant->industry()->key === 'properti' && ($reminder = FollowUpRule::query()->where('kind', SurveyReminder::KIND)->where('active', true)->first())) {
+                $rules->prepend($reminder);
+            }
+
             foreach ($rules as $rule) {
-                foreach ($this->due($rule, $timezone) as $lead) {
+                $reminds = $rule->kind === SurveyReminder::KIND;
+
+                foreach ($reminds ? SurveyReminder::due($rule, $timezone, self::CATCH_UP_HOURS) : $this->due($rule, $timezone) as $lead) {
                     if ($limit <= $result['sent'] + $result['failed']) {
                         return $result;
                     }
@@ -166,7 +174,10 @@ class RunFollowUps
     {
         $conversation = WaConversation::query()->firstOrCreate(['lead_id' => $lead->getKey()], ['phone' => $lead->phone]);
 
-        if ($conversation->last_inbound_at !== null && $conversation->last_inbound_at->greaterThan($this->quietSince($lead))) {
+        $reminds = $rule->kind === SurveyReminder::KIND;
+
+        // A client who wrote back still gets the reminder of their survey; a sequence step stops.
+        if (! $reminds && $conversation->last_inbound_at !== null && $conversation->last_inbound_at->greaterThan($this->quietSince($lead))) {
             return $this->log($rule, $lead, 'skipped', 'Lead sudah membalas');
         }
 
@@ -249,6 +260,7 @@ class RunFollowUps
     private function log(FollowUpRule $rule, Lead $lead, string $status, ?string $note, ?array $productIds = null): string
     {
         FollowUpLog::query()->create([
+            'survey_at' => $rule->kind === SurveyReminder::KIND ? $lead->survey_at : null,
             'product_ids' => $productIds,
             'follow_up_rule_id' => $rule->getKey(),
             'lead_id' => $lead->getKey(),

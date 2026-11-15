@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\Filament\Resources\Leads\Schemas\LeadForm;
 use App\Models\Lead;
 use App\Support\Industry;
 use Illuminate\Database\Eloquent\Builder;
@@ -64,6 +65,7 @@ class ExportLeadsCsv
             'property_id' => $lead->property?->name,
             'need' => $lead->need?->getLabel(),
             'payment_method' => $lead->payment_method?->getLabel(),
+            'purpose' => LeadForm::PURPOSES[$lead->purpose] ?? $lead->purpose,
             default => $lead->{$field},
         };
     }

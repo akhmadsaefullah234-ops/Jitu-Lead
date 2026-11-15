@@ -25,6 +25,9 @@ return [
             'alt' => 'Sakelar Aktif di daftar follow-up',
             'shot' => ['page' => 'follow-up-rules', 'highlight' => ['.fi-ta-row:has-text("Sapaan H+1") .fi-ta-toggle, .fi-ta-row:has-text("Sapaan H+1") button[role=switch]']],
         ],
+        [
+            'text' => 'Kotak <b>Pengingat survei H-1</b> mengirim WhatsApp ke klien sehari sebelum jadwal surveinya, sekali per jadwal. Klik <b>Atur pengingat</b>, periksa kalimatnya (variabel <b>{tanggal_survei}</b>, <b>{jam_survei}</b>, <b>{lokasi_survei}</b> diisi dari jadwal survei lead dalam zona waktu agensi), atur jam kirim, nyalakan <b>Aktif</b>, lalu simpan. Pengingat ini juga dibuat nonaktif sampai Anda menyalakannya.',
+        ],
     ],
-    'tips' => ['Bila lead belum punya properti diminati, {properti} diisi Lokasi incaran lead; bila itu juga kosong, diisi "properti yang Anda tanyakan".'],
+    'tips' => ['Pengingat survei tidak terkirim bila survei dibatalkan, lead pindah tahap, atau jadwalnya baru dibuat setelah jam pengingat hari itu lewat. Jadwal yang diubah mendapat pengingat baru.', 'Bila lead belum punya properti diminati, {properti} diisi Lokasi incaran lead; bila itu juga kosong, diisi "properti yang Anda tanyakan".'],
 ];

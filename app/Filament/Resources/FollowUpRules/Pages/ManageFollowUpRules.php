@@ -9,6 +9,7 @@ use App\Filament\Resources\Properties\Pages\EditProperty;
 use App\Filament\Resources\Properties\PropertyResource;
 use App\FollowUps\AskProduct;
 use App\FollowUps\GeneralFollowUps;
+use App\FollowUps\SurveyReminder;
 use App\Models\Property;
 use App\Support\CurrentTenant;
 use App\Support\Industry;
@@ -63,6 +64,11 @@ class ManageFollowUpRules extends ManageRecords
                 ->description(fn () => $this->askSummary())
                 ->icon(Heroicon::OutlinedChatBubbleLeftEllipsis)->color('info')
                 ->actions([$this->askProductAction()]),
+            Callout::make('Pengingat survei H-1')
+                ->visible($tenant?->industry()->key === 'properti')
+                ->description(fn () => $this->surveySummary())
+                ->icon(Heroicon::OutlinedCalendarDays)->color(fn () => SurveyReminder::orDefaults()->active ? 'success' : 'gray')
+                ->actions([$this->surveyReminderAction()]),
             Callout::make('Aturan di bawah sedang tidak dikirim')
                 ->visible(! $applies)
                 ->description('Aturan follow-up umum tidak dihapus dan tetap bisa diubah, tetapi dilewati selama follow-up umum tidak dipakai.')
@@ -87,6 +93,34 @@ class ManageFollowUpRules extends ManageRecords
             ->action(function (array $data) {
                 app(CurrentTenant::class)->get()->update(['general_follow_ups' => $data['general_follow_ups']]);
                 Notification::make()->title('Pengaturan follow-up umum disimpan')->success()->send();
+            });
+    }
+
+    private function surveySummary(): string
+    {
+        $rule = SurveyReminder::orDefaults();
+
+        return ($rule->active ? 'Aktif' : 'Nonaktif').": dikirim ke klien sehari sebelum jadwal survei, jam {$rule->send_time}, sekali per jadwal. "
+            .'Tidak dikirim bila survei dibatalkan, lead pindah tahap, atau jadwalnya baru dibuat setelah jam pengingat lewat.';
+    }
+
+    public function surveyReminderAction(): Action
+    {
+        return Action::make('surveyReminder')->label('Atur pengingat')->color('gray')->size('sm')->button()
+            ->modalHeading('Pengingat survei H-1')
+            ->modalDescription('{tanggal_survei}, {jam_survei}, dan {lokasi_survei} diisi dari jadwal survei lead, dalam zona waktu agensi.')
+            ->fillForm(fn () => SurveyReminder::orDefaults()->only(['send_time', 'body', 'media_asset_id', 'active']))
+            ->schema(collect(FollowUpRuleResource::fields())->filter(fn ($f) => ! method_exists($f, 'getName') || in_array($f->getName(), ['send_time', 'body', 'media_asset_id', 'active'], true))->values()->all())
+            ->extraModalFooterActions([
+                Action::make('surveyDefault')->label('Pakai teks bawaan')->color('gray')->cancelParentActions()->requiresConfirmation()
+                    ->action(function () {
+                        SurveyReminder::rule()->update(['body' => SurveyReminder::DEFAULT_BODY]);
+                        Notification::make()->title('Teks bawaan dipakai lagi')->success()->send();
+                    }),
+            ])
+            ->action(function (array $data) {
+                SurveyReminder::rule()->update(array_intersect_key($data, array_flip(['send_time', 'body', 'media_asset_id', 'active'])));
+                Notification::make()->title('Pengingat survei disimpan')->success()->send();
             });
     }
 

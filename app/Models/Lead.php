@@ -28,7 +28,7 @@ use LogicException;
 #[Fillable([
     'name', 'phone', 'email', 'lead_source_id', 'stage_id', 'owner_id', 'interest',
     'next_action', 'next_action_due_at', 'need', 'property_type', 'location',
-    'budget_min', 'budget_max', 'payment_method', 'property_id', 'survey_at',
+    'budget_min', 'budget_max', 'payment_method', 'property_id', 'survey_at', 'purpose', 'domicile', 'survey_scheduled_at',
     'survey_location', 'unit', 'deal_value', 'lost_reason_id', 'custom_fields', 'stage_entered_at',
     'variant', 'quantity', 'shipping_address', 'courier', 'shipping_cost', 'shipping_cost_source', 'order_items',
     'payment_type', 'payment_type_source', 'payment_proof_at', 'paid_at', 'shipping_province', 'tracking_number', 'shipped_at', 'shipping_address_parts',
@@ -61,6 +61,11 @@ class Lead extends Model
             // A shipping cost typed by hand (lead form, "Buat resi") no longer comes from the zone table or Everpro.
             if ($lead->isDirty('shipping_cost') && ! $lead->isDirty('shipping_cost_source')) {
                 $lead->shipping_cost_source = null;
+            }
+
+            // A survey reminder is only sent for a date set before it was due (App\FollowUps\SurveyReminder).
+            if ($lead->isDirty('survey_at') && ! $lead->isDirty('survey_scheduled_at')) {
+                $lead->survey_scheduled_at = $lead->survey_at === null ? null : now();
             }
 
             // Saving runs before the tenant is stamped on create, so fall back to the current tenant.
@@ -120,6 +125,7 @@ class Lead extends Model
             'payment_method' => PaymentMethod::class,
             'next_action_due_at' => 'datetime',
             'survey_at' => 'datetime',
+            'survey_scheduled_at' => 'datetime',
             'stage_entered_at' => 'datetime',
             'assigned_at' => 'datetime',
             'custom_fields' => 'array',
