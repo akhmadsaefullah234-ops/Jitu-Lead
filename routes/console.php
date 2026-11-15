@@ -1,5 +1,6 @@
 <?php
 
+use App\Jobs\QueueCanary;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -36,3 +37,7 @@ Schedule::command('backup:run')->dailyAt('02:00')->timezone('Asia/Jakarta')->wit
 Schedule::command('whatsapp:watch')->everyFiveMinutes()->withoutOverlapping();
 // WhatsApp Business labels waiting for the label to exist on the account (tried for 7 days).
 Schedule::command('whatsapp:labels-retry')->everyTenMinutes()->withoutOverlapping();
+// Operator heartbeat (docs/ops-monitoring.md): the canary proves the queue worker runs; ops:heartbeat pings the outside
+// monitor only while every check passes. In the background, so a slow monitor never holds up the other commands.
+Schedule::job(new QueueCanary)->everyMinute()->name('ops-queue-canary')->skip(fn () => app()->environment('local', 'testing'));
+Schedule::command('ops:heartbeat')->everyMinute()->withoutOverlapping()->runInBackground();

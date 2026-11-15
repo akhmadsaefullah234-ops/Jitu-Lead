@@ -60,4 +60,17 @@ return [
             ->filter(fn ($v, $k) => is_string($k) && str_starts_with($k, 'RCLONE_CONFIG_') && is_string($v))->all(),
     ],
 
+    // Operator health heartbeat (php artisan ops:heartbeat, every minute; docs/ops-monitoring.md). When every check passes the
+    // server pings this URL; an outside monitor (Better Stack heartbeat) emails the operator once the pings stop.
+    // Empty = off. The URL is a secret: it is never logged.
+    'ops' => [
+        'heartbeat_url' => env('OPS_HEARTBEAT_URL'),
+        // More failed jobs than this in the last 15 minutes counts as unhealthy.
+        'failed_jobs_max' => 20,
+        // Free space on the app's disk below this percentage counts as unhealthy.
+        'disk_min_percent' => 10,
+        // The queue canary (App\Jobs\QueueCanary, every minute) must have run within this many minutes.
+        'queue_max_age_minutes' => 5,
+    ],
+
 ];
