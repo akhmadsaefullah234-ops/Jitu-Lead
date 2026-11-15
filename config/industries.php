@@ -1,5 +1,6 @@
 <?php
 
+use App\Ai\AiSettings;
 use App\Ai\Defaults;
 use App\Ai\HandoffRules;
 use App\Enums\StageRequirement;
@@ -47,7 +48,8 @@ return [
             ],
             // The property texts live in code too: an early migration backfills them.
             'ai_instructions' => Defaults::INSTRUCTIONS,
-            'handoff_keywords' => HandoffRules::DEFAULTS,
+            // New agencies (and "Kembalikan ke bawaan"); an agency's own list is never changed by this.
+            'handoff_keywords' => [...HandoffRules::DEFAULTS, ...AiSettings::PROPERTY_HANDOFF],
 
             // Lead fields this business uses, in form order, with their labels
             'lead_fields' => [

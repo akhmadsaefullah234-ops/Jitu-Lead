@@ -276,6 +276,20 @@ class SessionManager {
     return s.conn.send(to.replace(/^\+/, '') + '@s.whatsapp.net', text);
   }
 
+  /** Typing indicator in a chat: 'composing' ("mengetik...") or 'paused'. Nothing is sent to the client but the indicator. */
+  async presence(id, to, state) {
+    const s = this.get(id);
+
+    if (!s || s.status !== 'connected' || !s.conn) throw new SessionError('Sesi WhatsApp belum terhubung.', 503);
+    if (typeof to !== 'string' || !E164.test(to)) throw new SessionError('Nomor tujuan tidak valid.');
+    if (state !== 'composing' && state !== 'paused') throw new SessionError('Status mengetik tidak valid.');
+    if (typeof s.conn.presence !== 'function') throw new SessionError('Tidak didukung.', 501);
+
+    await s.conn.presence(to.replace(/^\+/, '') + '@s.whatsapp.net', state);
+
+    return true;
+  }
+
   /** Sends a picture or a file. `media`: { type: 'image'|'document', caption?, mime_type, filename?, data (base64) }. */
   async sendMedia(id, to, media) {
     const s = this.get(id);

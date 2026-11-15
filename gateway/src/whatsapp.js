@@ -469,6 +469,11 @@ function connector({ log, decryptWaitMs = 45000, lookupRetryMs = 3000, loadLib =
 
         return sent.key.id;
       },
+      /** Shows "mengetik..." in the client's chat ('composing'), or stops it ('paused'). */
+      async presence(jid, state) {
+        if (!sock) throw new Error('belum terhubung');
+        await sock.sendPresenceUpdate(state, jid);
+      },
       /** Puts a WhatsApp Business label on a chat (never takes one off). */
       async addChatLabel(jid, labelId) {
         if (!sock) throw new Error('belum terhubung');

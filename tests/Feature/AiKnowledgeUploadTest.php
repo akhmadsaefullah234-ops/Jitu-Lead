@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Actions\ImportKnowledgeDocument;
+use App\Ai\AiSettings;
 use App\Ai\Defaults;
 use App\Ai\DocumentException;
 use App\Ai\DocumentReader;
@@ -202,7 +203,8 @@ class AiKnowledgeUploadTest extends TestCase
     public function test_new_agencies_start_with_ready_to_use_instructions_and_handoff_words(): void
     {
         $this->assertSame(Defaults::INSTRUCTIONS, $this->tenant->fresh()->ai_instructions);
-        $this->assertSame(Defaults::keywordText(), $this->tenant->fresh()->ai_handoff_keywords);
+        // A property agency also starts with the property words (foreigners, notary, disputes, a refused mortgage).
+        $this->assertSame(Defaults::keywordText().', '.implode(', ', AiSettings::PROPERTY_HANDOFF), $this->tenant->fresh()->ai_handoff_keywords);
     }
 
     public function test_the_agencys_handoff_list_replaces_the_defaults_and_blank_restores_them(): void

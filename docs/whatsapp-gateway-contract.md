@@ -32,6 +32,17 @@ CRM memanggil endpoint ini tiap beberapa detik selama dialog terbuka, dan mengam
 
 `POST /session/logout` memutus sesi dan mengosongkan kredensial perangkat di gateway.
 
+### `POST /presence`
+
+```json
+{ "to": "+6281234567890", "state": "composing" }
+```
+
+Menampilkan "mengetik..." di chat pelanggan (`composing`) atau menghentikannya (`paused`). Tidak ada pesan yang
+terkirim. Balasan `{"ok": true}`, atau 503 bila sesi belum terhubung dan 400 untuk nomor atau status yang salah. CRM
+memakainya sebelum balasan AI otomatis yang diberi jeda (Arahan AI > Jeda balasan). Gateway lama yang belum punya
+endpoint ini menjawab 404, dan CRM tetap mengirim balasannya tanpa indikator.
+
 ### `POST /messages`
 
 ```json

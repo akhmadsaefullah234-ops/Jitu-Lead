@@ -28,7 +28,7 @@ return [
             'text' => 'Catatan khusus satu {item} ditulis di halaman {item} itu, tab <b>Pengetahuan AI</b>. Nyalakan filter <b>Tampilkan juga pengetahuan {item}</b> untuk melihatnya di daftar ini.',
         ],
         [
-            'text' => '<b>Arahan AI (lanjutan)</b> berisi gaya dan aturan khusus AI, serta daftar kata yang membuat AI menyerahkan chat ke agen.',
+            'text' => '<b>Arahan AI (lanjutan)</b> berisi gaya dan aturan khusus AI, serta daftar kata yang membuat AI menyerahkan chat ke agen. Di sini juga dipilih <b>Bentuk balasan</b>: singkat tanpa format (bawaan), atau format WhatsApp dengan *tebal*, _miring_, daftar bernomor, dan emoji, dengan batas jumlah baris. Agensi properti bisa menyalakan pemeriksa angka dan frasa terlarang, dan menambah kata khusus properti (WNA, orang asing, notaris, sengketa, KPR ditolak) lewat tombol <b>Tambah kata khusus properti</b>. Jeda balasan dan jam malam diatur di bagian bawah.',
             'alt' => 'Jendela Arahan AI lanjutan dengan gaya dan aturan khusus serta kata penyerahan ke agen',
             'shot' => ['page' => 'ai-knowledge', 'steps' => [['click' => 'button:has-text("Arahan AI")'], ['waitFor' => '.fi-modal-window:visible']],
                 'highlight' => ['.fi-modal-window:visible .fi-modal-content']],

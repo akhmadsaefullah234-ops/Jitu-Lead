@@ -332,6 +332,23 @@ class GatewayProvider implements WhatsAppProvider
             : ['ok' => false, 'code' => 'error', 'already' => false, 'retry' => $response->status() >= 500 || $response->status() === 429];
     }
 
+    /**
+     * Shows "mengetik..." in the chat with $to (or stops it). True when the gateway did it; an older gateway without
+     * POST /presence, or any problem, is false and never an error: the indicator is only a nicety.
+     */
+    public function typing(string $to, bool $on = true): bool
+    {
+        if ($this->configurationProblem()) {
+            return false;
+        }
+
+        try {
+            return $this->http()->timeout(5)->post($this->url('/presence'), ['to' => $to, 'state' => $on ? 'composing' : 'paused'])->successful();
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
     private function post(string $path, array $payload, ?int $timeout = null): SendResult
     {
         if ($problem = $this->configurationProblem()) {
