@@ -18,7 +18,7 @@ class GenerateAiReplyJob implements ShouldQueue
 
     public int $timeout = 60;
 
-    public function __construct(public int $tenantId, public int $messageId)
+    public function __construct(public int $tenantId, public int $messageId, public bool $afterHours = false)
     {
         $this->afterCommit();
     }
@@ -34,7 +34,7 @@ class GenerateAiReplyJob implements ShouldQueue
         $current->run($tenant, function () use ($generate) {
             $message = WaMessage::query()->with('channel')->find($this->messageId);
 
-            if ($message !== null && $generate($message) !== null && $message->conversation !== null && ConversationMemory::due($message->conversation)) {
+            if ($message !== null && $generate($message, $this->afterHours) !== null && $message->conversation !== null && ConversationMemory::due($message->conversation)) {
                 // The summary of a long chat is kept up to date after the reply, so the next answer remembers it.
                 UpdateConversationMemory::dispatch($this->tenantId, $message->conversation_id);
             }

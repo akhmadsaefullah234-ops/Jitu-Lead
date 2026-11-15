@@ -22,7 +22,7 @@ async function boot(extra = {}) {
   const connector = ({ authDir, handlers }) => {
     fs.mkdirSync(authDir, { recursive: true });
     const sent = [];
-    const conn = { handlers, sent, loggedOut: false, sendMedia: async (jid, m) => (sent.push({ jid, media: m }), 'wamid.m' + sent.length), send: async (jid, text) => (sent.push({ jid, text }), 'wamid.' + sent.length), logout: async () => { conn.loggedOut = true; }, end() {} };
+    const conn = { handlers, sent, presences: [], loggedOut: false, presence: async (jid, state) => conn.presences.push([jid, state]), sendMedia: async (jid, m) => (sent.push({ jid, media: m }), 'wamid.m' + sent.length), send: async (jid, text) => (sent.push({ jid, text }), 'wamid.' + sent.length), logout: async () => { conn.loggedOut = true; }, end() {} };
     sockets.push(conn);
     return conn;
   };
@@ -89,6 +89,28 @@ test('validasi: start butuh webhook, nomor dan pesan dicek, kapasitas dibatasi',
   await g.call('POST', '/session/start', HOOK, { 'X-Session-Id': 'sesi-dua-12345' });
   assert.equal((await g.call('POST', '/session/start', HOOK, { 'X-Session-Id': 'sesi-tiga-12345' })).status, 503);
   g.close();
+});
+
+test('POST /presence menampilkan "mengetik" di chat; status dan nomor dicek', async () => {
+  const g = await boot();
+  await g.call('POST', '/session/start', HOOK);
+  assert.equal((await g.call('POST', '/presence', { to: '+6281234567890', state: 'composing' })).status, 503);
+
+  g.sockets[0].handlers.onOpen();
+  assert.deepEqual((await g.call('POST', '/presence', { to: '+6281234567890', state: 'composing' })).body, { ok: true });
+  assert.deepEqual(g.sockets[0].presences, [['6281234567890@s.whatsapp.net', 'composing']]);
+  assert.equal((await g.call('POST', '/presence', { to: '+6281234567890', state: 'online' })).status, 400);
+  assert.equal((await g.call('POST', '/presence', { to: '08xx', state: 'paused' })).status, 400);
+  assert.equal(g.sockets[0].sent.length, 0, 'tidak ada pesan yang terkirim');
+  g.close();
+});
+
+test('connector: presence memanggil sendPresenceUpdate Baileys', async () => {
+  const f = await fakeConnector();
+  const calls = [];
+  f.sock.sendPresenceUpdate = async (state, jid) => calls.push([state, jid]);
+  await f.conn.presence('6281@s.whatsapp.net', 'composing');
+  assert.deepEqual(calls, [['composing', '6281@s.whatsapp.net']]);
 });
 
 test('logout menghapus sesi dan datanya', async () => {

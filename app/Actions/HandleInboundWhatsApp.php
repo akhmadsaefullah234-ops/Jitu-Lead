@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\Ai\ReplyTiming;
 use App\Automation\StageAutomation;
 use App\Catalog\ProductMatcher;
 use App\Enums\AiMode;
@@ -9,7 +10,6 @@ use App\Enums\MessageStatus;
 use App\Enums\WaChannelStatus;
 use App\FollowUps\AskProduct;
 use App\Jobs\FetchWhatsAppMedia;
-use App\Jobs\GenerateAiReplyJob;
 use App\Leads\ChatShippingDetails;
 use App\Models\Lead;
 use App\Models\LeadSource;
@@ -282,7 +282,7 @@ class HandleInboundWhatsApp
     {
         if (self::aiAnswers($channel, $message) && ! self::awaitsFile($message)) {
             // A voice note still being downloaded is answered once its file is in (FetchWhatsAppMedia).
-            GenerateAiReplyJob::dispatch($this->current->id(), $message->getKey());
+            ReplyTiming::queue($this->current->get(), $channel, $message);
         }
     }
 

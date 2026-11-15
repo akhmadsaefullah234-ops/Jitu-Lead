@@ -142,9 +142,10 @@ class SendWhatsAppMessage
         $what = match ($this->origin) {
             'welcome' => 'Pesan sambutan WhatsApp',
             'shipping' => 'Pesan status kiriman',
+            'ai_quiet' => 'Sambutan jam malam AI',
             default => 'Chat WhatsApp',
         };
-        $automatic = in_array($this->origin, ['welcome', 'shipping'], true);
+        $automatic = in_array($this->origin, ['welcome', 'shipping', 'ai_quiet'], true);
 
         $conversation->lead->activities()->create([
             // An automatic welcome is not the owner answering, so it never counts as the lead being attended to.

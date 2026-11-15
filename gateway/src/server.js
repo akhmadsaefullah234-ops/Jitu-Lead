@@ -94,6 +94,11 @@ function createServer({ config, sessions }) {
           await sessions.logout(id);
           return reply(200, { status: 'disconnected' });
 
+        case 'POST /presence': {
+          const body = await readJson(req);
+          return reply(200, { ok: await sessions.presence(id, body.to, body.state) });
+        }
+
         case 'POST /messages': {
           const body = await readJson(req, 24 * 1024 * 1024);
           const type = body.type ?? 'text';

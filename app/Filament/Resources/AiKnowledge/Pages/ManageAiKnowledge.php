@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\AiKnowledge\Pages;
 
 use App\Actions\ImportKnowledgeDocument;
+use App\Ai\AiSettings;
 use App\Ai\AnthropicClient;
 use App\Ai\DocumentException;
 use App\Ai\DocumentReader;
@@ -15,10 +16,15 @@ use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\TimePicker;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ManageRecords;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\HtmlString;
@@ -153,13 +159,49 @@ class ManageAiKnowledge extends ManageRecords
         return Action::make('settings')->label('Arahan AI (lanjutan)')->icon(Heroicon::OutlinedCog6Tooth)->color('gray')
             ->modalHeading('Arahan AI (lanjutan)')
             ->modalDescription('Sudah terisi bawaan yang siap pakai, Anda tidak perlu mengubahnya. Aturan dasar tetap berlaku: AI hanya menjawab dari pengetahuan dan menyerahkan chat ke agen bila tidak yakin.')
-            ->fillForm(fn () => app(CurrentTenant::class)->get()->only(['ai_instructions', 'ai_handoff_keywords']))
+            ->fillForm(fn () => app(CurrentTenant::class)->get()->only(['ai_instructions', 'ai_handoff_keywords']) + AiSettings::of(app(CurrentTenant::class)->get())->form())
             ->schema([
                 Textarea::make('ai_instructions')->label('Gaya dan aturan khusus')->rows(8)->maxLength(2000),
+                Radio::make('format')->label('Bentuk balasan')->options(AiSettings::FORMATS)->live()
+                    ->helperText('Bawaan: singkat tanpa format. Format WhatsApp cocok untuk jawaban berbentuk blok, misalnya harga, legalitas, atau lokasi.'),
+                TextInput::make('max_lines')->label('Paling banyak baris per balasan')->numeric()->minValue(1)->maxValue(AiSettings::MAX_LINES)
+                    ->visible(fn (Get $get) => $get('format') === 'whatsapp'),
                 Textarea::make('ai_handoff_keywords')->label('Kata yang membuat AI menyerahkan chat ke agen')->rows(4)->maxLength(1000)
                     ->helperText('Pisahkan dengan koma. Jika Anda menghapus sebuah kata, AI akan ikut menjawab pesan yang memuatnya.'),
+                Section::make('Pemeriksa sebelum kirim otomatis')->compact()
+                    ->visible(fn () => app(CurrentTenant::class)->get()?->industry()->key === 'properti')
+                    ->schema([
+                        Toggle::make('guard')->label('Tahan balasan yang memuat angka atau frasa yang tidak ada di pengetahuan')
+                            ->helperText('Harga, persentase, tahun, dan luas harus ada di pengetahuan, data lead, atau chat. Bila tidak, balasan tidak dikirim dan menunggu agen di Inbox, dengan alasannya di aktivitas lead.'),
+                        Textarea::make('forbidden_phrases')->label('Frasa terlarang')->rows(2)
+                            ->placeholder(implode(', ', AiSettings::SUGGESTED_PHRASES))
+                            ->helperText('Pisahkan dengan koma. Frasa yang langsung disangkal ("belum siap huni", "SHM belum tersedia") tidak dihitung.'),
+                    ]),
+                Section::make('Jeda dan jam malam (hanya mode otomatis)')->compact()->columns(2)
+                    ->schema([
+                        TextInput::make('delay_min')->label('Jeda paling cepat (detik)')->numeric()->minValue(0)->maxValue(AiSettings::MAX_DELAY),
+                        TextInput::make('delay_max')->label('Jeda paling lama (detik)')->numeric()->minValue(0)->maxValue(AiSettings::MAX_DELAY)
+                            ->helperText('0 = langsung. Contoh 5 dan 25: balasan dikirim acak 5 sampai 25 detik setelah pesan masuk.'),
+                        Toggle::make('typing')->label('Tampilkan "mengetik..." selama jeda (nomor scan QR)')->columnSpanFull(),
+                        TimePicker::make('quiet_from')->label('Jam malam mulai')->seconds(false),
+                        TimePicker::make('quiet_until')->label('Jam malam selesai')->seconds(false)
+                            ->helperText('Kosongkan keduanya bila AI boleh membalas kapan saja. Zona waktu agensi.'),
+                        Radio::make('quiet_mode')->label('Di jam malam')->options(AiSettings::QUIET_MODES)->columnSpanFull(),
+                        Textarea::make('quiet_message')->label('Sambutan jam malam')->rows(2)->maxLength(500)->columnSpanFull(),
+                    ]),
             ])
             ->extraModalFooterActions([
+                Action::make('propertyHandoff')->label('Tambah kata khusus properti')->color('gray')->cancelParentActions()
+                    ->visible(fn () => app(CurrentTenant::class)->get()?->industry()->key === 'properti')
+                    ->modalDescription('Ditambahkan ke daftar serah-terima: '.implode(', ', AiSettings::PROPERTY_HANDOFF).'. Kata yang sudah ada tidak digandakan.')
+                    ->requiresConfirmation()
+                    ->action(function () {
+                        $tenant = app(CurrentTenant::class)->get();
+                        $words = array_map('trim', preg_split('/[,\n]+/', (string) ($tenant->ai_handoff_keywords ?: implode(', ', $tenant->industry()->config('handoff_keywords')))) ?: []);
+                        $missing = array_filter(AiSettings::PROPERTY_HANDOFF, fn ($w) => ! in_array($w, array_map('mb_strtolower', $words), true));
+                        $tenant->update(['ai_handoff_keywords' => implode(', ', array_values(array_filter([...$words, ...$missing])))]);
+                        Notification::make()->title(count($missing).' kata ditambahkan')->success()->send();
+                    }),
                 Action::make('reset')->label('Kembalikan ke bawaan')->color('gray')->cancelParentActions()
                     ->requiresConfirmation()
                     ->action(function () {
@@ -175,6 +217,7 @@ class ManageAiKnowledge extends ManageRecords
                 app(CurrentTenant::class)->get()->update([
                     'ai_instructions' => $data['ai_instructions'] ?: null,
                     'ai_handoff_keywords' => $data['ai_handoff_keywords'] ?: null,
+                    'ai_settings' => AiSettings::fromForm($data),
                 ]);
                 Notification::make()->title('Arahan disimpan')->success()->send();
             });
