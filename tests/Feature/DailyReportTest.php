@@ -213,6 +213,28 @@ class DailyReportTest extends TestCase
         $this->assertStringNotContainsString('Survei', $shop);
     }
 
+    public function test_the_report_counts_what_the_ai_did_for_a_property_agency(): void
+    {
+        $agent = User::factory()->create();
+        $agency = app(ProvisionTenant::class)('Griya Prima', 'griya-prima', $agent);
+        $a = $this->leadAt($agency, '2026-11-04 09:00');
+        $b = $this->leadAt($agency, '2026-11-04 10:00');
+        $at = CarbonImmutable::parse('2026-11-04 11:00', 'Asia/Jakarta');
+        $this->in($agency, function () use ($a, $b, $at) {
+            foreach ([[$a, 'ai_reply'], [$a, 'ai_reply'], [$b, 'ai_reply'], [$a, 'ai_held'], [$b, 'ai_survey'], [$b, 'ai_handoff']] as [$lead, $type]) {
+                $lead->activities()->create(['type' => $type, 'body' => $type])->forceFill(['created_at' => $at])->save();
+            }
+        });
+
+        $text = $this->text($agency, $agent);
+
+        $this->assertStringContainsString('• Balasan AI: 3', $text);
+        $this->assertStringContainsString('• Chat dijawab AI: 2', $text);
+        $this->assertStringContainsString('• Diserahkan ke tim (handoff): 1', $text);
+        $this->assertStringContainsString('• Jawaban AI ditahan pemeriksa: 1', $text);
+        $this->assertStringContainsString('• Survei dijadwalkan AI: 1', $text);
+    }
+
     public function test_an_agent_only_gets_their_own_leads_and_is_off_by_default(): void
     {
         $agent = $this->member($this->shop, Role::Agent);

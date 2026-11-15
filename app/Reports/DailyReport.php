@@ -143,7 +143,10 @@ class DailyReport
         $a = $data->automation($period);
         $block = [];
         $this->line($block, 'Balasan AI', $a['ai_replies']);
+        $this->line($block, 'Chat dijawab AI', $a['ai_chats']);
         $this->line($block, 'Diserahkan ke tim (handoff)', $a['handoffs']);
+        $this->line($block, 'Jawaban AI ditahan pemeriksa', $a['ai_held']);
+        $this->line($block, 'Survei dijadwalkan AI', $a['ai_surveys']);
         $this->line($block, 'Handoff tanpa balasan dalam 3 menit', $a['handoff_unanswered']);
         $this->line($block, 'Follow-up terkirim', $a['follow_ups_sent']);
         $this->line($block, '"Tanya produk" terkirim', $a['ask_sent']);
