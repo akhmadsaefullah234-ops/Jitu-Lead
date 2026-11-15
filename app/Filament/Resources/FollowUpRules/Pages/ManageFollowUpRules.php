@@ -9,6 +9,7 @@ use App\Filament\Resources\Properties\Pages\EditProperty;
 use App\Filament\Resources\Properties\PropertyResource;
 use App\FollowUps\AskProduct;
 use App\FollowUps\GeneralFollowUps;
+use App\FollowUps\PropertyFollowUps;
 use App\FollowUps\SurveyReminder;
 use App\Models\Property;
 use App\Support\CurrentTenant;
@@ -64,6 +65,11 @@ class ManageFollowUpRules extends ManageRecords
                 ->description(fn () => $this->askSummary())
                 ->icon(Heroicon::OutlinedChatBubbleLeftEllipsis)->color('info')
                 ->actions([$this->askProductAction()]),
+            Callout::make('Follow-up properti bawaan')
+                ->visible($tenant?->industry()->key === 'properti')
+                ->description(fn () => $this->propertySummary())
+                ->icon(Heroicon::OutlinedBolt)->color(fn () => PropertyFollowUps::for(app(CurrentTenant::class)->get())->enabled() ? 'success' : 'info')
+                ->actions([$this->propertyFollowUpsAction()]),
             Callout::make('Pengingat survei H-1')
                 ->visible($tenant?->industry()->key === 'properti')
                 ->description(fn () => $this->surveySummary())
@@ -93,6 +99,31 @@ class ManageFollowUpRules extends ManageRecords
             ->action(function (array $data) {
                 app(CurrentTenant::class)->get()->update(['general_follow_ups' => $data['general_follow_ups']]);
                 Notification::make()->title('Pengaturan follow-up umum disimpan')->success()->send();
+            });
+    }
+
+    private function propertySummary(): string
+    {
+        $follow = PropertyFollowUps::for(app(CurrentTenant::class)->get());
+        $names = implode(', ', [...array_map(fn ($r) => $r['name'], $follow->starters()), SurveyReminder::DEFAULTS['name']]);
+
+        return ($follow->enabled() ? 'Semua aktif' : 'Belum semua aktif').": {$names}. "
+            .'Rangkaian berhenti untuk lead yang sudah membalas atau sudah dibalas agen (dari Inbox atau HP); pengingat survei tetap dikirim.';
+    }
+
+    public function propertyFollowUpsAction(): Action
+    {
+        return Action::make('propertyFollowUps')->label('Nyalakan semua')->color('primary')->size('sm')->button()
+            ->visible(fn () => ! PropertyFollowUps::for(app(CurrentTenant::class)->get())->enabled())
+            ->requiresConfirmation()
+            ->modalHeading('Nyalakan follow-up properti bawaan')
+            ->modalDescription(fn () => implode(', ', array_map(fn ($r) => "{$r['name']} (tahap {$r['stage']})", PropertyFollowUps::for(app(CurrentTenant::class)->get())->starters()))
+                .', dan Pengingat survei H-1 dinyalakan. Teks yang sudah Anda ubah tetap dipakai; aturan yang terhapus dibuat lagi dengan teks bawaan. Pesan mulai terkirim pada jadwal berikutnya.')
+            ->action(function () {
+                $result = PropertyFollowUps::for(app(CurrentTenant::class)->get())->enable();
+                Notification::make()->title(count($result['on']).' follow-up aktif')
+                    ->body($result['missing'] !== [] ? 'Tidak bisa dibuat: '.implode('; ', $result['missing']) : null)
+                    ->status($result['missing'] !== [] ? 'warning' : 'success')->send();
             });
     }
 

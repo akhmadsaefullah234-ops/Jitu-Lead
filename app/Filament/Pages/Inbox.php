@@ -6,6 +6,7 @@ use App\Actions\GenerateAiReply;
 use App\Actions\LearnFromReply;
 use App\Actions\SendLibraryItem;
 use App\Actions\SendWhatsAppMessage;
+use App\Ai\AiSettings;
 use App\Ai\LeadQuote;
 use App\Automation\StageAutomation;
 use App\Automation\StageAutomationSettings;
@@ -15,6 +16,7 @@ use App\Filament\Concerns\NotifiesShipmentFormErrors;
 use App\Filament\Resources\Leads\LeadResource;
 use App\Filament\Resources\MediaAssets\MediaAssetResource;
 use App\Filament\Support\ShipmentActions;
+use App\FollowUps\PropertyFollowUps;
 use App\Media\Library;
 use App\Models\AiDraft;
 use App\Models\Lead;
@@ -162,7 +164,7 @@ class Inbox extends Page
         }
 
         try {
-            $message = app(SendWhatsAppMessage::class)($conversation, auth()->user(), $this->draft);
+            $message = app(SendWhatsAppMessage::class)->from(PropertyFollowUps::AGENT_ORIGIN)($conversation, auth()->user(), $this->draft);
         } catch (WhatsAppException $e) {
             Notification::make()->title($e->getMessage())->danger()->send();
 
@@ -175,7 +177,7 @@ class Inbox extends Page
             return;
         }
 
-        $conversation->pauseAiFor(config('whatsapp.ai_after_send_pause_seconds'));
+        $conversation->pauseAiFor(AiSettings::of(app(CurrentTenant::class)->get())->agentPauseSeconds());
         $this->markAiDraft($conversation, AiDraft::SENT);
         $this->applySuggestedOrder($conversation);
         app(LearnFromReply::class)($conversation, $message);
@@ -223,7 +225,7 @@ class Inbox extends Page
 
         foreach ($draft?->suggestedAssets() ?? [] as $asset) {
             try {
-                $sent = app(SendLibraryItem::class)($conversation->refresh(), auth()->user(), $asset);
+                $sent = app(SendLibraryItem::class)->from(PropertyFollowUps::AGENT_ORIGIN)($conversation->refresh(), auth()->user(), $asset);
 
                 if ($sent->status === MessageStatus::Failed) {
                     Notification::make()->title('Lampiran "'.$asset->title.'" gagal terkirim')->body($sent->error)->danger()->send();
@@ -292,12 +294,12 @@ class Inbox extends Page
                 $upload = $data['upload'] ?? null;
 
                 try {
-                    $send = app(SendWhatsAppMessage::class);
+                    $send = app(SendWhatsAppMessage::class)->from(PropertyFollowUps::AGENT_ORIGIN);
                     $caption = filled($data['caption'] ?? null) ? $data['caption'] : null;
 
                     $message = match (true) {
                         $conversation === null => throw new WhatsAppException('Pilih percakapan dulu.'),
-                        $asset !== null => app(SendLibraryItem::class)($conversation, auth()->user(), $asset, $caption),
+                        $asset !== null => app(SendLibraryItem::class)->from(PropertyFollowUps::AGENT_ORIGIN)($conversation, auth()->user(), $asset, $caption),
                         is_string($upload) => $send->sendFile($conversation, auth()->user(), $upload, (string) ($data['upload_name'] ?? basename($upload)), $caption),
                         default => throw new WhatsAppException('Pilih item dari pustaka atau unggah file.'),
                     };
@@ -317,7 +319,7 @@ class Inbox extends Page
                     return;
                 }
 
-                $conversation->pauseAiFor(config('whatsapp.ai_after_send_pause_seconds'));
+                $conversation->pauseAiFor(AiSettings::of(app(CurrentTenant::class)->get())->agentPauseSeconds());
                 $this->markAiDraft($conversation, AiDraft::SENT);
             });
     }
@@ -507,7 +509,7 @@ class Inbox extends Page
                 $template = WaTemplate::query()->find($data['template_id']);
 
                 try {
-                    app(SendWhatsAppMessage::class)($conversation, auth()->user(), null, true, $template);
+                    app(SendWhatsAppMessage::class)->from(PropertyFollowUps::AGENT_ORIGIN)($conversation, auth()->user(), null, true, $template);
                 } catch (WhatsAppException $e) {
                     Notification::make()->title($e->getMessage())->danger()->send();
                 }
