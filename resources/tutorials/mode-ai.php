@@ -27,6 +27,7 @@ return [
         ],
     ],
     'perhatian' => [
+        'AI membaca sampai 40 pesan terakhir dari tiap chat. Untuk chat yang panjang, AI juga menyimpan ringkasan singkat (nama, domisili, kebutuhan, budget, cara bayar, status survei, dan hal yang sudah dijanjikan), sehingga hal yang disebut klien di awal chat tetap diingat. Ringkasan tidak memuat nomor KTP, nomor rekening, PIN, atau kode OTP. Untuk agensi properti, AI juga membaca data lead: tahap pipeline, kebutuhan, budget, cara bayar, dan jadwal survei.',
         'Penyerahan ke agen tidak menjeda AI. Pertanyaan berikutnya yang bisa dijawab dari pengetahuan tetap dijawab AI, sedangkan pertanyaan yang diserahkan menunggu agen. AI baru dijeda saat agen mengetik (sampai 1 menit setelah berhenti mengetik) dan setelah agen mengirim pesan (5 menit).',
     ],
 ];

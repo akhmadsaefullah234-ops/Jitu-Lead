@@ -60,6 +60,20 @@ return [
             ->filter(fn ($v, $k) => is_string($k) && str_starts_with($k, 'RCLONE_CONFIG_') && is_string($v))->all(),
     ],
 
+    // What the WhatsApp AI reads of a chat (App\Ai\ConversationHistory, App\Ai\ConversationMemory).
+    'ai' => [
+        // The newest messages it reads word for word: at most this many, and at most this many tokens (estimated).
+        'history_messages' => (int) env('AI_HISTORY_MESSAGES', 40),
+        'history_tokens' => (int) env('AI_HISTORY_TOKENS', 6000),
+        // A single message longer than this (characters) is cut.
+        'message_chars' => 1500,
+        // The chat summary (wa_conversations.ai_memory) is written again after an AI reply once this many messages
+        // came in or went out since the last one. Older messages that no longer fit are summarised before the AI answers.
+        'memory_every' => (int) env('AI_MEMORY_EVERY', 12),
+        // Messages per summary call; a longer backlog is summarised in several calls.
+        'memory_chunk' => 60,
+    ],
+
     // Operator health heartbeat (php artisan ops:heartbeat, every minute; docs/ops-monitoring.md). When every check passes the
     // server pings this URL; an outside monitor (Better Stack heartbeat) emails the operator once the pings stop.
     // Empty = off. The URL is a secret: it is never logged.

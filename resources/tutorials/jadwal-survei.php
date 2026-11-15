@@ -34,6 +34,7 @@ return [
     ],
     'tips' => [
         'Dasbor menghitung Survei terjadwal (survei yang tanggalnya jatuh di periode itu) dan Survei terlaksana (lead yang masuk Sudah survei di periode itu).',
+        'AI asisten membaca jadwal dan lokasi survei yang tersimpan di lead (dalam zona waktu agensi), jadi bisa menjawab klien yang menanyakan jadwalnya tanpa mengarang.',
         'Tahap ini bisa memicu event Meta Schedule (bawaan untuk properti, mati sampai dinyalakan di Pelacakan iklan) dan label WhatsApp Business Prospek (uji coba).',
     ],
     'perhatian' => ['Jadwal dan lokasi survei hanya diminta saat lead masuk tahap ini. Untuk mengganti jadwal, pindahkan lead lagi ke Jadwal survei dengan tanggal baru.'],

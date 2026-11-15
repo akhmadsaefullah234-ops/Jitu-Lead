@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 use LogicException;
 
-#[Fillable(['lead_id', 'phone', 'last_inbound_at', 'last_inbound_channel_id', 'ad_entry_at', 'free_window_ends_at', 'ad_data', 'unread_count', 'last_message_at', 'ai_paused_until'])]
+#[Fillable(['lead_id', 'phone', 'last_inbound_at', 'last_inbound_channel_id', 'ad_entry_at', 'free_window_ends_at', 'ad_data', 'unread_count', 'last_message_at', 'ai_paused_until', 'ai_memory', 'ai_memory_message_id', 'ai_memory_at'])]
 class WaConversation extends Model
 {
     use BelongsToTenant;
@@ -34,6 +34,8 @@ class WaConversation extends Model
             'free_window_ends_at' => 'datetime',
             'last_message_at' => 'datetime',
             'ai_paused_until' => 'datetime',
+            'ai_memory' => 'array',
+            'ai_memory_at' => 'datetime',
             'ad_data' => 'array',
         ];
     }
