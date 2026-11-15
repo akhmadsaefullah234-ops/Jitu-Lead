@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\Ai\AiSettings;
 use App\Ai\ReplyTiming;
 use App\Automation\StageAutomation;
 use App\Catalog\ProductMatcher;
@@ -130,8 +131,10 @@ class HandleInboundWhatsApp
     /**
      * A reply an agent typed in the WhatsApp app on the phone of a gateway number. It is shown in the Inbox as
      * an outgoing message and counts as the lead being attended to, and the AI steps back as when an agent
-     * sends from the CRM. It is not a customer message: no AI reply, no alert, no unread count, and the
-     * follow-ups keep their schedule. A number that is not a lead yet is ignored unless configured otherwise.
+     * sends from the CRM (Arahan AI > "AI diam setelah agen membalas"). It is not a customer message: no AI reply,
+     * no alert, no unread count. A shop's follow-ups keep their schedule; a property agency's sequence stops, as
+     * a person took the chat over (PropertyFollowUps::tookOver). A number that is not a lead yet is ignored unless
+     * configured otherwise.
      */
     private function fromPhone(WaChannel $channel, InboundMessage $incoming): ?WaMessage
     {
@@ -163,7 +166,7 @@ class HandleInboundWhatsApp
                 ]);
 
                 $conversation->forceFill(['last_message_at' => $incoming->sentAt, 'unread_count' => 0])->save();
-                $conversation->pauseAiFor((int) config('whatsapp.ai_after_send_pause_seconds'));
+                $conversation->pauseAiFor(AiSettings::of($channel->tenant()->first())->agentPauseSeconds());
 
                 $lead->activities()->create([
                     'type' => 'whatsapp_out_phone',

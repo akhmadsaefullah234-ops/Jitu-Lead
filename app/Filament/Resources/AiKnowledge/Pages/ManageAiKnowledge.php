@@ -8,6 +8,7 @@ use App\Ai\AnthropicClient;
 use App\Ai\DocumentException;
 use App\Ai\DocumentReader;
 use App\Filament\Resources\AiKnowledge\AiKnowledgeResource;
+use App\Models\MediaAsset;
 use App\Privacy\KnowledgeScan;
 use App\Support\CurrentTenant;
 use App\Support\Industry;
@@ -17,6 +18,7 @@ use Filament\Actions\ActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Radio;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\TimePicker;
@@ -188,6 +190,19 @@ class ManageAiKnowledge extends ManageRecords
                             ->helperText('Kosongkan keduanya bila AI boleh membalas kapan saja. Zona waktu agensi.'),
                         Radio::make('quiet_mode')->label('Di jam malam')->options(AiSettings::QUIET_MODES)->columnSpanFull(),
                         Textarea::make('quiet_message')->label('Sambutan jam malam')->rows(2)->maxLength(500)->columnSpanFull(),
+                    ]),
+                Section::make('Lampiran sambutan (hanya mode otomatis)')->compact()
+                    ->schema([
+                        Select::make('welcome_assets')->label('Lampirkan di balasan otomatis pertama ke tiap lead')->multiple()->maxItems(AiSettings::MAX_WELCOME_ASSETS)
+                            ->options(fn () => MediaAsset::query()->where('active', true)->orderBy('title')->pluck('title', 'id')->all())
+                            ->helperText('Misalnya brosur dan daftar harga dari Pustaka media. Dikirim sekali per lead, sesudah balasan pertama AI. Kosongkan bila tidak perlu.'),
+                    ]),
+                Section::make('Saat chat ditangani agen')->compact()->columns(2)
+                    ->schema([
+                        TextInput::make('agent_pause')->label('AI diam setelah agen membalas (menit)')->numeric()->minValue(1)->maxValue(AiSettings::MAX_PAUSE_MINUTES)
+                            ->helperText('Berlaku untuk balasan dari Inbox dan dari WhatsApp di HP. Bawaan 5 menit.'),
+                        TextInput::make('handoff_pause')->label('AI diam setelah menyerahkan chat (menit)')->numeric()->minValue(0)->maxValue(AiSettings::MAX_PAUSE_MINUTES)
+                            ->helperText('0 (bawaan): pertanyaan berikutnya yang ada di pengetahuan tetap dijawab AI. Isi misalnya 60 agar chat yang diserahkan dijawab agen saja.'),
                     ]),
             ])
             ->extraModalFooterActions([

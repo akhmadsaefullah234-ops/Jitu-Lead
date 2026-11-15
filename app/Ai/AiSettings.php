@@ -34,6 +34,12 @@ final class AiSettings
 
     public const MAX_DELAY = 60;
 
+    /** Library items the first automatic reply to a lead may carry (brochure, price list). */
+    public const MAX_WELCOME_ASSETS = 2;
+
+    /** Minutes, at most, the AI may stay out of a chat a person is handling. */
+    public const MAX_PAUSE_MINUTES = 1440;
+
     private function __construct(private array $values) {}
 
     public static function of(?Tenant $tenant): self
@@ -56,6 +62,9 @@ final class AiSettings
             'quiet_until' => $this->values['quiet_until'] ?? null,
             'quiet_mode' => $this->quietMode(),
             'quiet_message' => $this->quietMessage(),
+            'welcome_assets' => $this->welcomeAssets(),
+            'agent_pause' => $this->agentPauseMinutes(),
+            'handoff_pause' => $this->handoffPauseMinutes(),
         ];
     }
 
@@ -80,6 +89,9 @@ final class AiSettings
             'quiet_until' => $from !== null && $until !== null && $from !== $until ? $until : null,
             'quiet_mode' => array_key_exists($data['quiet_mode'] ?? '', self::QUIET_MODES) ? $data['quiet_mode'] : 'greet',
             'quiet_message' => mb_substr(trim((string) ($data['quiet_message'] ?? '')), 0, 500) ?: self::DEFAULT_QUIET_MESSAGE,
+            'welcome_assets' => self::ids($data['welcome_assets'] ?? []),
+            'agent_pause' => max(1, min(self::MAX_PAUSE_MINUTES, (int) ($data['agent_pause'] ?? self::defaultAgentPause()))),
+            'handoff_pause' => max(0, min(self::MAX_PAUSE_MINUTES, (int) ($data['handoff_pause'] ?? 0))),
         ];
     }
 
@@ -222,5 +234,39 @@ final class AiSettings
         $start = $until->setTime($h, $m);
 
         return $start->greaterThanOrEqualTo($until) ? $start->subDay() : $start;
+    }
+
+    /** @return list<int> the library items the first automatic reply to a lead carries; none by default */
+    public function welcomeAssets(): array
+    {
+        return self::ids($this->values['welcome_assets'] ?? []);
+    }
+
+    /** Minutes the AI keeps out of a chat after a person sent a message in it (config, 5 minutes, unless set). */
+    public function agentPauseMinutes(): int
+    {
+        return max(1, min(self::MAX_PAUSE_MINUTES, (int) ($this->values['agent_pause'] ?? self::defaultAgentPause())));
+    }
+
+    public function agentPauseSeconds(): int
+    {
+        return isset($this->values['agent_pause']) ? $this->agentPauseMinutes() * 60 : (int) config('whatsapp.ai_after_send_pause_seconds');
+    }
+
+    /** Minutes the AI keeps out of a chat after it handed the chat to a person; 0 (the default) keeps answering. */
+    public function handoffPauseMinutes(): int
+    {
+        return max(0, min(self::MAX_PAUSE_MINUTES, (int) ($this->values['handoff_pause'] ?? 0)));
+    }
+
+    private static function defaultAgentPause(): int
+    {
+        return max(1, (int) round((int) config('whatsapp.ai_after_send_pause_seconds') / 60));
+    }
+
+    /** @return list<int> */
+    private static function ids(mixed $ids): array
+    {
+        return array_slice(array_values(array_unique(array_filter(array_map('intval', (array) $ids), fn (int $id) => $id > 0))), 0, self::MAX_WELCOME_ASSETS);
     }
 }

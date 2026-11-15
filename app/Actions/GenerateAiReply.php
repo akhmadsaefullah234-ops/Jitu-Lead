@@ -294,6 +294,13 @@ class GenerateAiReply
             : $buyer->instructions();
 
         $settings = AiSettings::of($tenant);
+        // The agency's brochure and price list go with the first automatic reply a lead gets, once.
+        $welcome = $mode === AiMode::Auto && ! $ack ? $this->welcomeAssets($settings, $lead) : collect();
+
+        if ($welcome->isNotEmpty()) {
+            $notes[] = sprintf(self::WELCOME_NOTE, $welcome->pluck('title')->implode(', '));
+        }
+
         $base = $this->system($settings, $tenant->name, $tenant->industry()->term('business'), $tenant->ai_instructions, $text, $library, $shop,
             $retail ? $lead : null, $products, $package, $facts, ConversationMemory::block($conversation), $property);
         $given = $base."\n".collect($history)->pluck('content')->implode("\n");
@@ -491,7 +498,38 @@ class GenerateAiReply
             return $this->draft($inbound, $answer, AiDraft::PENDING, null, true, $assetIds, $actions);
         }
 
-        return $this->sendAutomatically($inbound, $answer, $assetIds, $actions);
+        if ($welcome->isEmpty()) {
+            return $this->sendAutomatically($inbound, $answer, $assetIds, $actions);
+        }
+
+        $assetIds = array_values(array_unique([...$welcome->modelKeys(), ...$assetIds]));
+        $draft = $this->sendAutomatically($inbound, $answer, $assetIds, $actions);
+
+        if ($draft->status === AiDraft::SENT) {
+            $lead->forceFill(['ai_welcome_sent_at' => now()])->save();
+        }
+
+        return $draft;
+    }
+
+    /** What the AI is told when its answer carries the agency's welcome brochure and price list. */
+    public const WELCOME_NOTE = 'LAMPIRAN SAMBUTAN: ini balasan otomatis pertama untuk klien ini, dan aplikasi melampirkan %s sesudah pesanmu. Sebut singkat bahwa itu dikirim, tanpa menulis baris LAMPIRAN untuk item tersebut.';
+
+    /**
+     * The library items (Arahan AI > Lampiran sambutan) the first automatic reply to this lead carries: none when
+     * the agency chose none, the lead already got them, or the AI already answered this lead automatically before.
+     *
+     * @return Collection<int, MediaAsset>
+     */
+    private function welcomeAssets(AiSettings $settings, ?Lead $lead): Collection
+    {
+        $ids = $settings->welcomeAssets();
+
+        if ($ids === [] || $lead === null || $lead->ai_welcome_sent_at !== null || $lead->activities()->where('type', 'ai_reply')->exists()) {
+            return collect();
+        }
+
+        return MediaAsset::query()->where('active', true)->whereIn('id', $ids)->get()->sortBy(fn (MediaAsset $a) => array_search($a->getKey(), $ids, true))->values();
     }
 
     /**
@@ -865,6 +903,11 @@ class GenerateAiReply
     /** @param  list<int>  $assetIds */
     private function draft(WaMessage $inbound, ?string $body, string $status, ?string $reason = null, bool $apiCall = false, array $assetIds = [], array $actions = []): AiDraft
     {
+        // Arahan AI > "Jeda setelah diserahkan": a chat handed to a person stays theirs for a while (off by default).
+        if ($status === AiDraft::HANDOFF && ($minutes = AiSettings::of($this->current->get())->handoffPauseMinutes()) > 0) {
+            $inbound->conversation->pauseAiFor($minutes * 60);
+        }
+
         return AiDraft::query()->create([
             'actions' => $actions === [] ? null : $actions,
             'media_asset_ids' => $assetIds === [] ? null : $assetIds,

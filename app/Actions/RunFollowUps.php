@@ -7,6 +7,7 @@ use App\Enums\MessageStatus;
 use App\Enums\Role;
 use App\FollowUps\AskProduct;
 use App\FollowUps\GeneralFollowUps;
+use App\FollowUps\PropertyFollowUps;
 use App\FollowUps\SurveyReminder;
 use App\Models\FollowUpLog;
 use App\Models\FollowUpRule;
@@ -181,6 +182,11 @@ class RunFollowUps
             return $this->log($rule, $lead, 'skipped', 'Lead sudah membalas');
         }
 
+        // A property agent who answered the client by hand has taken the chat over: the sequence step is not sent.
+        if (! $reminds && PropertyFollowUps::stopsOnTakeover($tenant) && PropertyFollowUps::tookOver($conversation, $this->quietSince($lead))) {
+            return $this->log($rule, $lead, 'skipped', 'Agen sudah menangani chat ini');
+        }
+
         // Right after the form's WhatsApp welcome the follow-up waits, so the buyer never gets two in a row.
         // The welcome is the shop writing, not the buyer, so it never stops the sequence.
         if ($conversation->messages()->where('origin', 'welcome')->where('status', '!=', MessageStatus::Failed)
@@ -208,7 +214,7 @@ class RunFollowUps
         }
 
         $text = $this->renderer->render($rule->body, $lead, $actor, $tenant->name)['text'];
-        $message = ($this->send)($conversation, $actor, $text);
+        $message = $this->send->from('follow_up')($conversation, $actor, $text);
 
         if ($message->status === MessageStatus::Failed) {
             return $this->log($rule, $lead, 'failed', (string) $message->error);
@@ -243,7 +249,7 @@ class RunFollowUps
         }
 
         try {
-            $sent = ($this->sendItem)($conversation->refresh(), $actor, $asset);
+            $sent = $this->sendItem->from('follow_up')($conversation->refresh(), $actor, $asset);
         } catch (WhatsAppException $e) {
             return ' (lampiran gagal: '.$e->getMessage().')';
         }

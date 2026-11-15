@@ -126,6 +126,7 @@ class Lead extends Model
             'next_action_due_at' => 'datetime',
             'survey_at' => 'datetime',
             'survey_scheduled_at' => 'datetime',
+            'ai_welcome_sent_at' => 'datetime',
             'stage_entered_at' => 'datetime',
             'assigned_at' => 'datetime',
             'custom_fields' => 'array',
