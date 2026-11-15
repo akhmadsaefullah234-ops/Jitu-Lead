@@ -4,12 +4,15 @@ namespace App\Actions;
 
 use App\Ai\AnthropicClient;
 use App\Ai\BuyerFacts;
+use App\Ai\ConversationHistory;
+use App\Ai\ConversationMemory;
 use App\Ai\HandoffRules;
 use App\Ai\KnowledgeBase;
 use App\Ai\LeadQuote;
 use App\Ai\OrderConfirmation;
 use App\Ai\PackageStatus;
 use App\Ai\ProductContext;
+use App\Ai\PropertyClientFacts;
 use App\Ai\ReplySignals;
 use App\Ai\ShopTools;
 use App\Ai\VoiceNoteTranscript;
@@ -59,6 +62,9 @@ class GenerateAiReply
 
     /** Told to the model when earlier questions in the chat already went to a person. */
     public const HANDED_OFF_NOTE = 'Sebagian pesan pembeli sebelumnya sudah diteruskan ke admin dan belum dijawab (ditandai di riwayat chat). Jangan membahasnya dan jangan menyerahkan lagi karena pesan itu. Jawab pesan terbaru bila bisa dijawab dari PENGETAHUAN, data produk, atau hasil tool; serahkan ke admin hanya bila pesan terbaru itu sendiri tidak bisa dijawab.';
+
+    /** Told when older messages did not fit and could not be summarised (the summary call failed). */
+    public const OMITTED_NOTE = 'Ada %d pesan lama di chat ini yang tidak dimuat dan belum diringkas. Bila klien merujuk hal yang tidak terlihat di chat atau ringkasan, tanyakan ulang dengan sopan; jangan menebak.';
 
     /** The turn that marks a handed-off message in the chat the model reads. */
     public const HANDED_OFF_TURN = '(Pesan ini sudah diteruskan ke admin.)';
@@ -169,7 +175,14 @@ class GenerateAiReply
         // "ok", "siap", "terima kasih", 🙏: answered briefly or not at all, never handed to a person.
         $ack = ReplySignals::acknowledgement($text);
         $handedOff = $this->handedOff($conversation, $inbound);
-        $history = $this->history($conversation, $handedOff);
+        $loaded = ConversationHistory::load($conversation, $handedOff, self::HANDED_OFF_TURN);
+
+        // Older messages that no longer fit are summarised first, so nothing the client said is lost without a trace.
+        if ($loaded->omitted > 0 && app(ConversationMemory::class)->update($conversation)) {
+            $loaded = ConversationHistory::load($conversation, $handedOff, self::HANDED_OFF_TURN);
+        }
+
+        $history = $loaded->turns;
         $shop?->buyerSaid(collect($history)->where('role', 'user')->pluck('content')->push($text)->implode("\n"));
 
         // An expedition the shop does not use ("bisa J&T?"): a person answers, nothing is priced.
@@ -252,8 +265,17 @@ class GenerateAiReply
             $notes[] = self::HANDED_OFF_NOTE;
         }
 
+        if ($loaded->omitted > 0) {
+            $notes[] = sprintf(self::OMITTED_NOTE, $loaded->omitted);
+        }
+
+        // A property agency's AI reads the lead as the CRM holds it (stage, needs, budget, survey); a shop's, the buyer's order data.
+        $facts = $tenant->industry()->key === 'properti'
+            ? (new PropertyClientFacts($lead, $tenant->timezone ?: (string) config('app.timezone')))->instructions()
+            : $buyer->instructions();
+
         $base = $this->system($tenant->name, $tenant->industry()->term('business'), $tenant->ai_instructions, $text, $library, $shop,
-            $retail ? $lead : null, $products, $package, $buyer);
+            $retail ? $lead : null, $products, $package, $facts, ConversationMemory::block($conversation));
         $given = $base."\n".collect($history)->pluck('content')->implode("\n");
         $tools = [...($shop?->definitions() ?? []), ...ReplySignals::definitions()];
         $retry = null;
@@ -741,52 +763,6 @@ class GenerateAiReply
         return $lead->owner ?? $this->current->get()->activeUsers()->wherePivot('role', Role::Admin->value)->first();
     }
 
-    /**
-     * The client's words are untrusted: they only ever appear as user turns,
-     * never in the system prompt.
-     *
-     * @param  list<int>  $handedOff  inbound messages already handed to a person; each is followed by HANDED_OFF_TURN
-     * @return list<array{role: 'user'|'assistant', content: string}>
-     */
-    private function history($conversation, array $handedOff = []): array
-    {
-        $turns = [];
-
-        $recent = $conversation->messages()->whereNotIn('type', ['template', 'reaction', 'unsupported'])->reorder()->orderByDesc('id')->limit(12)->get()->reverse();
-
-        foreach ($recent as $m) {
-            // Voice notes, locations and stickers as words; a sticker or a reaction is only context, never a question.
-            $content = MessageContent::forAi($m);
-
-            if ($content === null || $content === '') {
-                continue;
-            }
-
-            $role = $m->direction === 'in' ? 'user' : 'assistant';
-            $content = mb_substr($content, 0, 1500);
-
-            if ($m->direction === 'out' && filled($m->reactions['in'] ?? null)) {
-                $content .= ' (pelanggan memberi reaksi '.$m->reactions['in'].')';
-            }
-
-            if ($turns && end($turns)['role'] === $role) {
-                $turns[array_key_last($turns)]['content'] .= "\n".$content;
-            } else {
-                $turns[] = ['role' => $role, 'content' => $content];
-            }
-
-            if ($role === 'user' && in_array((int) $m->getKey(), $handedOff, true)) {
-                $turns[] = ['role' => 'assistant', 'content' => self::HANDED_OFF_TURN];
-            }
-        }
-
-        while ($turns && $turns[0]['role'] !== 'user') {
-            array_shift($turns);
-        }
-
-        return $turns;
-    }
-
     /** What the AI is told when a buyer ordered through a form that did not ask how they pay. */
     public const PAYMENT_NOT_ASKED = 'CATATAN PESANAN: pembeli ini sudah mengisi formulir order, tetapi cara bayar belum ditanyakan. Tanyakan cara bayar yang ia pilih (sesuai yang tersedia di pengetahuan) sebelum mencatat pesanan.';
 
@@ -800,7 +776,7 @@ class GenerateAiReply
     public const KNOWLEDGE_HEADER = 'PENGETAHUAN (catatan toko dan contoh tanya-jawab dari chat pembeli LAIN; nama, alamat, kota, dan pesanan di contoh bukan milik pembeli ini):';
 
     /** @param  Collection<int, MediaAsset>  $library */
-    private function system(string $agency, string $business, ?string $instructions, string $question, Collection $library, ?ShopTools $shop = null, ?Lead $lead = null, ?ProductContext $products = null, ?string $package = null, ?BuyerFacts $buyer = null): string
+    private function system(string $agency, string $business, ?string $instructions, string $question, Collection $library, ?ShopTools $shop = null, ?Lead $lead = null, ?ProductContext $products = null, ?string $package = null, ?string $facts = null, ?string $memory = null): string
     {
         // Only the knowledge for every product plus the one this chat is about, so products never mix.
         $context = $this->knowledge->context($question, $products?->product()?->getKey());
@@ -816,7 +792,8 @@ class GenerateAiReply
             $products?->instructions(),
             $package,
             $lead && self::paymentNotAsked($lead) ? self::PAYMENT_NOT_ASKED : null,
-            $buyer?->instructions(),
+            $facts,
+            $memory,
             self::KNOWLEDGE_HEADER."\n".($context !== '' ? $context : '(kosong)'),
             $files !== '' ? "LAMPIRAN yang boleh dikirim (id | judul | folder | kapan dipakai):\n{$files}\nJika klien jelas membutuhkan salah satunya (misalnya menanyakan harga lalu price list ada), tambahkan di baris terakhir jawabanmu, setelah teks balasan: LAMPIRAN: <id>. Maksimal dua id dipisah koma. Jangan menulis id selain yang ada di daftar. Jika tidak perlu, jangan tulis baris itu. Lampirkan foto hanya untuk varian yang dipesan atau ditanyakan pembeli, dan jangan melampirkan foto saat merangkum atau mengonfirmasi pesanan kecuali pembeli memintanya." : null,
         ]));

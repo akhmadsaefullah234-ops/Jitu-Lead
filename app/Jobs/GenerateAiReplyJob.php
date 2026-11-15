@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Actions\GenerateAiReply;
+use App\Ai\ConversationMemory;
 use App\Models\Tenant;
 use App\Models\WaMessage;
 use App\Support\CurrentTenant;
@@ -33,8 +34,9 @@ class GenerateAiReplyJob implements ShouldQueue
         $current->run($tenant, function () use ($generate) {
             $message = WaMessage::query()->with('channel')->find($this->messageId);
 
-            if ($message !== null) {
-                $generate($message);
+            if ($message !== null && $generate($message) !== null && $message->conversation !== null && ConversationMemory::due($message->conversation)) {
+                // The summary of a long chat is kept up to date after the reply, so the next answer remembers it.
+                UpdateConversationMemory::dispatch($this->tenantId, $message->conversation_id);
             }
         });
     }
