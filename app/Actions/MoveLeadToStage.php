@@ -88,14 +88,21 @@ class MoveLeadToStage
     private function requiredDetails(Lead $lead, Stage $stage, array $details): array
     {
         return match ($stage->requirement) {
-            StageRequirement::Survey => $this->survey($details),
+            StageRequirement::Survey => self::survey($details),
             StageRequirement::Booking => $this->booking($lead, $details),
             StageRequirement::LostReason => $this->lostReason($details),
             null => [],
         };
     }
 
-    private function survey(array $details): array
+    /**
+     * The survey details a lead needs, checked: a date and time after now, and a location.
+     *
+     * @return array{survey_at: CarbonImmutable, survey_location: string}
+     *
+     * @throws ValidationException
+     */
+    public static function survey(array $details): array
     {
         $at = filled($details['survey_at'] ?? null) ? CarbonImmutable::parse($details['survey_at']) : null;
         $location = trim((string) ($details['survey_location'] ?? ''));
@@ -114,6 +121,46 @@ class MoveLeadToStage
         }
 
         return ['survey_at' => $at, 'survey_location' => $location];
+    }
+
+    /**
+     * A new date, time or place for the survey of a lead already waiting for it: the one planned survey is changed,
+     * never doubled, with the same checks as entering the stage, and the H-1 confirmation follows the new date.
+     *
+     * @throws ValidationException
+     */
+    public function reschedule(Lead $lead, array $details, ?User $actor, ?string $auto = null): Lead
+    {
+        if (PlanLimits::current()?->readOnly()) {
+            throw ValidationException::withMessages(['stage' => 'Langganan hanya-baca, lead tidak bisa diubah. Perpanjang paket di menu Langganan.']);
+        }
+
+        $changes = self::survey($details);
+        $stage = $lead->stage;
+
+        if ($stage?->requirement !== StageRequirement::Survey) {
+            throw ValidationException::withMessages(['stage' => 'Lead belum ada di tahap survei.']);
+        }
+
+        $before = $lead->survey_at;
+        $lead->fill($changes);
+
+        if (! $lead->isDirty(['survey_at', 'survey_location'])) {
+            return $lead;
+        }
+
+        $lead->next_action = $stage->default_action ?? $lead->next_action;
+        $lead->next_action_due_at = $this->dueAt($lead, $stage);
+        $lead->save();
+
+        $lead->activities()->create([
+            'user_id' => $auto === null ? $actor?->getKey() : null,
+            'type' => 'survey_changed',
+            'body' => 'Jadwal survei diubah'.($before ? ' dari '.$before->format('j M Y H:i') : '').' ke '.$lead->survey_at->format('j M Y H:i').' di '.$lead->survey_location.($auto ? ": {$auto}" : ''),
+            'meta' => ['survey_at' => $lead->survey_at->toIso8601String(), 'survey_location' => $lead->survey_location] + ($auto === null ? [] : ['auto' => $auto]),
+        ]);
+
+        return $lead;
     }
 
     private function booking(Lead $lead, array $details): array

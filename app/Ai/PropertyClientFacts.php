@@ -2,6 +2,7 @@
 
 namespace App\Ai;
 
+use App\Filament\Resources\Leads\Schemas\LeadForm;
 use App\Models\Lead;
 use App\Shipping\ShippingQuote;
 use Carbon\CarbonInterface;
@@ -34,6 +35,8 @@ class PropertyClientFacts
             'Nama' => $line($lead?->name),
             'Tahap pipeline' => $line($lead?->stage?->name),
             'Kebutuhan' => $line($lead?->need?->getLabel()),
+            'Tujuan' => $line(LeadForm::PURPOSES[$lead?->purpose] ?? $lead?->purpose),
+            'Domisili' => $line($lead?->domicile),
             'Tipe properti' => $line($lead?->property_type),
             'Lokasi yang dicari' => $line($lead?->location),
             'Budget' => $this->budget(),
@@ -70,6 +73,12 @@ class PropertyClientFacts
     {
         $local = $at->copy()->timezone($this->timezone)->locale('id');
 
-        return $local->translatedFormat('l, j F Y').' pukul '.$local->format('H.i').' '.(self::ZONES[$this->timezone] ?? $this->timezone);
+        return $local->translatedFormat('l, j F Y').' pukul '.$local->format('H.i').' '.self::zone($this->timezone);
+    }
+
+    /** "WITA" for Asia/Makassar; the zone name itself elsewhere. */
+    public static function zone(string $timezone): string
+    {
+        return self::ZONES[$timezone] ?? $timezone;
     }
 }

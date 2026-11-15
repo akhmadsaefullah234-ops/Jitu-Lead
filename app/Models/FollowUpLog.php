@@ -6,7 +6,7 @@ use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 
-#[Fillable(['follow_up_rule_id', 'lead_id', 'stage_id', 'status', 'note', 'product_ids'])]
+#[Fillable(['follow_up_rule_id', 'lead_id', 'stage_id', 'status', 'note', 'product_ids', 'survey_at'])]
 class FollowUpLog extends Model
 {
     use BelongsToTenant;
@@ -14,6 +14,6 @@ class FollowUpLog extends Model
     protected function casts(): array
     {
         // product_ids: the products a "Tanya produk" message listed, in its order
-        return ['product_ids' => 'array'];
+        return ['product_ids' => 'array', 'survey_at' => 'datetime'];
     }
 }

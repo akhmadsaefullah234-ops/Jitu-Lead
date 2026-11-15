@@ -35,6 +35,15 @@ class LeadForm
         'Ruko' => 'Ruko',
         'Tanah' => 'Tanah',
         'Kavling' => 'Kavling',
+        'Villa' => 'Villa',
+    ];
+
+    /** Why a property client buys, as the AI and the form write it. */
+    public const PURPOSES = [
+        'hunian' => 'Hunian',
+        'investasi' => 'Investasi',
+        'villa' => 'Villa / liburan',
+        'sewa' => 'Sewa',
     ];
 
     public static function configure(Schema $schema): Schema
@@ -77,6 +86,10 @@ class LeadForm
                             ->default(Need::Buy)
                             ->inline()
                             ->required(),
+                        Select::make('purpose')
+                            ->options(self::PURPOSES),
+                        TextInput::make('domicile')
+                            ->maxLength(120),
                         Select::make('property_type')
                             ->options(self::PROPERTY_TYPES),
                         TextInput::make('location')

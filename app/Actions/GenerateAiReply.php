@@ -13,6 +13,7 @@ use App\Ai\OrderConfirmation;
 use App\Ai\PackageStatus;
 use App\Ai\ProductContext;
 use App\Ai\PropertyClientFacts;
+use App\Ai\PropertyTools;
 use App\Ai\ReplySignals;
 use App\Ai\ShopTools;
 use App\Ai\VoiceNoteTranscript;
@@ -36,6 +37,7 @@ use App\WhatsApp\MessageContent;
 use App\WhatsApp\RouteKind;
 use App\WhatsApp\RouteSelector;
 use App\WhatsApp\WhatsAppException;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -84,6 +86,9 @@ class GenerateAiReply
     public const MAX_TOKENS = 2048;
 
     public const MAX_ROUNDS = 6;
+
+    /** The second try after a survey was planned but the answer did not repeat its day and time. */
+    public const SURVEY_NOTE = 'PERBAIKI: jadwal survei sudah tercatat, tetapi balasanmu belum mengulang konfirmasinya. Tulis ulang dengan menyebut nama klien (bila ada), hari dan tanggal, jam, dan lokasi dari hasil '.PropertyTools::SURVEY.'.';
 
     /** The second try after an answer spoke about its rules or reasoning. */
     public const INTERNAL_NOTE = 'PERBAIKI: balasanmu sebelumnya berisi penjelasan tentang aturan, pengetahuan, instruksi, atau tool. Tulis ulang hanya pesan untuk pembeli, tanpa penalaran, atau panggil tool '.ReplySignals::HANDOFF_TOOL.' bila memang tidak bisa dijawab.';
@@ -184,6 +189,9 @@ class GenerateAiReply
 
         $history = $loaded->turns;
         $shop?->buyerSaid(collect($history)->where('role', 'user')->pluck('content')->push($text)->implode("\n"));
+        // A property chat's tools (needs, survey); a survey is only planned from what the client said lately.
+        $property = PropertyTools::for($tenant, $lead);
+        $property?->clientSaid(collect($history)->where('role', 'user')->pluck('content')->take(-3)->push($text)->implode("\n"));
 
         // An expedition the shop does not use ("bisa J&T?"): a person answers, nothing is priced.
         if ($retail && $shop !== null && ! $ack && ($unserved = CourierChoice::resolve(ShippingSettings::of($tenant), CourierChoice::brands($text))[1]) !== []) {
@@ -275,20 +283,23 @@ class GenerateAiReply
             : $buyer->instructions();
 
         $base = $this->system($tenant->name, $tenant->industry()->term('business'), $tenant->ai_instructions, $text, $library, $shop,
-            $retail ? $lead : null, $products, $package, $facts, ConversationMemory::block($conversation));
+            $retail ? $lead : null, $products, $package, $facts, ConversationMemory::block($conversation), $property);
         $given = $base."\n".collect($history)->pluck('content')->implode("\n");
-        $tools = [...($shop?->definitions() ?? []), ...ReplySignals::definitions()];
+        $tools = [...($shop?->definitions() ?? []), ...($property?->definitions() ?? []), ...ReplySignals::definitions()];
         $retry = null;
 
         // One more try when the answer quoted shipping that no check returned, or spoke about its own instructions.
         for ($attempt = 0; ; $attempt++) {
             $last = $attempt > 0;
             $shop?->forget();
+            $property?->forget();
 
             try {
                 ['text' => $answer, 'calls' => $calls, 'trace' => $trace] = $this->ai->converse(
                     implode("\n\n", array_filter([$base, $quote?->instructions(), ...$notes, $retry])), $history, $tools,
-                    fn (string $name, array $input) => $shop?->run($name, $input) ?? ['status' => 'error', 'pesan' => 'Tool tidak dikenal.'],
+                    fn (string $name, array $input) => in_array($name, [PropertyTools::NEEDS, PropertyTools::SURVEY], true) && $property !== null
+                        ? $property->run($name, $input)
+                        : ($shop?->run($name, $input) ?? ['status' => 'error', 'pesan' => 'Tool tidak dikenal.']),
                     self::MAX_TOKENS, self::MAX_ROUNDS, stopTools: [ReplySignals::HANDOFF_TOOL, ReplySignals::SILENT_TOOL],
                 );
             } catch (Throwable $e) {
@@ -406,6 +417,9 @@ class GenerateAiReply
                 $actions = [self::orderAction($formOrder)];
             }
 
+            // What the client's needs and the survey planned in this answer write onto the lead, once it is sent.
+            $actions = [...$actions, ...($property?->actions() ?? [])];
+
             // "PRODUK: 3": the buyer named or switched product; the lead follows once the answer is really sent.
             [$answer, $productIds] = $products->split($answer);
             if ($productIds !== [] && $productIds[0] !== $lead?->property_id) {
@@ -429,6 +443,18 @@ class GenerateAiReply
                 }
 
                 return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed ?? $formOrder, 'AI hampir mengirim teks internal (aturan atau penalaran) ke pembeli');
+            }
+
+            // A survey planned in this answer is confirmed to the client with its day, time and place: asked once,
+            // then added by the app, so a client never goes without the time that was written down.
+            if (($survey = $property?->plannedSurvey()) !== null && ! self::confirmsSurvey($answer, $survey[0])) {
+                if (! $last) {
+                    $retry = self::SURVEY_NOTE;
+
+                    continue;
+                }
+
+                $answer .= "\n\n".self::surveyLine($lead, $survey[0], $survey[1], $property->timezone());
             }
 
             break;
@@ -496,6 +522,19 @@ class GenerateAiReply
                 .($trace['tools'] !== [] ? ' ('.implode(', ', $trace['tools']).')' : '')
                 .($result !== null ? '; hasil terakhir '.$trace['last_tool'].': '.$result : ''),
         ]);
+    }
+
+    /** True when the answer names the planned survey's time (10.00 or 10:00) and its day of the month. */
+    private static function confirmsSurvey(string $answer, CarbonImmutable $at): bool
+    {
+        return preg_match('/(?<!\d)'.$at->format('G').'[.:]'.$at->format('i').'(?!\d)/', $answer) === 1
+            && preg_match('/(?<!\d)'.$at->format('j').'(?!\d)/', $answer) === 1;
+    }
+
+    /** The confirmation the app adds when the model did not write one. */
+    private static function surveyLine(?Lead $lead, CarbonImmutable $at, string $location, string $timezone): string
+    {
+        return 'Konfirmasi jadwal survei'.(filled($lead?->name) ? ' '.$lead->name : '').': '.(new PropertyClientFacts($lead, $timezone))->when($at).', di '.$location.'.';
     }
 
     /** @param  array{name: string, input: array, result: array}  $call */
@@ -681,6 +720,17 @@ class GenerateAiReply
                 $actions[$i]['outcome'] = $this->applyProduct($lead->refresh(), (array) ($action['product_ids'] ?? []), $by);
             }
 
+            if (in_array($action['type'] ?? null, ['needs', 'survey'], true) && ! ($action['applied'] ?? false)) {
+                $actions[$i]['applied'] = true;
+
+                try {
+                    $actions[$i]['outcome'] = PropertyTools::apply($lead->refresh(), $action, $actor, $by);
+                } catch (Throwable $e) {
+                    report($e);
+                    $actions[$i]['outcome'] = ['status' => 'gagal', 'pesan' => $e->getMessage()];
+                }
+            }
+
             if (($action['type'] ?? null) === 'order' && ! ($action['applied'] ?? false)) {
                 $actions[$i]['applied'] = true;
 
@@ -776,7 +826,7 @@ class GenerateAiReply
     public const KNOWLEDGE_HEADER = 'PENGETAHUAN (catatan toko dan contoh tanya-jawab dari chat pembeli LAIN; nama, alamat, kota, dan pesanan di contoh bukan milik pembeli ini):';
 
     /** @param  Collection<int, MediaAsset>  $library */
-    private function system(string $agency, string $business, ?string $instructions, string $question, Collection $library, ?ShopTools $shop = null, ?Lead $lead = null, ?ProductContext $products = null, ?string $package = null, ?string $facts = null, ?string $memory = null): string
+    private function system(string $agency, string $business, ?string $instructions, string $question, Collection $library, ?ShopTools $shop = null, ?Lead $lead = null, ?ProductContext $products = null, ?string $package = null, ?string $facts = null, ?string $memory = null, ?PropertyTools $property = null): string
     {
         // Only the knowledge for every product plus the one this chat is about, so products never mix.
         $context = $this->knowledge->context($question, $products?->product()?->getKey());
@@ -795,6 +845,7 @@ class GenerateAiReply
             $facts,
             $memory,
             self::KNOWLEDGE_HEADER."\n".($context !== '' ? $context : '(kosong)'),
+            $property?->instructions(),
             $files !== '' ? "LAMPIRAN yang boleh dikirim (id | judul | folder | kapan dipakai):\n{$files}\nJika klien jelas membutuhkan salah satunya (misalnya menanyakan harga lalu price list ada), tambahkan di baris terakhir jawabanmu, setelah teks balasan: LAMPIRAN: <id>. Maksimal dua id dipisah koma. Jangan menulis id selain yang ada di daftar. Jika tidak perlu, jangan tulis baris itu. Lampirkan foto hanya untuk varian yang dipesan atau ditanyakan pembeli, dan jangan melampirkan foto saat merangkum atau mengonfirmasi pesanan kecuali pembeli memintanya." : null,
         ]));
     }

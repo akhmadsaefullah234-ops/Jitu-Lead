@@ -203,6 +203,13 @@ class Inbox extends Page
 
                 continue;
             }
+            if (in_array($action['type'] ?? null, ['needs', 'survey'], true)) {
+                ($outcome['status'] ?? null) === 'gagal'
+                    ? Notification::make()->title($action['type'] === 'survey' ? 'Jadwal survei belum tercatat' : 'Kebutuhan belum tercatat')->body($outcome['pesan'] ?? null)->warning()->send()
+                    : Notification::make()->title($action['type'] === 'survey' ? 'Jadwal survei dicatat' : 'Kebutuhan klien dicatat')->body($outcome['pesan'] ?? null)->success()->send();
+
+                continue;
+            }
             ($outcome['status'] ?? null) === 'tercatat'
                 ? Notification::make()->title('Pesanan dicatat di lead')->body($outcome['pesan'] ?? null)->success()->send()
                 : Notification::make()->title('Pesanan belum tercatat')->body($outcome['pesan'] ?? null)->warning()->send();

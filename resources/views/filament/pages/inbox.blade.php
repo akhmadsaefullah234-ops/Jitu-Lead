@@ -282,6 +282,12 @@
                                 @if (($action['type'] ?? null) === 'product' && ! ($action['applied'] ?? false))
                                     <div style="margin:.25rem 0;font-size:.8rem;color:#6b7280">Bila dikirim, produk lead diganti ke {{ implode(', ', $action['names'] ?? []) }}.</div>
                                 @endif
+                                @if (($action['type'] ?? null) === 'survey' && ! ($action['applied'] ?? false))
+                                    <div style="margin:.25rem 0;font-size:.8rem;color:#6b7280">Bila dikirim, survei dijadwalkan {{ \Carbon\CarbonImmutable::parse($action['survey_at'])->timezone((app(\App\Support\CurrentTenant::class)->get()?->timezone ?: config('app.timezone')))->locale('id')->translatedFormat('l, j F Y H.i') }} di {{ $action['survey_location'] ?? '' }}.</div>
+                                @endif
+                                @if (($action['type'] ?? null) === 'needs' && ! ($action['applied'] ?? false))
+                                    <div style="margin:.25rem 0;font-size:.8rem;color:#6b7280">Bila dikirim, kebutuhan klien dicatat di lead ({{ implode(', ', array_keys($action['changes'] ?? [])) }}).</div>
+                                @endif
                             @endforeach
                             @if ($aiDraft->suggestedAssets()->isNotEmpty())
                                 <div style="margin:.25rem 0;font-size:.8rem;color:#6b7280">Ikut terkirim: {{ $aiDraft->suggestedAssets()->pluck('title')->implode(', ') }}</div>
