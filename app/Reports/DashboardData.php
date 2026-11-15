@@ -331,6 +331,10 @@ class DashboardData
 
             return [
                 'ai_replies' => $activities('ai_reply')->count(),
+                // Chats (leads) the AI answered on its own, answers the property guard held, surveys the AI booked.
+                'ai_chats' => $activities('ai_reply')->distinct()->count('lead_id'),
+                'ai_held' => $activities('ai_held')->count(),
+                'ai_surveys' => $activities('ai_survey')->count(),
                 'drafts_waiting' => DB::table('ai_drafts')->where('tenant_id', $this->tenant()->getKey())->where('status', 'pending')->whereIn('conversation_id', clone $conversations)->count(),
                 'handoffs' => $activities('ai_handoff')->count(),
                 // Why the AI handed over (most frequent first), and the handovers nobody answered within 3 minutes.

@@ -19,5 +19,5 @@ return [
                 'highlight' => ['.fi-section:has(.fi-section-header-heading:text-is("Laporan untuk saya"))', '.fi-header button:has-text("Kirim contoh sekarang")']],
         ],
     ],
-    'tips' => ['Laporan toko yang memakai pengiriman otomatis juga memuat blok Pengiriman: resi otomatis kemarin, COD, gagal, belum dicetak, dan perlu tindakan. Bila WhatsApp tidak bisa dipakai, laporan dikirim ke email.'],
+    'tips' => ['Laporan toko yang memakai pengiriman otomatis juga memuat blok Pengiriman: resi otomatis kemarin, COD, gagal, belum dicetak, dan perlu tindakan. Bila WhatsApp tidak bisa dipakai, laporan dikirim ke email.', 'Blok <b>AI & otomatis</b> memuat balasan AI, jumlah chat yang dijawab AI, chat yang diserahkan ke tim, jawaban AI yang ditahan pemeriksa, dan survei yang dijadwalkan AI dari chat. Baris yang nol tidak ditampilkan.'],
 ];
