@@ -546,6 +546,7 @@ class StageAutomationTest extends TestCase
 
         $agency = $this->makeTenant('griya-prima');
         $this->actingInTenant($this->adminOf($agency), $agency);
-        $this->assertFalse(StageAutomationPage::canAccess(), 'only shops have stage automation');
+        $this->assertTrue(StageAutomationPage::canAccess(), 'a property agency has its own rules');
+        Livewire::test(StageAutomationPage::class)->assertSet('data.contacted.enabled', true)->assertDontSee('Format order lengkap');
     }
 }

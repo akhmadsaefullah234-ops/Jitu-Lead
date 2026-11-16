@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\Automation\PropertyStageAutomation;
 use App\Billing\PlanLimits;
 use App\Enums\MessageStatus;
 use App\Media\Library;
@@ -21,6 +22,7 @@ use App\WhatsApp\WhatsAppException;
 use App\WhatsApp\WhatsAppProvider;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * Sends one message to a lead, choosing the number itself (PRD F9). The route is
@@ -143,9 +145,10 @@ class SendWhatsAppMessage
             'welcome' => 'Pesan sambutan WhatsApp',
             'shipping' => 'Pesan status kiriman',
             'ai_quiet' => 'Sambutan jam malam AI',
+            PropertyStageAutomation::ORIGIN => 'Pesan terima kasih setelah survei',
             default => 'Chat WhatsApp',
         };
-        $automatic = in_array($this->origin, ['welcome', 'shipping', 'ai_quiet'], true);
+        $automatic = in_array($this->origin, ['welcome', 'shipping', 'ai_quiet', PropertyStageAutomation::ORIGIN], true);
 
         $conversation->lead->activities()->create([
             // An automatic welcome is not the owner answering, so it never counts as the lead being attended to.
@@ -156,6 +159,15 @@ class SendWhatsAppMessage
                 : $what.' terkirim lewat '.($message->channel?->isOfficial() ? 'nomor resmi' : 'gateway'),
             'meta' => ['message_id' => $message->getKey(), 'paid' => $message->is_paid],
         ]);
+
+        if ($message->status !== MessageStatus::Failed) {
+            try {
+                // A property agency's "Hubungi" task is done once the client really got an answer.
+                app(PropertyStageAutomation::class)->replied($conversation->lead, $message);
+            } catch (Throwable $e) {
+                report($e);
+            }
+        }
 
         return $message;
     }

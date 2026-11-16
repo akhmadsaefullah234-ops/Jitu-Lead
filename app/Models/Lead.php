@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Automation\PropertyStageAutomation;
 use App\Enums\Interest;
 use App\Enums\Need;
 use App\Enums\PaymentMethod;
@@ -24,6 +25,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 use LogicException;
+use Throwable;
 
 #[Fillable([
     'name', 'phone', 'email', 'lead_source_id', 'stage_id', 'owner_id', 'interest',
@@ -107,6 +109,16 @@ class Lead extends Model
 
         // A stage the agency mapped to an ad conversion, or becoming Hot, is reported to Meta/TikTok.
         static::saved(fn (Lead $lead) => PipelineConversions::saved($lead));
+        // A property client's needs written down (the AI's simpan_kebutuhan, an agent) can make the lead Terkualifikasi.
+        static::saved(function (Lead $lead) {
+            if ($lead->wasChanged(['purpose', 'domicile', 'budget_min', 'budget_max', 'payment_method']) && app(CurrentTenant::class)->get() !== null) {
+                try {
+                    app(PropertyStageAutomation::class)->needsChanged($lead);
+                } catch (Throwable $e) {
+                    report($e);
+                }
+            }
+        });
         // An address with a postal code or kelurahan is matched once to the shipping provider's place (queued).
         static::saved(function (Lead $lead) {
             if ($lead->wasChanged('shipping_address_parts') || ($lead->wasRecentlyCreated && filled($lead->shipping_address_parts))) {

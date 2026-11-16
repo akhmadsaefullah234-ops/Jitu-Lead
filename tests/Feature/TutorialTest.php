@@ -102,7 +102,7 @@ class TutorialTest extends TestCase
     public function test_the_property_chapters_are_there_and_replace_the_shop_ones_on_the_same_page(): void
     {
         $property = ['katalog-properti', 'pipeline-properti', 'menggali-kebutuhan', 'jadwal-survei', 'booking-closing', 'gugur',
-            'landing-properti', 'formulir-properti', 'follow-up-properti', 'dasbor-properti'];
+            'landing-properti', 'formulir-properti', 'follow-up-properti', 'dasbor-properti', 'otomatisasi-tahap-properti'];
 
         foreach ($property as $slug) {
             $this->assertSame(['properti'], Tutorials::all()[$slug]->industries, $slug);

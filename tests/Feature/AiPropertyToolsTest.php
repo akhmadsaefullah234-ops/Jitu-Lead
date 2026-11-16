@@ -51,7 +51,8 @@ class AiPropertyToolsTest extends TestCase
         parent::setUp();
         Carbon::setTestNow(CarbonImmutable::parse('2026-11-16 10:00', 'Asia/Makassar'));
         $this->tenant = $this->makeTenant('griya-pelangi');
-        $this->tenant->forceFill(['name' => 'Rumahkudotcom', 'timezone' => 'Asia/Makassar'])->save();
+        // An agency made before Otomatisasi tahap (nothing stored): the tools alone move nothing but the survey.
+        $this->tenant->forceFill(['name' => 'Rumahkudotcom', 'timezone' => 'Asia/Makassar', 'stage_automation' => null])->save();
         $this->channel = $this->in(fn () => WaChannel::create([
             'type' => WaChannelType::Gateway, 'name' => 'Susan', 'phone' => '+6289900000001',
             'status' => WaChannelStatus::Connected, 'position' => 1, 'ai_mode' => AiMode::Auto,

@@ -19,5 +19,8 @@ return [
                 'highlight' => ['.fi-modal-window:visible .fi-modal-content']],
         ],
     ],
-    'tips' => ['Tugas hilang dari daftar saat lead masuk tahap Menang atau Gugur. Jumlah tugas terlambat tampil sebagai angka merah di menu Tugas.'],
+    'tips' => [
+        'Tugas hilang dari daftar saat lead masuk tahap Menang atau Gugur. Jumlah tugas terlambat tampil sebagai angka merah di menu Tugas.',
+        'Agensi properti dengan Otomatisasi tahap menyala: tugas "Hubungi lewat WhatsApp atau telepon" selesai sendiri saat AI atau agen membalas, "Gali kebutuhan" selesai saat tujuan klien tercatat, dan chat yang diserahkan AI muncul sebagai tugas "Tanggapi chat yang diserahkan AI" beserta alasannya.',
+    ],
 ];
