@@ -4,6 +4,7 @@ namespace App\Actions;
 
 use App\Ai\AiSettings;
 use App\Ai\ReplyTiming;
+use App\Automation\PropertyStageAutomation;
 use App\Automation\StageAutomation;
 use App\Catalog\ProductMatcher;
 use App\Enums\AiMode;
@@ -182,6 +183,12 @@ class HandleInboundWhatsApp
 
         if ($message !== null) {
             $this->keepMedia($message, $fileBytes);
+
+            try {
+                app(PropertyStageAutomation::class)->replied($message->conversation->lead, $message);
+            } catch (Throwable $e) {
+                report($e);
+            }
         }
 
         return $message;
@@ -260,11 +267,15 @@ class HandleInboundWhatsApp
         }
     }
 
-    /** A shop's automatic stage moves (payment proof, a cancelled buyer writing again). Never costs the message. */
+    /**
+     * A shop's automatic stage moves (payment proof, a cancelled buyer writing again), or a property agency's (the
+     * client answering, a lost client writing again). Never costs the message.
+     */
     private function automate(Lead $lead, WaMessage $message): void
     {
         try {
             app(StageAutomation::class)->inbound($lead, $message);
+            app(PropertyStageAutomation::class)->inbound($lead, $message);
         } catch (Throwable $e) {
             report($e);
         }

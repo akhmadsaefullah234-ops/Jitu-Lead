@@ -32,7 +32,7 @@ class ReplySignals
     /** Signs that an answer talks about its own instructions instead of to the buyer. */
     private const INTERNAL = [
         '/\bHANDOFF\b/i',
-        '/\b(?:'.self::HANDOFF_TOOL.'|'.self::SILENT_TOOL.'|'.ShopTools::CHECK.'|'.ShopTools::RECORD.'|'.PropertyTools::NEEDS.'|'.PropertyTools::SURVEY.')\b/i',
+        '/\b(?:'.self::HANDOFF_TOOL.'|'.self::SILENT_TOOL.'|'.ShopTools::CHECK.'|'.ShopTools::RECORD.'|'.PropertyTools::NEEDS.'|'.PropertyTools::SURVEY.'|'.PropertyTools::CANCEL.')\b/i',
         '/\b(?:berdasarkan|sesuai(?:\s+dengan)?|menurut|mengikuti)\s+(?:aturan|instruksi|panduan|pedoman|arahan|prompt|pengetahuan|data\s+pengetahuan|informasi\s+yang\s+(?:saya|aku)\s+(?:miliki|punya))\b/iu',
         '/\b(?:aturan|instruksi|arahan)\s+(?:saya|sistem|yang\s+diberikan|yang\s+ada)\b/iu',
         '/\b(?:system\s+prompt|prompt\s+sistem|bagian\s+pengetahuan|catatan\s+sistem|PENGETAHUAN:|tool\s+call)\b/iu',

@@ -70,3 +70,9 @@ Aktivitas lead yang dicatat: `ai_needs` dan `ai_survey`. Keduanya dipakai ringka
   - jadwal dibuat setelah jam pengingat lewat (`leads.survey_scheduled_at`), karena klien baru saja dikonfirmasi.
 - **Balasan klien.** Pengingat tetap dikirim walaupun klien sudah membalas, berbeda dari follow-up biasa.
 - **Kuota paket.** Pengingat tidak dihitung ke batas jumlah follow-up paket.
+
+## batalkan_survei (with Otomatisasi tahap)
+
+A third tool, offered only when the agency has **Otomatisasi tahap > Klien membatalkan survei** on and the lead waits
+for its survey. It is refused unless the client's message says they cancel or postpone. Once the answer is sent, the
+lead goes back to Terkualifikasi and the date is cleared. See `docs/property-stage-automation.md`.

@@ -3,6 +3,8 @@
 namespace App\Ai;
 
 use App\Actions\MoveLeadToStage;
+use App\Automation\PropertyStageAutomation;
+use App\Automation\PropertyStages;
 use App\Enums\Need;
 use App\Enums\PaymentMethod;
 use App\Enums\StageRequirement;
@@ -27,6 +29,12 @@ class PropertyTools
     public const NEEDS = 'simpan_kebutuhan';
 
     public const SURVEY = 'jadwalkan_survei';
+
+    /** Only with Otomatisasi tahap > "Klien membatalkan survei" on, for a lead waiting for its survey. */
+    public const CANCEL = 'batalkan_survei';
+
+    /** Words that show the client called the survey off. */
+    private const CANCELLED = '/\b(?:batal|batalkan|dibatalkan|cancel|tidak\s+jadi|ga\s+jadi|gak\s+jadi|nggak\s+jadi|ngga\s+jadi|enggak\s+jadi|gk\s+jadi|tunda|ditunda|undur|diundur|reschedule)\b/iu';
 
     /** cara_bayar as the model writes it => the lead's payment method. */
     public const PAYMENTS = ['kpr' => PaymentMethod::Kpr, 'tunai_keras' => PaymentMethod::Cash, 'tunai_bertahap' => PaymentMethod::Installment];
@@ -96,7 +104,26 @@ class PropertyTools
             ];
         }
 
+        if ($this->cancels()) {
+            $tools[] = [
+                'name' => self::CANCEL,
+                'description' => 'Catat bahwa klien membatalkan atau menunda survei yang sudah dijadwalkan, HANYA bila klien sendiri yang menyampaikannya di chat ini. '
+                    .'Bila klien ingin pindah ke hari atau jam lain yang sudah ia sebut, pakai '.self::SURVEY.', bukan alat ini.',
+                'input_schema' => ['type' => 'object', 'properties' => [
+                    'alasan' => ['type' => 'string', 'description' => 'Alasan singkat yang klien sebut, bila ada'],
+                ]],
+            ];
+        }
+
         return $tools;
+    }
+
+    /** The survey can be called off from the chat: the rule is on and the lead waits for its survey. */
+    private function cancels(): bool
+    {
+        $automation = app(PropertyStageAutomation::class);
+
+        return $this->lead->survey_at !== null && $automation->on('survey_change') && $automation->stages()->is($this->lead->stage, PropertyStages::SURVEY);
     }
 
     public function instructions(): string
@@ -111,6 +138,7 @@ class PropertyTools
                     .'Setelah tercatat, ulangi konfirmasinya ke klien: nama, hari dan tanggal, jam, dan lokasi. '
                     .'Sekarang '.$now->translatedFormat('l, j F Y').' pukul '.$now->format('H.i').' (zona waktu agensi).'
                 : null,
+            $this->cancels() ? 'Bila klien membatalkan atau menunda survei tanpa menyebut jadwal baru, panggil '.self::CANCEL.', lalu sampaikan bahwa jadwalnya dibatalkan dan tim siap menjadwalkan ulang kapan saja.' : null,
         ]));
     }
 
@@ -121,6 +149,7 @@ class PropertyTools
             return match ($name) {
                 self::NEEDS => $this->needs($input),
                 self::SURVEY => $this->survey($input),
+                self::CANCEL => $this->cancel($input),
                 default => ['status' => 'error', 'pesan' => 'Tool tidak dikenal.'],
             };
         } catch (Throwable $e) {
@@ -200,6 +229,22 @@ class PropertyTools
         ]);
     }
 
+    private function cancel(array $input): array
+    {
+        if (! $this->cancels()) {
+            return ['status' => 'ditolak', 'pesan' => 'Lead ini tidak punya jadwal survei yang bisa dibatalkan.'];
+        }
+
+        if (preg_match(self::CANCELLED, $this->clientSaid) !== 1) {
+            return ['status' => 'ditolak', 'pesan' => 'Klien belum menyatakan membatalkan atau menunda survei. Jangan membatalkan sendiri.'];
+        }
+
+        $this->actions = array_values(array_filter($this->actions, fn (array $a) => ! in_array($a['type'], ['survey', 'survey_cancel'], true)));
+        $this->actions[] = ['type' => 'survey_cancel', 'reason' => self::text($input['alasan'] ?? null, 120)];
+
+        return ['status' => 'akan_dibatalkan', 'pesan' => 'Sampaikan ke klien bahwa jadwal survei dibatalkan, tanpa menyalahkan, dan tawarkan menjadwalkan ulang kapan saja ia siap.'];
+    }
+
     private function survey(array $input): array
     {
         $stage = self::surveyStage();
@@ -239,7 +284,7 @@ class PropertyTools
         }
 
         $local = $checked['survey_at']->timezone($this->timezone())->locale('id');
-        $this->actions = array_values(array_filter($this->actions, fn (array $a) => $a['type'] !== 'survey'));
+        $this->actions = array_values(array_filter($this->actions, fn (array $a) => ! in_array($a['type'], ['survey', 'survey_cancel'], true)));
         $this->actions[] = ['type' => 'survey', 'survey_at' => $checked['survey_at']->toIso8601String(), 'survey_location' => $checked['survey_location']];
 
         return [
@@ -270,6 +315,10 @@ class PropertyTools
             $lead->activities()->create(['type' => 'ai_needs', 'body' => 'Kebutuhan klien dicatat dari chat ('.$by.'): '.implode(', ', array_keys($changes)), 'meta' => ['changes' => $changes]]);
 
             return ['status' => 'tercatat', 'pesan' => 'Kebutuhan dicatat: '.implode(', ', array_keys($changes))];
+        }
+
+        if ($action['type'] === 'survey_cancel') {
+            return app(PropertyStageAutomation::class)->surveyCancelled($lead, $by, $action['reason'] ?? null);
         }
 
         $details = ['survey_at' => CarbonImmutable::parse($action['survey_at'])->timezone((string) config('app.timezone')), 'survey_location' => $action['survey_location']];

@@ -21,6 +21,7 @@ use App\Ai\PropertyTools;
 use App\Ai\ReplySignals;
 use App\Ai\ShopTools;
 use App\Ai\VoiceNoteTranscript;
+use App\Automation\PropertyStageAutomation;
 use App\Billing\PlanLimits;
 use App\Catalog\ProductMatcher;
 use App\Enums\AiMode;
@@ -168,6 +169,11 @@ class GenerateAiReply
 
         if ($this->handoff->matches($text, $tenant->ai_handoff_keywords)) {
             return $this->handoffTo($inbound, 'Klien meminta bicara dengan agen atau menyebut hal sensitif');
+        }
+
+        // Otomatisasi tahap (property): a client ready to book is a person's job, with a task.
+        if (PropertyStageAutomation::wantsBooking($text) && app(PropertyStageAutomation::class)->on('booking_ready')) {
+            return $this->handoffTo($inbound, PropertyStageAutomation::BOOKING_REASON);
         }
 
         // The plan's quota is checked before the model is called, so an exhausted agency costs nothing.
@@ -322,7 +328,7 @@ class GenerateAiReply
             try {
                 ['text' => $answer, 'calls' => $calls, 'trace' => $trace] = $this->ai->converse(
                     implode("\n\n", array_filter([$base, $quote?->instructions(), ...$notes, $retry])), $history, $tools,
-                    fn (string $name, array $input) => in_array($name, [PropertyTools::NEEDS, PropertyTools::SURVEY], true) && $property !== null
+                    fn (string $name, array $input) => in_array($name, [PropertyTools::NEEDS, PropertyTools::SURVEY, PropertyTools::CANCEL], true) && $property !== null
                         ? $property->run($name, $input)
                         : ($shop?->run($name, $input) ?? ['status' => 'error', 'pesan' => 'Tool tidak dikenal.']),
                     self::MAX_TOKENS, self::MAX_ROUNDS, stopTools: [ReplySignals::HANDOFF_TOOL, ReplySignals::SILENT_TOOL],
@@ -842,7 +848,7 @@ class GenerateAiReply
                 $actions[$i]['outcome'] = $this->applyProduct($lead->refresh(), (array) ($action['product_ids'] ?? []), $by);
             }
 
-            if (in_array($action['type'] ?? null, ['needs', 'survey'], true) && ! ($action['applied'] ?? false)) {
+            if (in_array($action['type'] ?? null, ['needs', 'survey', 'survey_cancel'], true) && ! ($action['applied'] ?? false)) {
                 $actions[$i]['applied'] = true;
 
                 try {
@@ -942,6 +948,15 @@ class GenerateAiReply
         // Arahan AI > "Jeda setelah diserahkan": a chat handed to a person stays theirs for a while (off by default).
         if ($status === AiDraft::HANDOFF && ($minutes = AiSettings::of($this->current->get())->handoffPauseMinutes()) > 0) {
             $inbound->conversation->pauseAiFor($minutes * 60);
+        }
+
+        // Otomatisasi tahap (property): the chat becomes the agent's task, with the reason.
+        if ($status === AiDraft::HANDOFF && ($lead = $inbound->conversation->lead) !== null) {
+            try {
+                app(PropertyStageAutomation::class)->handedOff($lead, (string) ($reason ?? 'perlu dicek agen'));
+            } catch (Throwable $e) {
+                report($e);
+            }
         }
 
         return AiDraft::query()->create([

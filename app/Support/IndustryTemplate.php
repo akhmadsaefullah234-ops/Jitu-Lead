@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use App\Automation\PropertyStageAutomationSettings;
+use App\Automation\PropertyStages;
 use App\Automation\RetailStages;
 use App\Enums\StageType;
 use App\Models\Lead;
@@ -31,6 +33,7 @@ class IndustryTemplate
                 $full ? $this->replace($tenant) : null;
                 $this->add($tenant, $to);
                 $this->aiTexts($tenant, $from, $to);
+                $full ? $this->automation($tenant) : null;
 
                 return $full;
             });
@@ -45,6 +48,18 @@ class IndustryTemplate
             'ai_instructions' => $tenant->industry()->config('ai_instructions'),
             'ai_handoff_keywords' => implode(', ', $tenant->industry()->config('handoff_keywords')),
         ])->save();
+        $this->automation($tenant);
+    }
+
+    /**
+     * A new property agency (or one switched to property before it had leads) starts with Otomatisasi tahap on.
+     * An agency that already chose keeps its choice.
+     */
+    private function automation(Tenant $tenant): void
+    {
+        if (PropertyStageAutomationSettings::appliesTo($tenant) && ! PropertyStageAutomationSettings::of($tenant)->chosen()) {
+            PropertyStageAutomationSettings::store($tenant, PropertyStageAutomationSettings::defaults());
+        }
     }
 
     private function replace(Tenant $tenant): void
@@ -115,17 +130,18 @@ class IndustryTemplate
 
     /**
      * Remembers which step of the template each stage is (stages.template_key), so automatic moves still find
-     * "Menunggu pembayaran" after the agency renames it. Stages that already have a key keep it.
+     * "Menunggu pembayaran" or "Terkualifikasi" after the agency renames it. Stages that already have a key keep it.
      */
     private function markTemplateStages(Tenant $tenant, Industry $industry): void
     {
-        if ($industry->key !== 'retail') {
+        if (! in_array($industry->key, ['retail', 'properti'], true)) {
             return;
         }
 
         $stages = $tenant->stages()->orderBy('position')->orderBy('id')->get();
         $taken = $stages->pluck('template_key')->filter()->all();
-        $found = RetailStages::match($stages->whereNull('template_key')->map(fn ($s) => ['id' => $s->id, 'name' => $s->name, 'type' => $s->type->value])->values()->all());
+        $rows = $stages->whereNull('template_key')->map(fn ($s) => ['id' => $s->id, 'name' => $s->name, 'type' => $s->type->value, 'requirement' => $s->requirement?->value])->values()->all();
+        $found = $industry->key === 'retail' ? RetailStages::match($rows) : PropertyStages::match($rows);
 
         foreach ($found as $key => $id) {
             in_array($key, $taken, true) ?: $stages->firstWhere('id', $id)->forceFill(['template_key' => $key])->save();
