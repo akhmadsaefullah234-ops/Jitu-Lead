@@ -22,6 +22,7 @@ use App\Models\WaConversation;
 use App\Models\WaMessage;
 use App\Push\Alerts;
 use App\Support\CurrentTenant;
+use App\Tracking\PipelineConversions;
 use App\WhatsApp\ChannelAlerts;
 use App\WhatsApp\InboundMessage;
 use App\WhatsApp\MediaStore;
@@ -276,6 +277,13 @@ class HandleInboundWhatsApp
         try {
             app(StageAutomation::class)->inbound($lead, $message);
             app(PropertyStageAutomation::class)->inbound($lead, $message);
+        } catch (Throwable $e) {
+            report($e);
+        }
+
+        try {
+            // Pelacakan iklan > "Klien membalas pertama kali": a Contact event, once per lead, when switched on.
+            app(PipelineConversions::class)->clientReplied($lead, $message);
         } catch (Throwable $e) {
             report($e);
         }

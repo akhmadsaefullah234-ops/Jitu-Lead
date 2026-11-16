@@ -8,6 +8,7 @@ use App\Automation\RetailStages;
 use App\Enums\StageType;
 use App\Models\Lead;
 use App\Models\Tenant;
+use App\Tracking\PropertyAdDefaults;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -52,14 +53,17 @@ class IndustryTemplate
     }
 
     /**
-     * A new property agency (or one switched to property before it had leads) starts with Otomatisasi tahap on.
-     * An agency that already chose keeps its choice.
+     * A new property agency (or one switched to property before it had leads) starts with Otomatisasi tahap on and
+     * Jitu's ad-tracking flow. An agency that already chose keeps its choice.
      */
     private function automation(Tenant $tenant): void
     {
         if (PropertyStageAutomationSettings::appliesTo($tenant) && ! PropertyStageAutomationSettings::of($tenant)->chosen()) {
             PropertyStageAutomationSettings::store($tenant, PropertyStageAutomationSettings::defaults());
         }
+
+        // Pelacakan iklan with Jitu's property flow, waiting for a pixel and token; nothing goes out before.
+        PropertyAdDefaults::provision($tenant);
     }
 
     private function replace(Tenant $tenant): void

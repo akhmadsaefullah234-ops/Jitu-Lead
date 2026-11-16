@@ -8,11 +8,13 @@ use App\Filament\Support\NoAutofill;
 use App\Jobs\SendConversionEvents;
 use App\Models\Stage;
 use App\Models\TrackingSetting;
+use App\Models\WaChannel;
 use App\Support\CurrentTenant;
 use App\Support\Industry;
 use App\Tracking\ConversionPayload;
 use App\Tracking\PipelineConversions;
 use App\Tracking\PixelEvents;
+use App\Tracking\PropertyAdDefaults;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
@@ -23,6 +25,7 @@ use Filament\Pages\Page;
 use Filament\Schemas\Components\Section;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -96,12 +99,12 @@ class TrackingSettings extends Page
             .(isset($last['event']) ? ' ('.$last['event'].(isset($last['status']) ? ', HTTP '.$last['status'] : '').')' : (isset($last['status']) ? ' (HTTP '.$last['status'].')' : ''));
     }
 
-    /** @return array{enabled: bool, hot: ?string, stages: array<int, string>, messaging: bool} */
+    /** @return array{enabled: bool, hot: ?string, stages: array<int, string>, messaging: bool, contact: bool} */
     public function pipeline(): array
     {
         $s = $this->settings();
 
-        return $s?->pipeline_events !== null ? $s->pipeline() : PipelineConversions::defaults(Industry::current()->key);
+        return $s?->pipeline_events !== null ? $s->pipeline() : (TrackingSetting::starting() ?? PipelineConversions::defaults(Industry::current()->key));
     }
 
     /** "Order masuk: InitiateCheckout · Hot: Lead" for the page, or why nothing is sent. */
@@ -112,6 +115,7 @@ class TrackingSettings extends Page
         $parts = array_filter([
             ...array_map(fn ($id, $event) => isset($names[$id]) ? $names[$id].': '.$event : null, array_keys($p['stages']), $p['stages']),
             $p['hot'] ? 'Lead ditandai Hot: '.$p['hot'] : null,
+            ($p['contact'] ?? false) ? 'Klien membalas pertama kali: Contact' : null,
         ]);
 
         return ($p['enabled'] ? 'Aktif. ' : 'Mati. ').($parts ? implode(' · ', $parts) : 'Belum ada tahap yang dipetakan.');
@@ -186,6 +190,7 @@ class TrackingSettings extends Page
                     Notification::make()->title('Pelacakan disimpan')->success()->send();
                 }),
             $this->pipelineAction(),
+            $this->jituDefaultsAction(),
             $this->testAction(),
         ];
     }
@@ -201,7 +206,7 @@ class TrackingSettings extends Page
             ->fillForm(function () {
                 $p = $this->pipeline();
 
-                return ['enabled' => $p['enabled'], 'hot' => $p['hot'] ?? '', 'messaging' => $p['messaging'],
+                return ['enabled' => $p['enabled'], 'hot' => $p['hot'] ?? '', 'messaging' => $p['messaging'], 'contact' => $p['contact'] ?? false,
                     'stages' => collect(Stage::query()->pluck('id'))->mapWithKeys(fn ($id) => ['s'.$id => $p['stages'][$id] ?? ''])->all()];
             })
             ->schema(fn () => [
@@ -211,6 +216,8 @@ class TrackingSettings extends Page
                 Section::make('Tahap → event')->description('Event dikirim saat lead masuk ke tahap itu, baik dipindah agen, otomatisasi tahap, maupun AI.')
                     ->schema(Stage::query()->orderBy('position')->orderBy('id')->get()->map(fn (Stage $stage) => Select::make('stages.s'.$stage->getKey())->label($stage->name)
                         ->options($none + PipelineConversions::EVENTS)->native(false)->selectablePlaceholder(false))->all()),
+                Toggle::make('contact')->label('Klien membalas pertama kali → Contact')
+                    ->helperText('Sekali per lead, saat klien menulis setelah pesan pertama dari kita. Sinyal percakapan dua arah yang kuat untuk iklan Klik ke WhatsApp.'),
                 Toggle::make('messaging')->label('Conversions API for Business Messaging (beta)')
                     ->helperText('Juga mengirim event ke dataset WhatsApp Business untuk chat dari iklan Klik ke WhatsApp yang masuk lewat nomor API resmi (butuh WhatsApp Business Account ID di Saluran WhatsApp). Tidak berlaku untuk nomor scan QR.'),
             ])
@@ -227,10 +234,76 @@ class TrackingSettings extends Page
 
                 $setting->fill(['pipeline_events' => [
                     'enabled' => (bool) ($data['enabled'] ?? false), 'hot' => $valid($data['hot'] ?? null), 'stages' => $stages, 'messaging' => (bool) ($data['messaging'] ?? false),
+                    'contact' => (bool) ($data['contact'] ?? false),
                 ]])->save();
 
                 Notification::make()->title('Event dari pipeline disimpan')->success()->send();
+
+                if ((bool) ($data['messaging'] ?? false) && ! self::hasCloudApiNumber()) {
+                    Notification::make()->title('Business Messaging tidak berlaku untuk nomor Anda')->body(self::MESSAGING_WARNING)->warning()->persistent()->send();
+                }
             });
+    }
+
+    /** Shown when Business Messaging is on but no number can use it. */
+    public const MESSAGING_WARNING = 'Conversions API for Business Messaging hanya berlaku untuk nomor WhatsApp Business API resmi (Cloud API) dengan WhatsApp Business Account ID. Nomor scan QR (gateway) tidak bisa memakainya, jadi tidak ada event yang terkirim lewat jalur ini. Matikan, dan andalkan Conversions API biasa serta label WhatsApp.';
+
+    /** Whether the agency has a Cloud API number that Business Messaging can use. */
+    public static function hasCloudApiNumber(): bool
+    {
+        return WaChannel::query()->get()->contains(fn (WaChannel $c) => $c->isOfficial() && filled($c->credential('waba_id')));
+    }
+
+    /** "Samakan dengan bawaan Jitu" (property agencies): the same flow as a shop, with the differences listed first. */
+    private function jituDefaultsAction(): Action
+    {
+        return Action::make('jituDefaults')->label('Samakan dengan bawaan Jitu')->icon(Heroicon::OutlinedSparkles)->color('gray')
+            ->visible(fn () => $this->lockedReason() === null && Industry::current()->key === 'properti')
+            ->modalHeading('Samakan dengan bawaan Jitu')->modalSubmitActionLabel('Samakan')
+            ->modalDescription(function () {
+                $diff = PropertyAdDefaults::differences($this->settings());
+
+                if ($diff === []) {
+                    return 'Pengaturan Anda sudah sama dengan bawaan Jitu.';
+                }
+
+                $rows = implode('', array_map(fn (array $d) => '<li><b>'.e($d[0]).'</b>: '.e($d[1]).' → '.e($d[2]).'</li>', $diff));
+
+                return new HtmlString('Yang berubah ('.count($diff).'):<ul style="list-style:disc;padding-left:1.25rem;margin:.5rem 0">'.$rows.'</ul>'
+                    .'Pixel ID, token, dan pengaturan TikTok dan Google tidak diubah. Event yang sudah terkirim tidak dikirim ulang.');
+            })
+            ->action(function () {
+                PropertyAdDefaults::apply($this->settings());
+                Notification::make()->title('Pelacakan disamakan dengan bawaan Jitu')->success()->send();
+            });
+    }
+
+    /**
+     * Sends one test event to every platform with a test event code. Returns the platforms it went to, or null when
+     * none is ready; throws when sending failed.
+     *
+     * @return list<string>|null
+     */
+    public static function sendTestEvent(string $event): ?array
+    {
+        $settings = TrackingSetting::current();
+        $ready = array_keys(array_filter([
+            'Meta' => filled($settings?->meta_pixel_id) && filled($settings?->credential('meta_capi_token')) && filled($settings?->credential('meta_test_event_code')),
+            'TikTok' => filled($settings?->tiktok_pixel_id) && filled($settings?->credential('tiktok_events_token')) && filled($settings?->credential('tiktok_test_event_code')),
+        ]));
+
+        if ($ready === []) {
+            return null;
+        }
+
+        $payload = new ConversionPayload('test-'.Str::lower(Str::random(12)), time(), null, null, PipelineConversions::phoneHash('081200000000'), null, null, [],
+            ['meta' => $event, 'tiktok' => PipelineConversions::TIKTOK[$event] ?? null],
+            ['action_source' => 'system_generated', 'test' => true, 'user' => ['country' => hash('sha256', 'id'), 'external_id' => hash('sha256', 'uji')],
+                'custom' => ['currency' => PixelEvents::CURRENCY, 'value' => 100000]]);
+
+        SendConversionEvents::dispatchSync((int) app(CurrentTenant::class)->id(), $payload->toArray());
+
+        return $ready;
     }
 
     private function testAction(): Action
@@ -241,30 +314,19 @@ class TrackingSettings extends Page
             ->modalDescription('Dikirim hanya ke platform yang kode uji event-nya diisi di "Atur pelacakan", sehingga muncul di tab Test Events dan tidak dihitung sebagai konversi.')
             ->schema([Select::make('event')->label('Event')->options(PipelineConversions::EVENTS)->default('Lead')->required()->native(false)])
             ->action(function (array $data) {
-                $settings = TrackingSetting::current();
-                $ready = array_keys(array_filter([
-                    'Meta' => filled($settings?->meta_pixel_id) && filled($settings?->credential('meta_capi_token')) && filled($settings?->credential('meta_test_event_code')),
-                    'TikTok' => filled($settings?->tiktok_pixel_id) && filled($settings?->credential('tiktok_events_token')) && filled($settings?->credential('tiktok_test_event_code')),
-                ]));
+                $event = (string) $data['event'];
 
-                if ($ready === []) {
-                    Notification::make()->title('Belum ada platform yang siap diuji')->body('Isi Pixel ID, token, dan kode uji event (dari tab Test Events) di "Atur pelacakan" dulu.')->warning()->send();
+                try {
+                    $ready = self::sendTestEvent($event);
+                } catch (Throwable $e) {
+                    Notification::make()->title('Event uji gagal dikirim')->body('Periksa Pixel ID dan token. Status terakhir tiap platform tampil di kartu di bawah.')->danger()->send();
 
                     return;
                 }
 
-                $event = (string) $data['event'];
-                $payload = new ConversionPayload('test-'.Str::lower(Str::random(12)), time(), null, null, PipelineConversions::phoneHash('081200000000'), null, null, [],
-                    ['meta' => $event, 'tiktok' => PipelineConversions::TIKTOK[$event] ?? null],
-                    ['action_source' => 'system_generated', 'test' => true, 'user' => ['country' => hash('sha256', 'id'), 'external_id' => hash('sha256', 'uji')],
-                        'custom' => ['currency' => PixelEvents::CURRENCY, 'value' => 100000]]);
-
-                try {
-                    SendConversionEvents::dispatchSync((int) app(CurrentTenant::class)->id(), $payload->toArray());
-                    Notification::make()->title('Event uji '.$event.' dikirim ke '.implode(' dan ', $ready))->body('Periksa tab Test Events di Events Manager.')->success()->send();
-                } catch (Throwable $e) {
-                    Notification::make()->title('Event uji gagal dikirim')->body('Periksa Pixel ID dan token. Status terakhir tiap platform tampil di kartu di bawah.')->danger()->send();
-                }
+                $ready === null
+                    ? Notification::make()->title('Belum ada platform yang siap diuji')->body('Isi Pixel ID, token, dan kode uji event (dari tab Test Events) di "Atur pelacakan" dulu.')->warning()->send()
+                    : Notification::make()->title('Event uji '.$event.' dikirim ke '.implode(' dan ', $ready))->body('Periksa tab Test Events di Events Manager.')->success()->send();
             });
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\WhatsApp;
 
+use App\Automation\PropertyStages;
 use App\Automation\RetailStages;
 use App\Enums\Interest;
 use App\Enums\StageRequirement;
@@ -197,8 +198,8 @@ class BusinessLabels
     /**
      * Off, only chats from ads, and per industry:
      * shops: Hot = Prospek, "Order masuk" = Order baru, "Dikemas & dikirim" (transfer, or payment unknown) or
-     * "Selesai" (cash on delivery) = Lunas; property: Hot or the survey stage = Prospek, the booking stage = Order
-     * baru, the won stage (akad/closing) = Lunas. Must run inside the tenant.
+     * "Selesai" (cash on delivery) = Lunas; property: Hot, Terkualifikasi or Jadwal survei = Prospek, Booking = Order
+     * baru, Closing = Lunas. Must run inside the tenant.
      *
      * @return array{enabled: bool, ads_only: bool, rules: list<array{name: string, hot: bool, stages: list<int>, cod_stages: list<int>}>}
      */
@@ -216,6 +217,13 @@ class BusinessLabels
             $rules[1]['stages'] = array_values(array_filter([$id(RetailStages::ORDER)]));
             $rules[2]['stages'] = array_values(array_filter([$id(RetailStages::SHIPPING), $id(RetailStages::DONE)]));
             $rules[2]['cod_stages'] = array_values(array_filter([$id(RetailStages::DONE)]));
+        } elseif ($industry === 'properti') {
+            // The same flow as the pipeline events (App\Tracking\PropertyAdDefaults).
+            $steps = new PropertyStages;
+            $id = fn (string $key) => $steps->stage($key)?->getKey();
+            $rules[0]['stages'] = array_values(array_filter([$id(PropertyStages::QUALIFIED), $id(PropertyStages::SURVEY)]));
+            $rules[1]['stages'] = array_values(array_filter([$id(PropertyStages::BOOKING)]));
+            $rules[2]['stages'] = array_values(array_filter([$id(PropertyStages::CLOSING)]));
         } else {
             $stages = Stage::query()->orderBy('position')->orderBy('id')->get();
             $survey = $stages->first(fn (Stage $s) => $s->requirement === StageRequirement::Survey || str_contains(mb_strtolower($s->name), 'survei'));
@@ -282,6 +290,33 @@ class BusinessLabels
         }
 
         return null;
+    }
+
+    /** What the owner does when the standard labels are not in the account yet (shown on the page and after loading). */
+    public const GUIDE = 'Di WhatsApp Bisnis, label standar ada di bagian Saran dan baru menjadi Daftar Anda setelah dipakai sekali. Buka satu chat UJI (bukan pelanggan), centang Prospek, Order baru, dan Lunas, pilih Selesai, lalu klik Muat label dari WhatsApp di sini.';
+
+    /** WhatsApp's own chat lists, which a gateway with an old copy of the account shows instead of the business labels. */
+    private const LISTS = ['grup', 'groups', 'favorit', 'favorites', 'favourites', 'belum dibaca', 'unread'];
+
+    /** Whether Meta reads this label as a Click-to-WhatsApp signal: only Prospek, Order baru and Lunas (or their other names). */
+    public static function isSignal(string $name): bool
+    {
+        $n = trim((string) preg_replace('/\s+/u', ' ', mb_strtolower($name)));
+
+        return collect(self::SAME)->contains(fn (array $group) => in_array($n, $group, true));
+    }
+
+    /**
+     * Whether what the gateway knows looks like an old copy of the account: only WhatsApp's own lists (Grup, Favorit,
+     * Belum dibaca), not a single business label.
+     *
+     * @param  list<string>  $names
+     */
+    public static function staleList(array $names): bool
+    {
+        $names = array_map(fn ($n) => trim((string) preg_replace('/\s+/u', ' ', mb_strtolower($n))), $names);
+
+        return $names !== [] && array_diff($names, self::LISTS) === [];
     }
 
     /**

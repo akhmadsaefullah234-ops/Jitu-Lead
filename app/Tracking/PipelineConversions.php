@@ -14,6 +14,7 @@ use App\Models\Stage;
 use App\Models\Tenant;
 use App\Models\TrackingSetting;
 use App\Models\WaChannel;
+use App\Models\WaMessage;
 use App\Support\CurrentTenant;
 use App\Support\PhoneNumber;
 use Illuminate\Support\Facades\DB;
@@ -272,6 +273,13 @@ class PipelineConversions
             $count = $product ? max(1, (int) ($lead->quantity ?? 1)) : null;
         }
 
+        // A property deal: the transaction value an agent entered at Booking or Closing, and the type (or project) sold.
+        if (app(CurrentTenant::class)->get()?->industry()->key === 'properti' && (int) $lead->deal_value > 0) {
+            $value = (int) $lead->deal_value;
+            $count = 1;
+            $name = trim(implode(' ', array_filter([$lead->property?->name, filled($lead->unit) ? '('.$lead->unit.')' : null]))) ?: $name;
+        }
+
         return array_filter([
             'currency' => PixelEvents::CURRENCY,
             'value' => $value,
@@ -316,23 +324,29 @@ class PipelineConversions
     /**
      * The default mapping for an agency's stages; switched off until the agency turns it on.
      * Shops: Hot = Lead, "Order masuk" = InitiateCheckout, "Dikemas & dikirim" = Purchase.
-     * Property: the survey stage = Schedule, akad/closing = Purchase.
+     * Property (App\Tracking\PropertyAdDefaults, the same flow as a shop's): Lead baru = Lead (when the lead is made),
+     * Terkualifikasi = QualifiedLead, Jadwal survei = Schedule, Booking = InitiateCheckout, Closing = Purchase,
+     * Hot = QualifiedLead, the client's first reply = Contact.
      *
-     * @return array{enabled: bool, hot: ?string, stages: array<int, string>, messaging: bool}
+     * @return array{enabled: bool, hot: ?string, stages: array<int, string>, messaging: bool, contact: bool}
      */
     public static function defaults(?string $industry): array
     {
-        $stages = Stage::query()->orderBy('position')->orderBy('id')->get();
-        $map = [];
+        if ($industry === 'properti') {
+            return ['enabled' => false] + PropertyAdDefaults::pipeline();
+        }
 
-        if ($industry === 'retail') {
-            $retail = new RetailStages;
-            foreach ([RetailStages::ORDER => 'InitiateCheckout', RetailStages::SHIPPING => 'Purchase'] as $key => $event) {
-                if ($stage = $retail->stage($key)) {
-                    $map[$stage->getKey()] = $event;
-                }
+        $map = [];
+        $retail = new RetailStages;
+
+        foreach ([RetailStages::ORDER => 'InitiateCheckout', RetailStages::SHIPPING => 'Purchase'] as $key => $event) {
+            if ($industry === 'retail' && ($stage = $retail->stage($key))) {
+                $map[$stage->getKey()] = $event;
             }
-        } else {
+        }
+
+        if ($industry !== 'retail') {
+            $stages = Stage::query()->orderBy('position')->orderBy('id')->get();
             $survey = $stages->first(fn (Stage $s) => $s->requirement === StageRequirement::Survey || str_contains(mb_strtolower($s->name), 'survei'));
             $won = $stages->first(fn (Stage $s) => preg_match('/akad|closing/i', $s->name)) ?? $stages->first(fn (Stage $s) => $s->type === StageType::Won);
 
@@ -344,7 +358,29 @@ class PipelineConversions
             }
         }
 
-        return ['enabled' => false, 'hot' => $industry === 'retail' ? 'Lead' : null, 'stages' => $map, 'messaging' => false];
+        return ['enabled' => false, 'hot' => $industry === 'retail' ? 'Lead' : null, 'stages' => $map, 'messaging' => false, 'contact' => false];
+    }
+
+    /**
+     * Pelacakan iklan > Event dari pipeline > "Klien membalas pertama kali": a Contact event the first time the client
+     * writes after a message from us, the two-way chat a Click-to-WhatsApp campaign can optimise for. Once per lead.
+     * Must run inside the tenant.
+     */
+    public function clientReplied(Lead $lead, WaMessage $message): void
+    {
+        $settings = TrackingSetting::active();
+        $pipeline = $settings?->pipeline();
+
+        if ($pipeline === null || ! $pipeline['enabled'] || ! $pipeline['contact'] || ! $this->canSend($settings, $pipeline) || $message->direction !== 'in') {
+            return;
+        }
+
+        $ours = WaMessage::query()->where('conversation_id', $message->conversation_id)->where('direction', 'out')->where('is_intro', false)
+            ->where('id', '<', $message->getKey())->exists();
+
+        if ($ours) {
+            $this->send($lead->loadMissing(['property', 'source', 'conversation.lastInboundChannel']), 'Contact', 'reply', $message->sent_at?->getTimestamp() ?? time(), $pipeline);
+        }
     }
 
     /** Whether any route could send: a Meta or TikTok pixel with its token, or the business messaging beta. */

@@ -15,7 +15,33 @@ Per tahap pipeline agensi dipilih satu event Meta: tidak ada, `Lead`, `Qualified
 | Industri | Bawaan (mati sampai agensi menyalakan) |
 | --- | --- |
 | Toko (retail) | Hot = `Lead`, Order masuk = `InitiateCheckout`, Dikemas & dikirim = `Purchase` |
-| Properti | Jadwal survei = `Schedule`, Akad/Closing = `Purchase` |
+| Properti | Lead baru = `Lead`, Terkualifikasi = `QualifiedLead`, Jadwal survei = `Schedule`, Booking/UTJ = `InitiateCheckout`, Closing = `Purchase`; Hot = `QualifiedLead`; Contact nyala |
+
+Juga **"Klien membalas pertama kali → Contact"** (pilihan, bawaan mati kecuali bawaan properti Jitu): dikirim
+sekali per lead saat klien membalas setelah pesan pertama kita (bukan pesan pembuka otomatis), trigger `reply`.
+
+### Bawaan Jitu untuk agensi properti
+
+`App\Tracking\PropertyAdDefaults`, alurnya sama dengan toko: event formulir/landing `Lead`, lalu tahap seperti
+tabel di atas, Hot = `QualifiedLead`, Contact nyala, Conversions API for Business Messaging mati (hanya jalan
+untuk nomor Cloud API; kebanyakan agensi memakai gateway QR).
+
+- **Agensi properti BARU** (dibuat lewat templat industri) langsung memakai bawaan ini: ditandai
+  `tenants.pipeline_settings.ad_defaults = jitu`, tidak ada baris yang ditulis di `tracking_settings`, dan tidak ada
+  event yang keluar sebelum Pixel ID dan token diisi. Simpanan pertama agensi di *Event dari pipeline* menyimpannya.
+- **Agensi yang sudah ada tidak berubah.** Pemetaan yang pernah disimpan tetap dipakai. Tombol
+  **Samakan dengan bawaan Jitu** (hanya untuk properti) menampilkan daftar perbedaan (sekarang → sesudah) lebih
+  dulu, lalu menulis bawaan sambil menjaga Pixel ID, token, dan pilihan TikTok.
+- Menyimpan dengan Business Messaging nyala tanpa nomor Cloud API memunculkan peringatan: jalur itu tidak jalan
+  untuk nomor gateway QR.
+
+### Siap iklan CTWA (properti)
+
+Halaman *Pelacakan iklan → Siap iklan CTWA* (admin, agensi properti) memeriksa: Pixel dan token, event pipeline
+nyala, otomasi tahap properti nyala, event pernah terkirim, lead dari iklan dalam 30 hari, label per nomor
+gateway (nyala, daftar dimuat, daftar usang, label yang belum ada), berbagi data WhatsApp Business ke Meta
+(dicek manual di HP), dan Business Messaging tanpa Cloud API. Tombol **Uji kirim event** sama dengan di halaman
+Pelacakan iklan (pakai Test Event Code). Di bawahnya ringkasan 30 hari: event per nama dan pemicu, label per status.
 
 Cara kerja (`App\Tracking\PipelineConversions`):
 
@@ -44,7 +70,8 @@ Cara kerja (`App\Tracking\PipelineConversions`):
 - `fbc` / `fbp` (tidak di-hash, sesuai aturan Meta) bila lead datang dari formulir yang menyimpannya.
 
 `custom_data`: `currency: IDR`, `value` = jumlah harga produk × jumlah di pesanan (tanpa ongkir), atau harga produk
-lead; `content_ids`, `content_name`, `num_items`; `ctwa_clid` dan `ad_id` lead hanya sebagai catatan.
+lead. Untuk properti yang lead-nya punya nilai deal (`deal_value`), `value` = nilai deal, `num_items` = 1, dan
+`content_name` = nama properti (unit); `content_ids`, `content_name`, `num_items`; `ctwa_clid` dan `ad_id` lead hanya sebagai catatan.
 
 Setiap event yang terkirim dicatat di aktivitas lead ("Event Purchase dikirim ke Meta"). Log kegagalan hanya
 berisi platform, nama event, dan status HTTP, tanpa token atau data pelanggan.
