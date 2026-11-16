@@ -65,6 +65,7 @@ final class AiSettings
             'welcome_assets' => $this->welcomeAssets(),
             'agent_pause' => $this->agentPauseMinutes(),
             'handoff_pause' => $this->handoffPauseMinutes(),
+            'product_list' => $this->asksProductWithList(),
         ];
     }
 
@@ -92,6 +93,7 @@ final class AiSettings
             'welcome_assets' => self::ids($data['welcome_assets'] ?? []),
             'agent_pause' => max(1, min(self::MAX_PAUSE_MINUTES, (int) ($data['agent_pause'] ?? self::defaultAgentPause()))),
             'handoff_pause' => max(0, min(self::MAX_PAUSE_MINUTES, (int) ($data['handoff_pause'] ?? 0))),
+            'product_list' => (bool) ($data['product_list'] ?? true),
         ];
     }
 
@@ -234,6 +236,15 @@ final class AiSettings
         $start = $until->setTime($h, $m);
 
         return $start->greaterThanOrEqualTo($until) ? $start->subDay() : $start;
+    }
+
+    /**
+     * "Tanyakan tipe lewat daftar": while a lead's product (property type) is not known, the AI asks which one with
+     * the list of names and names no price until it is clear. On by default, as it always was.
+     */
+    public function asksProductWithList(): bool
+    {
+        return (bool) ($this->values['product_list'] ?? true);
     }
 
     /** @return list<int> the library items the first automatic reply to a lead carries; none by default */

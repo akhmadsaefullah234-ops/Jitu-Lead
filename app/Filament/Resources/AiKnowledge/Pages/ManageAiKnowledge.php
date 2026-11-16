@@ -168,6 +168,8 @@ class ManageAiKnowledge extends ManageRecords
                     ->helperText('Bawaan: singkat tanpa format. Format WhatsApp cocok untuk jawaban berbentuk blok, misalnya harga, legalitas, atau lokasi.'),
                 TextInput::make('max_lines')->label('Paling banyak baris per balasan')->numeric()->minValue(1)->maxValue(AiSettings::MAX_LINES)
                     ->visible(fn (Get $get) => $get('format') === 'whatsapp'),
+                Toggle::make('product_list')->label('Tanyakan tipe lewat daftar')
+                    ->helperText('Hidup (bawaan): bila tipe atau produk yang ditanyakan klien belum jelas, AI menanyakannya dengan menyebut pilihannya dan belum menyebut harga. Matikan bila sapaan pertama harus mengikuti arahan Anda: AI tidak menyodorkan daftar dan boleh menjawab harga umum dari pengetahuan.'),
                 Textarea::make('ai_handoff_keywords')->label('Kata yang membuat AI menyerahkan chat ke agen')->rows(4)->maxLength(1000)
                     ->helperText('Pisahkan dengan koma. Jika Anda menghapus sebuah kata, AI akan ikut menjawab pesan yang memuatnya.'),
                 Section::make('Pemeriksa sebelum kirim otomatis')->compact()

@@ -14,6 +14,7 @@ Settings live in `tenants.ai_settings` (JSON), read through `App\Ai\AiSettings` 
 | `quiet_from` / `quiet_until` | none | Quiet hours in the agency time zone; may run past midnight. |
 | `quiet_mode` | `greet` | `greet`: one short greeting per night, full answer in the morning. `defer`: nothing until morning. |
 | `quiet_message` | `DEFAULT_QUIET_MESSAGE` | The night greeting. |
+| `product_list` | on | "Tanyakan tipe lewat daftar": while the lead's product is unknown and there are several, the AI asks which one with the names and names no price. Off: no list is offered, the general price from the knowledge may be named, and a type the client names is still recorded with `PRODUK: <id>` (the id list stays in the prompt, marked as not for the client). |
 
 ## Format
 
@@ -43,6 +44,27 @@ During quiet hours in Auto mode `GenerateAiReply::quiet()` sends the greeting on
 quiet hours plus 0 to 5 minutes. The greeting does not count as an answer, so in the morning the newest client
 message is answered.
 
+### The morning answer
+
+The night greeting (origin `ai_quiet`) is left out of the history the AI reads in the morning
+(`ConversationHistory::load`), and `AnthropicClient::normalize` makes every chat start and end with a client turn,
+joining two turns of the same role. Until 2026-11-16 the greeting was the last turn, and the API refused the request
+with a 400 because the model does not take a prefilled answer; five chats stopped at the greeting.
+
+## When the AI fails
+
+`AnthropicClient` throws `App\Ai\AiException` with the API's own reason ("AI error 400: invalid_request_error: ...",
+digits masked, no chat text). `GenerateAiReply` tries once more after 2 seconds; if that fails too, the chat is handed
+to a person: an `ai_handoff` activity "AI gagal menjawab: <alasan>", a handoff draft (the Inbox box), the log line
+"AI reply failed", and an e-mail to the agency's admins (`App\Mail\AiReplyFailed`, at most one per agency per hour,
+`App\Ai\AiFailureAlert`).
+
+`php artisan ai:retry-stuck --tenant=<slug> [--minutes=30] [--hours=48] [--limit=20] [--dry-run]` runs the AI again
+for chats whose newest message is the night greeting, or a client message older than `--minutes` with no answer. A
+client message that already has an AI result (sent, suggestion or handoff) is skipped, and `GenerateAiReply` itself
+refuses a message that has a draft or a newer message, so nothing is answered twice. It does nothing during the
+agency's quiet hours.
+
 ## Property handoff words
 
 New property agencies get `AiSettings::PROPERTY_HANDOFF` (WNA, orang asing, notaris, sengketa, KPR ditolak, BI
@@ -51,4 +73,5 @@ words with **Tambah kata khusus properti**.
 
 ## Behaviour for existing agencies
 
-Unchanged by default: short format, guard off, no pause, no quiet hours, their own handoff list.
+Unchanged by default: short format, guard off, no pause, no quiet hours, their own handoff list, product list on.
+Since 2026-11-16 every agency's failed AI answers are handed to a person (before, they were only logged).

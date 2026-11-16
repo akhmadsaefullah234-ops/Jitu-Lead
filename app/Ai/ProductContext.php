@@ -6,6 +6,7 @@ use App\Filament\Resources\Properties\PropertyResource;
 use App\Models\Lead;
 use App\Models\Property;
 use App\Shipping\ShippingQuote;
+use App\Support\CurrentTenant;
 use App\Support\Industry;
 use Illuminate\Support\Collection;
 
@@ -60,15 +61,24 @@ class ProductContext
         } else {
             $names = $products->take(10)->pluck('name')->implode(', ');
             $lines[] = "PRODUK PELANGGAN: belum diketahui {$term} mana yang ditanyakan pelanggan ini.";
-            $lines[] = "Bila dari chat belum jelas, tanyakan dulu dengan sopan {$term} mana yang dimaksud, sebutkan pilihannya: {$names}. Bila foto {$term} ada di LAMPIRAN, boleh disertakan. Jangan menyebut harga sebelum {$term}nya jelas.";
+            $lines[] = $this->asksWithList()
+                ? "Bila dari chat belum jelas, tanyakan dulu dengan sopan {$term} mana yang dimaksud, sebutkan pilihannya: {$names}. Bila foto {$term} ada di LAMPIRAN, boleh disertakan. Jangan menyebut harga sebelum {$term}nya jelas."
+                // Arahan AI > "Tanyakan tipe lewat daftar" off: the agency's own flow (greeting, name, purpose) leads.
+                : "Jangan menyodorkan daftar atau pilihan bernomor {$term} kepada pelanggan, dan jangan menunda jawaban sampai {$term}nya jelas. Ikuti alur di arahan agensi. Bila pelanggan menanyakan harga, jawab dengan harga umum yang tertulis di PENGETAHUAN. Bila pelanggan menyebut {$term} tertentu, jawab tentang {$term} itu.";
         }
 
         if ($products->count() > 1) {
-            $lines[] = 'DAFTAR '.mb_strtoupper($term)." (id | nama):\n".$products->map(fn (Property $p) => $p->getKey().' | '.$p->name)->implode("\n");
+            $lines[] = 'DAFTAR '.mb_strtoupper($term).($this->asksWithList() ? '' : ' (hanya untuk baris PRODUK, jangan disodorkan ke pelanggan)')." (id | nama):\n".$products->map(fn (Property $p) => $p->getKey().' | '.$p->name)->implode("\n");
             $lines[] = "Bila pelanggan menyebut, memilih, atau beralih ke {$term} lain dari daftar, tulis di baris terakhir jawabanmu: PRODUK: <id>. Bila ia menambah {$term}, tulis id yang paling ia minati lebih dulu, mis. PRODUK: 3, 7. Jangan tulis baris itu bila {$term}nya tidak berubah.";
         }
 
         return implode("\n", $lines);
+    }
+
+    /** Arahan AI > "Tanyakan tipe lewat daftar" (on unless the agency turned it off). */
+    private function asksWithList(): bool
+    {
+        return AiSettings::of(app(CurrentTenant::class)->get())->asksProductWithList();
     }
 
     /** One product's catalogue details as the AI reads them. */

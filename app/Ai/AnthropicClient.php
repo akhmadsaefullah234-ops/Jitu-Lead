@@ -3,7 +3,6 @@
 namespace App\Ai;
 
 use Illuminate\Support\Facades\Http;
-use RuntimeException;
 
 /**
  * Minimal Messages API client: one text answer, or a short tool-use loop for
@@ -23,7 +22,7 @@ class AnthropicClient
      */
     public function reply(string $system, array $messages, int $maxTokens = 1024): string
     {
-        $response = $this->send($this->body($system, $messages, $maxTokens));
+        $response = $this->send($this->body($system, self::normalize($messages), $maxTokens));
 
         if (in_array($response['stop_reason'] ?? null, ['max_tokens', 'refusal'], true)) {
             return '';
@@ -48,6 +47,7 @@ class AnthropicClient
      */
     public function converse(string $system, array $messages, array $tools, callable $run, int $maxTokens = 1024, int $maxRounds = 4, array $stopTools = []): array
     {
+        $messages = self::normalize($messages);
         $calls = [];
         // Text the model wrote in a round that also called a tool ("Pesanan kakak: ... Total Rp 240.000"), last first.
         $toolText = '';
@@ -125,10 +125,59 @@ class AnthropicClient
         ])->timeout(30)->acceptJson()->post(config('services.anthropic.url'), $body);
 
         if (! $response->successful()) {
-            throw new RuntimeException('AI error '.$response->status());
+            throw new AiException($response->status(), self::reason($response->json()));
         }
 
         return $response->json() ?? [];
+    }
+
+    /**
+     * The API's own words for a refused request ("messages: ... must end with a user turn"), short and without
+     * anything quoted from the chat: the API names fields and rules, and digits are masked to be safe.
+     */
+    public static function reason(mixed $json): string
+    {
+        $type = is_array($json) ? (string) ($json['error']['type'] ?? '') : '';
+        $message = is_array($json) ? (string) ($json['error']['message'] ?? '') : '';
+        $message = (string) preg_replace('/\d{4,}/', '[angka]', preg_replace('/\s+/', ' ', $message));
+
+        return trim($type.($message !== '' ? ': '.mb_strimwidth($message, 0, 200, '…') : ''));
+    }
+
+    /**
+     * Plain chat turns as the API accepts them: starting with the client, the same role never twice in a row (joined
+     * with a line break), and ending with the client, since a chat that ends with the agency (a night greeting, a
+     * handed-off marker) is refused with a 400 by models that do not take a prefilled answer. Turns that already
+     * carry blocks (tool rounds) are left as they are.
+     *
+     * @param  list<array{role: string, content: string|array}>  $messages
+     * @return list<array{role: string, content: string|array}>
+     */
+    public static function normalize(array $messages): array
+    {
+        $out = [];
+
+        foreach ($messages as $m) {
+            $last = $out === [] ? null : array_key_last($out);
+
+            if ($last !== null && $out[$last]['role'] === $m['role'] && is_string($out[$last]['content']) && is_string($m['content'])) {
+                $out[$last]['content'] = trim($out[$last]['content']."\n".$m['content']);
+
+                continue;
+            }
+
+            $out[] = $m;
+        }
+
+        while ($out !== [] && $out[0]['role'] !== 'user') {
+            array_shift($out);
+        }
+
+        while ($out !== [] && $out[array_key_last($out)]['role'] !== 'user' && is_string($out[array_key_last($out)]['content'])) {
+            array_pop($out);
+        }
+
+        return array_values($out);
     }
 
     private function text(array $response): string
