@@ -266,12 +266,12 @@ class WhatsAppLabelsTest extends TestCase
         $this->assertSame(0, $this->in(fn () => WaLabelEvent::query()->count()));
     }
 
-    public function test_property_defaults_survey_booking_and_closing(): void
+    public function test_property_defaults_qualified_survey_booking_and_closing(): void
     {
         $agency = $this->makeTenant('griya-uji');
         $rules = app(CurrentTenant::class)->run($agency, fn () => BusinessLabels::defaults('properti'))['rules'];
 
-        $this->assertSame([true, [$this->stage($agency, 'Jadwal survei')->getKey()]], [$rules[0]['hot'], $rules[0]['stages']]);
+        $this->assertSame([true, [$this->stage($agency, 'Terkualifikasi')->getKey(), $this->stage($agency, 'Jadwal survei')->getKey()]], [$rules[0]['hot'], $rules[0]['stages']]);
         $this->assertSame([$this->stage($agency, 'Booking')->getKey()], $rules[1]['stages']);
         $this->assertSame([$this->stage($agency, 'Closing')->getKey()], $rules[2]['stages']);
     }
@@ -283,9 +283,9 @@ class WhatsAppLabelsTest extends TestCase
 
         Livewire::test(EditWaChannel::class, ['record' => $this->gw->getKey()])
             ->assertFormSet(['label_settings.enabled' => false, 'label_settings.ads_only' => true, 'label_settings.rules.0.name' => 'Prospek', 'label_settings.rules.0.hot' => true])
-            ->callAction(TestAction::make('loadLabels')->schemaComponent('wa_labels', 'form'))
+            ->callAction(TestAction::make('loadLabels')->schemaComponent('wa_labels.wa_label_actions', 'form'))
             ->assertNotified('Ada label yang belum ada di WhatsApp')
-            ->assertSee('belum ada: pasang sekali di HP')
+            ->assertSee('Buka satu chat UJI (bukan pelanggan)')
             ->fillForm(['label_settings.enabled' => true, 'label_settings.rules.2.name' => 'Paid', 'label_settings.rules.2.stages' => [$selesai]])
             ->call('save')
             ->assertHasNoFormErrors()
@@ -308,7 +308,7 @@ class WhatsAppLabelsTest extends TestCase
         $this->accountLabels = [['id' => '5', 'name' => 'Lead'], ['id' => '7', 'name' => 'New order'], ['id' => '9', 'name' => 'Lunas']];
 
         Livewire::test(EditWaChannel::class, ['record' => $this->gw->getKey()])
-            ->callAction(TestAction::make('loadLabels')->schemaComponent('wa_labels', 'form'))
+            ->callAction(TestAction::make('loadLabels')->schemaComponent('wa_labels.wa_label_actions', 'form'))
             ->assertNotified('Semua label tersedia')
             ->assertSee('(sebagai "Lead")', false);
 

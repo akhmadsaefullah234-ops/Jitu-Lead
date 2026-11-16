@@ -4,8 +4,10 @@ namespace App\Models;
 
 use App\Billing\PlanLimits;
 use App\Models\Concerns\BelongsToTenant;
+use App\Support\CurrentTenant;
 use App\Tracking\PipelineConversions;
 use App\Tracking\PixelEvents;
+use App\Tracking\PropertyAdDefaults;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Model;
@@ -79,11 +81,11 @@ class TrackingSetting extends Model
      * Which events the CRM sends by itself (App\Tracking\PipelineConversions): stage id => Meta event, the event
      * for a lead turning Hot, and the business messaging beta. Off and unmapped until the agency saves it.
      *
-     * @return array{enabled: bool, hot: ?string, stages: array<int, string>, messaging: bool}
+     * @return array{enabled: bool, hot: ?string, stages: array<int, string>, messaging: bool, contact: bool}
      */
     public function pipeline(): array
     {
-        $stored = (array) ($this->pipeline_events ?? []);
+        $stored = (array) ($this->pipeline_events ?? self::starting() ?? []);
         $valid = fn ($e) => is_string($e) && array_key_exists($e, PipelineConversions::EVENTS) ? $e : null;
         $stages = [];
 
@@ -98,7 +100,24 @@ class TrackingSetting extends Model
             'hot' => $valid($stored['hot'] ?? null),
             'stages' => $stages,
             'messaging' => (bool) ($stored['messaging'] ?? false),
+            'contact' => (bool) ($stored['contact'] ?? false),
         ];
+    }
+
+    /**
+     * What an agency that never saved "Event dari pipeline" starts with: Jitu's property flow, on, for a property
+     * agency made with it (tenants.pipeline_settings.ad_defaults, set by PropertyAdDefaults::provision); otherwise
+     * nothing (off). Must run inside the tenant.
+     *
+     * @return array<string, mixed>|null
+     */
+    public static function starting(): ?array
+    {
+        $tenant = app(CurrentTenant::class)->get();
+
+        return $tenant !== null && $tenant->industry()->key === 'properti' && data_get($tenant->pipeline_settings, 'ad_defaults') === PropertyAdDefaults::FLAG
+            ? ['enabled' => true] + PropertyAdDefaults::pipeline()
+            : null;
     }
 
     /** Notes the last answer of a destination for the Pelacakan page: no token, no customer data. */

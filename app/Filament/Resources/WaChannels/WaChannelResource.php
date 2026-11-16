@@ -13,6 +13,7 @@ use App\Models\Stage;
 use App\Models\WaChannel;
 use App\Models\WaLabelEvent;
 use App\Support\Industry;
+use App\Tracking\PropertyAdDefaults;
 use App\WhatsApp\BusinessLabels;
 use App\WhatsApp\GatewayProvider;
 use App\WhatsApp\GatewayUrlGuard;
@@ -30,6 +31,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
@@ -202,13 +204,22 @@ class WaChannelResource extends Resource
             ->description('Memasang label WhatsApp Business di chat lead secara otomatis saat lead pindah tahap atau ditandai Hot, sehingga sinyal iklan Klik ke WhatsApp ("Prospek", "Order baru", "Lunas") terkirim ke Meta lewat fitur berbagi data WhatsApp Business tanpa memberi label manual di HP. Belum pasti Meta menghitung label dari perangkat tertaut sama seperti dari HP: cek hasilnya di Ads Manager.')
             ->collapsible()->collapsed(fn (?WaChannel $record) => ! ($record && BusinessLabels::settings($record)['enabled']))
             ->visible(fn (?WaChannel $record, Get $get) => $record !== null && static::typeOf($get('type')) === 'gateway')
-            ->headerActions([
-                Action::make('loadLabels')->label('Muat label dari WhatsApp')->icon(Heroicon::OutlinedArrowPath)->link()
-                    ->action(fn (?WaChannel $record) => static::loadLabels($record)),
-            ])
             ->schema([
+                Actions::make([
+                    Action::make('jituLabels')->label('Pakai bawaan Jitu')->icon(Heroicon::OutlinedSparkles)->link()
+                        ->requiresConfirmation()->modalHeading('Pakai label bawaan Jitu?')
+                        ->modalDescription(fn (?WaChannel $record) => $record ? static::jituLabelsPreview($record) : null)
+                        ->action(function (?WaChannel $record, $livewire) {
+                            $record->forceFill(['label_settings' => PropertyAdDefaults::labels($record)])->save();
+                            $livewire->refreshFormData(['label_settings']);
+                            Notification::make()->title('Label otomatis menyala dengan bawaan Jitu')->body('Klik "Muat label dari WhatsApp" untuk memastikan ketiga label ada di akun.')->success()->send();
+                        }),
+                    Action::make('loadLabels')->label('Muat label dari WhatsApp')->icon(Heroicon::OutlinedArrowPath)->link()
+                        ->action(fn (?WaChannel $record) => static::loadLabels($record)),
+                ])->key('wa_label_actions'),
                 Placeholder::make('label_check')->label('Label di WhatsApp')
-                    ->content(fn (?WaChannel $record) => $record ? view('filament.wa-label-check', ['checks' => BusinessLabels::checklist($record), 'known' => BusinessLabels::settings($record)['known']]) : null),
+                    ->content(fn (?WaChannel $record) => $record ? view('filament.wa-label-check', ['checks' => BusinessLabels::checklist($record), 'known' => BusinessLabels::settings($record)['known'],
+                        'stale' => BusinessLabels::staleList(BusinessLabels::settings($record)['known'])]) : null),
                 Toggle::make('label_settings.enabled')->label('Aktifkan label otomatis'),
                 Toggle::make('label_settings.ads_only')->label('Hanya chat dari iklan')
                     ->helperText('Hanya lead yang datang dari iklan Klik ke WhatsApp (punya ID iklan atau data iklan).'),
@@ -217,6 +228,19 @@ class WaChannelResource extends Resource
                     ->content(fn (?WaChannel $record) => $record ? view('filament.wa-label-summary', ['summary' => BusinessLabels::summary($record), 'statuses' => WaLabelEvent::STATUSES]) : null),
                 View::make('filament.guides.wa-labels'),
             ]);
+    }
+
+    /** What "Pakai bawaan Jitu" will store, in words. */
+    public static function jituLabelsPreview(WaChannel $record): HtmlString
+    {
+        $names = Stage::query()->pluck('name', 'id');
+        $rules = PropertyAdDefaults::labels($record)['rules'];
+        $lines = array_map(fn (array $r) => '<li><b>'.e($r['name']).'</b>: '.e(implode(', ', array_filter([
+            $r['hot'] ? 'lead ditandai Hot' : null, ...array_map(fn ($id) => $names[$id] ?? null, $r['stages']),
+        ])) ?: 'tidak ada tahap').'</li>', $rules);
+
+        return new HtmlString('Label otomatis dinyalakan untuk chat dari iklan saja, dengan tiga label standar yang dibaca Meta:<ul style="list-style:disc;padding-left:1.25rem;margin:.5rem 0">'
+            .implode('', $lines).'</ul>Pengaturan label nomor ini yang sekarang diganti. Label yang sudah terpasang di chat tidak dilepas.');
     }
 
     /**
@@ -246,8 +270,18 @@ class WaChannelResource extends Resource
             $lines[] = 'Label di WhatsApp: '.implode(', ', $names).'.';
         }
 
+        if (BusinessLabels::staleList($names)) {
+            $lines[] = 'Gateway hanya melihat daftar bawaan WhatsApp ('.implode(', ', $names).'), belum satu pun label bisnis. Daftar label di gateway kemungkinan usang: pastikan HP memakai WhatsApp Bisnis, pakai label sekali di HP, lalu muat lagi setelah 10 menit. Bila tetap sama, pasang ulang gateway.';
+        }
+
         if ($missing !== []) {
-            $lines[] = 'Pasang '.implode(', ', array_map(fn ($m) => "\"{$m}\"", $missing)).' sekali di HP (WhatsApp Business: buka chat mana pun, ketuk nama kontak atau menu, pilih Label, lalu pilih atau buat label itu), lalu klik "Muat label dari WhatsApp" lagi.';
+            $lines[] = 'Belum ada: '.implode(', ', $missing).'. '.BusinessLabels::GUIDE;
+        }
+
+        $notSignals = array_values(array_filter(array_keys($checks), fn (string $rule) => ! BusinessLabels::isSignal($rule)));
+
+        if ($notSignals !== []) {
+            $lines[] = 'Bukan sinyal Meta: '.implode(', ', $notSignals).'. Meta hanya membaca Prospek, Order baru, dan Lunas; label lain (mis. Pelanggan baru, Pesanan selesai) tidak dihitung.';
         }
 
         if ($retried > 0) {

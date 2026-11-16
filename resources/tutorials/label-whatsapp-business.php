@@ -9,7 +9,7 @@ return [
     'intro' => '<p>Memasang label WhatsApp Business (misalnya Prospek, Order baru, Lunas) di chat lead secara otomatis saat lead pindah tahap atau ditandai Hot, sebagai sinyal untuk iklan Klik ke WhatsApp. Hanya untuk nomor gateway yang memakai akun WhatsApp Business.</p>',
     'steps' => [
         [
-            'text' => 'Buka <b>Koneksi WhatsApp</b>, klik nomor gateway, lalu buka bagian <b>Label WhatsApp Business (uji coba)</b>. Klik <b>Muat label dari WhatsApp</b> agar sistem mengenali label di akun Anda. Label yang belum ada dibuat sekali di HP, lalu klik tombol itu lagi.',
+            'text' => 'Buka <b>Koneksi WhatsApp</b>, klik nomor gateway, lalu buka bagian <b>Label WhatsApp Business (uji coba)</b>. Klik <b>Muat label dari WhatsApp</b> agar sistem mengenali label di akun Anda. Bila label belum ada, ikuti petunjuk di layar: di WhatsApp Bisnis, label standar ada di bagian Saran dan baru menjadi Daftar Anda setelah dipakai sekali. Buka satu chat UJI (bukan pelanggan), centang Prospek, Order baru, dan Lunas, pilih Selesai, lalu klik tombol itu lagi.',
             'alt' => 'Bagian Label WhatsApp Business dengan tombol Muat label dari WhatsApp',
             'shot' => ['page' => 'wa-channels', 'steps' => [['click' => '.fi-ta-row >> nth=0 >> a.fi-ta-col >> nth=0'], ['waitFor' => '.fi-section-header-heading:has-text("Label WhatsApp Business")'],
                 ['click' => '.fi-section-header-heading:has-text("Label WhatsApp Business")'], ['wait' => 500], ['scroll' => '.fi-section:has(.fi-section-header-heading:has-text("Label WhatsApp Business"))']],
@@ -23,6 +23,10 @@ return [
                 'highlight' => ['.fi-fo-field:has-text("Aktifkan label otomatis")', 'fieldset:has-text("Label calon pembeli")']],
         ],
     ],
-    'tips' => ['Pantau <b>Ringkasan 30 hari</b> di bagian yang sama dan cocokkan dengan hasil di Ads Manager.'],
+    'tips' => [
+        'Tombol <b>Pakai bawaan Jitu</b> menyalakan label otomatis untuk chat dari iklan dengan aturan bawaan dalam satu klik. Properti: Prospek saat Terkualifikasi, Hot, atau Jadwal survei; Order baru saat Booking; Lunas saat Closing.',
+        'Label yang tidak dibaca Meta sebagai sinyal diberi tanda <b>bukan sinyal Meta</b>. Hanya Prospek, Order baru, dan Lunas yang dihitung.',
+        'Pantau <b>Ringkasan 30 hari</b> di bagian yang sama dan cocokkan dengan hasil di Ads Manager.',
+    ],
     'perhatian' => ['Fitur ini masih uji coba. Bila angka di Ads Manager tidak ikut bergerak, matikan saja.'],
 ];

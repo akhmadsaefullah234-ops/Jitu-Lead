@@ -20,7 +20,7 @@ return [
                 'highlight' => ['.fi-modal-window:visible .fi-section:has(.fi-section-header-heading:text-is("Meta"))']],
         ],
         [
-            'text' => 'Klik <b>Event dari pipeline</b>, nyalakan <b>Kirim event dari pipeline</b>, dan pilih satu event untuk tiap tahap. Bawaan toko: Hot menjadi Lead, Order masuk menjadi InitiateCheckout, Dikemas & dikirim menjadi Purchase. Event dikirim saat lead masuk tahap itu, siapa pun yang memindahkannya.',
+            'text' => 'Klik <b>Event dari pipeline</b>, nyalakan <b>Kirim event dari pipeline</b>, dan pilih satu event untuk tiap tahap. Bawaan toko: Hot menjadi Lead, Order masuk menjadi InitiateCheckout, Dikemas & dikirim menjadi Purchase. Bawaan properti: Lead baru menjadi Lead, Terkualifikasi menjadi QualifiedLead, Jadwal survei menjadi Schedule, Booking menjadi InitiateCheckout, Closing menjadi Purchase. Event dikirim saat lead masuk tahap itu, siapa pun yang memindahkannya. <b>Klien membalas pertama kali</b> mengirim Contact sekali per lead.',
             'alt' => 'Jendela Event dari pipeline dengan pilihan event per tahap',
             'shot' => ['page' => 'tracking-settings', 'steps' => [['click' => '.fi-header button:has-text("Event dari pipeline")'], ['waitFor' => '.fi-modal-window:visible']],
                 'highlight' => ['.fi-modal-window:visible .fi-modal-content']],
@@ -28,6 +28,8 @@ return [
     ],
     'tips' => [
         'Setiap lead mengirim satu event jenis yang sama sekali saja, jadi tidak terhitung ganda. Purchase dikirim lagi untuk setiap pesanan baru.',
+        'Agensi properti: tombol <b>Samakan dengan bawaan Jitu</b> menampilkan dulu apa saja yang berbeda dari bawaan, lalu menyamakannya. Pixel ID dan token tidak berubah. Agensi properti baru sudah memakai bawaan ini sejak awal.',
+        'Conversions API for Business Messaging hanya jalan untuk nomor WhatsApp Cloud API. Bila semua nomor memakai scan QR, biarkan mati.',
         'Data kontak dikirim dalam bentuk hash (SHA-256), tidak pernah dalam bentuk asli. Setiap event yang terkirim tercatat di aktivitas lead.',
     ],
     'perhatian' => ['Token tersimpan terenkripsi dan tidak ditampilkan lagi. Jangan menempelkan token di chat atau dokumen.'],

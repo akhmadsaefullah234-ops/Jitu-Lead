@@ -339,17 +339,21 @@ class PipelineConversionsTest extends TestCase
             ->assertHasNoActionErrors()
             ->assertSee('Selesai: Purchase');
 
-        $this->assertSame(['enabled' => true, 'hot' => null, 'stages' => [$this->stageId('Dikemas & dikirim') => 'Purchase', $this->stageId('Selesai') => 'Purchase'], 'messaging' => false],
+        $this->assertSame(['enabled' => true, 'hot' => null, 'stages' => [$this->stageId('Dikemas & dikirim') => 'Purchase', $this->stageId('Selesai') => 'Purchase'], 'messaging' => false, 'contact' => false],
             TrackingSetting::current()->pipeline(), 'the default stays, the cleared one goes, the new one is added');
     }
 
-    public function test_property_agencies_default_to_schedule_for_the_survey_and_purchase_for_closing(): void
+    public function test_property_agencies_default_to_the_same_flow_as_a_shop(): void
     {
         $agency = $this->makeTenant('griya-uji');
         $defaults = app(CurrentTenant::class)->run($agency, fn () => PipelineConversions::defaults('properti'));
 
-        $this->assertSame([$this->stage($agency, 'Jadwal survei')->getKey() => 'Schedule', $this->stage($agency, 'Closing')->getKey() => 'Purchase'], $defaults['stages']);
-        $this->assertNull($defaults['hot']);
+        $this->assertSame([
+            $this->stage($agency, 'Lead baru')->getKey() => 'Lead', $this->stage($agency, 'Terkualifikasi')->getKey() => 'QualifiedLead',
+            $this->stage($agency, 'Jadwal survei')->getKey() => 'Schedule', $this->stage($agency, 'Booking')->getKey() => 'InitiateCheckout',
+            $this->stage($agency, 'Closing')->getKey() => 'Purchase',
+        ], $defaults['stages']);
+        $this->assertSame(['QualifiedLead', false, false, true], [$defaults['hot'], $defaults['enabled'], $defaults['messaging'], $defaults['contact']]);
     }
 
     public function test_the_test_event_goes_only_where_a_test_code_is_set_and_shows_the_last_result(): void

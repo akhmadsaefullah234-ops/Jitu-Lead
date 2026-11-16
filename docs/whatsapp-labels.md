@@ -21,14 +21,27 @@ tertaut), supaya admin tidak perlu memberi label manual di HP.
   paling sering 1x per 10 menit; tanpa scan ulang), lalu menampilkan tanda centang untuk ketiga label (✓ Prospek,
   ✓ Order baru, ✗ Lunas, termasuk padanannya Lead/New order/Paid). Label yang belum ada diberi petunjuk: pasang
   sekali di HP, lalu klik tombol lagi. Hasilnya juga tampil tetap di bagian "Label di WhatsApp".
+  Label yang dipilih tapi bukan sinyal Meta diberi tanda "bukan sinyal Meta". Bila gateway hanya melihat daftar
+  bawaan WhatsApp (Grup, Favorit, Belum dibaca) tanpa satu pun label bisnis, daftar di gateway dianggap **usang**:
+  pakai label sekali di HP, lalu muat lagi.
+- Bila label belum ada, layar menampilkan petunjuk ini (`BusinessLabels::GUIDE`):
+  "Di WhatsApp Bisnis, label standar ada di bagian Saran dan baru menjadi Daftar Anda setelah dipakai sekali. Buka
+  satu chat UJI (bukan pelanggan), centang Prospek, Order baru, dan Lunas, pilih Selesai, lalu klik Muat label dari
+  WhatsApp di sini."
+- **Pakai bawaan Jitu** (tombol di bagian label): satu klik menyalakan label otomatis, hanya chat dari iklan, dan
+  aturan bawaan industri. Konfirmasi menampilkan aturan yang akan disimpan. Daftar label yang sudah dimuat tetap.
 
 Bawaan per industri:
 
 | Label | Toko (retail) | Properti |
 | --- | --- | --- |
-| Prospek | lead jadi Hot | Hot, atau tahap survei |
-| Order baru | Order masuk | tahap booking/UTJ |
-| Lunas | Dikemas & dikirim atau Selesai bila transfer / belum diketahui; Selesai bila COD | tahap menang (akad/closing) |
+| Prospek | lead jadi Hot | Hot, Terkualifikasi, atau Jadwal survei |
+| Order baru | Order masuk | Booking/UTJ |
+| Lunas | Dikemas & dikirim atau Selesai bila transfer / belum diketahui; Selesai bila COD | Closing (tahap menang) |
+
+Bawaan ini hanya dipakai bila nomor belum pernah menyimpan aturannya sendiri; aturan yang tersimpan tidak berubah.
+Satu perpindahan tahap otomatis menghasilkan tepat satu event Meta dan paling banyak satu label (diuji di
+`PropertyAdSignalsTest`).
 
 ## Cara kerja (`App\WhatsApp\BusinessLabels`)
 
@@ -39,7 +52,8 @@ Bawaan per industri:
 - Sekali per lead per label (`wa_label_events`, unik tenant + lead + label). Bila lead lompat ke tahap "Lunas",
   label sebelumnya yang belum terpasang (Prospek, Order baru) dipasang lebih dulu, berurutan. Bila gateway tidak
   bisa dihubungi, label berikutnya tidak dipasang dulu agar urutan tetap benar.
-- Label tidak pernah dilepas. Gateway tidak pernah membuat label baru.
+- Label tidak pernah dilepas. Gateway tidak pernah membuat label baru (lihat kajian di
+  `docs/whatsapp-label-creation-study.md`).
 - Bila akun belum punya label itu, statusnya **menunggu label** (`waiting_label`), bukan gagal: aktivitas lead
   mencatat petunjuknya sekali, lalu label dipasang otomatis begitu akun memilikinya (`whatsapp:labels-retry` tiap
   10 menit, atau langsung setelah "Muat label dari WhatsApp"), berurutan. Setelah 7 hari tetap tidak ada, statusnya
