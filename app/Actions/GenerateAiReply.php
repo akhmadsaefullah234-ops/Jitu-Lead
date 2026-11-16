@@ -2,6 +2,8 @@
 
 namespace App\Actions;
 
+use App\Ai\AiException;
+use App\Ai\AiFailureAlert;
 use App\Ai\AiSettings;
 use App\Ai\AnthropicClient;
 use App\Ai\BuyerFacts;
@@ -41,8 +43,10 @@ use App\WhatsApp\RouteKind;
 use App\WhatsApp\RouteSelector;
 use App\WhatsApp\WhatsAppException;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Sleep;
 use Throwable;
 
 /**
@@ -307,6 +311,8 @@ class GenerateAiReply
         $tools = [...($shop?->definitions() ?? []), ...($property?->definitions() ?? []), ...ReplySignals::definitions()];
         $retry = null;
 
+        $failedOnce = false;
+
         // One more try when the answer quoted shipping that no check returned, or spoke about its own instructions.
         for ($attempt = 0; ; $attempt++) {
             $last = $attempt > 0;
@@ -324,7 +330,16 @@ class GenerateAiReply
             } catch (Throwable $e) {
                 report($e);
 
-                return null;
+                // One more try a moment later; then the chat goes to a person, who is told, instead of going quiet.
+                if (! $failedOnce) {
+                    $failedOnce = true;
+                    $attempt--;
+                    Sleep::for(2)->seconds();
+
+                    continue;
+                }
+
+                return $this->aiFailed($inbound, $e);
             }
 
             if ($quote !== null) {
@@ -891,6 +906,27 @@ class GenerateAiReply
         }
 
         return $failed;
+    }
+
+    /**
+     * The model could not be reached or refused the request twice: the chat is handed to a person with the reason
+     * on the lead ("AI gagal menjawab: ..."), so it shows in the Inbox, and the agency's admins get an e-mail.
+     */
+    private function aiFailed(WaMessage $inbound, Throwable $e): AiDraft
+    {
+        $reason = match (true) {
+            $e instanceof AiException => 'layanan AI menolak permintaan (kode '.$e->status.')',
+            $e instanceof ConnectionException => 'layanan AI tidak menjawab',
+            default => 'galat '.class_basename($e),
+        };
+        $body = 'AI gagal menjawab: '.$reason;
+
+        Log::warning('AI reply failed', ['tenant_id' => $inbound->tenant_id, 'conversation_id' => $inbound->conversation_id,
+            'message_id' => $inbound->getKey(), 'error' => $e->getMessage()]);
+        $inbound->conversation->lead?->activities()->create(['type' => 'ai_handoff', 'body' => $body]);
+        app(AiFailureAlert::class)->tell($this->current->get(), $inbound, $reason);
+
+        return $this->draft($inbound, null, AiDraft::HANDOFF, $body);
     }
 
     private function handoffTo(WaMessage $inbound, string $reason, bool $apiCall = false): AiDraft

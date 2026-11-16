@@ -2,6 +2,7 @@
 
 namespace App\Ai;
 
+use App\Actions\GenerateAiReply;
 use App\Models\WaConversation;
 use App\WhatsApp\MessageContent;
 
@@ -38,7 +39,10 @@ final class ConversationHistory
         $budget = max(1, (int) config('jitu.ai.history_tokens', 6000));
         $chars = max(100, (int) config('jitu.ai.message_chars', 1500));
 
-        $newest = $conversation->messages()->whereNotIn('type', self::SKIPPED)->reorder()->orderByDesc('id')->limit($max)->get();
+        // The night greeting ("kami balas besok pagi") is not part of the chat the AI answers in the morning.
+        $newest = $conversation->messages()->whereNotIn('type', self::SKIPPED)
+            ->where(fn ($q) => $q->whereNull('origin')->orWhere('origin', '!=', GenerateAiReply::QUIET_ORIGIN))
+            ->reorder()->orderByDesc('id')->limit($max)->get();
         $kept = [];
         $used = 0;
         $oldest = null;
@@ -87,9 +91,8 @@ final class ConversationHistory
             }
         }
 
-        while ($turns && $turns[0]['role'] !== 'user') {
-            array_shift($turns);
-        }
+        // The API takes a chat that starts and ends with the client (see AnthropicClient::normalize).
+        $turns = AnthropicClient::normalize($turns);
 
         $omitted = $oldest === null ? 0 : $conversation->messages()->whereNotIn('type', self::SKIPPED)
             ->where('id', '<', $oldest)->where('id', '>', (int) $conversation->ai_memory_message_id)->count();
