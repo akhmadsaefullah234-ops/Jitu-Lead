@@ -5,6 +5,7 @@ namespace App\Ai\Facts;
 use App\Models\AiFact;
 use App\Models\AiKnowledgeItem;
 use App\Models\Property;
+use App\Support\CurrentTenant;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -61,6 +62,7 @@ final class Facts
     {
         $facts = self::approved();
         $project = $facts->whereNull('subject')->mapWithKeys(fn (AiFact $f) => [$f->key => $f->value])->all();
+        $project['pay_options'] = PaymentModel::decode($project['pay_options'] ?? null);
         $types = $facts->whereNotNull('subject')->groupBy(fn (AiFact $f) => self::subjectKey($f->subject))
             ->map(fn (Collection $g) => ['name' => $g->last()->subject, 'property_id' => $g->whereNotNull('property_id')->last()?->property_id]
                 + $g->mapWithKeys(fn (AiFact $f) => [$f->key => $f->value])->all())
@@ -80,6 +82,7 @@ final class Facts
     {
         DB::transaction(function () use ($data) {
             $project = $data['project'] ?? [];
+            $project['pay_options'] = PaymentModel::encode($project['pay_options'] ?? []);
             $rows = [];
 
             foreach (FactKeys::PROJECT as $key => $_) {
@@ -127,6 +130,10 @@ final class Facts
             AiFact::query()->where('status', AiFact::APPROVED)->whereKeyNot($kept)->update(['status' => AiFact::REJECTED]);
 
             self::rebuild();
+
+            if (($tenant = app(CurrentTenant::class)->get()) !== null) {
+                PaymentDefaults::adapt($tenant, PaymentModel::current());
+            }
         });
     }
 
@@ -214,10 +221,11 @@ final class Facts
             'Nama proyek' => $name, 'Developer' => $value('developer'), 'Lokasi' => $value('location'),
             'Legalitas' => $value('legal'), 'Serah terima' => $value('handover'),
         ])];
-        $entries[] = [null, 'Cara bayar', self::lines([
-            'Cara bayar' => $value('payment_methods'), 'Booking fee' => $value('booking_fee'),
-            'Uang muka (DP)' => $value('down_payment'), 'Tenor cicilan' => $value('tenor'),
-        ])];
+        // The payment model when the agency filled it, else the free text from before it (or from a document).
+        $payment = PaymentModel::from($facts->whereNull('subject'));
+        $entries[] = [null, $payment->filled() ? 'Model pembayaran' : 'Cara bayar', self::lines($payment->filled()
+            ? $payment->lines() + ['Catatan cara bayar' => $value('payment_methods'), 'Catatan DP' => $value('down_payment'), 'Catatan tenor' => $value('tenor')]
+            : ['Cara bayar' => $value('payment_methods'), 'Booking fee' => $value('booking_fee'), 'Uang muka (DP)' => $value('down_payment'), 'Tenor cicilan' => $value('tenor')])];
         $entries[] = [null, 'Jam dan lokasi survei', self::lines(['Jam survei' => $value('survey_hours'), 'Lokasi survei' => $value('survey_location') ?? $value('location')])];
         $entries[] = [null, 'Kontak', self::lines(['Kontak' => $value('contact')])];
 

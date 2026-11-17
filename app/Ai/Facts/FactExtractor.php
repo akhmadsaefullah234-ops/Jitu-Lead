@@ -74,7 +74,7 @@ final class FactExtractor
         $same = 0;
         $rows = [];
 
-        foreach (FactKeys::PROJECT as $key => $_) {
+        foreach (FactKeys::fromDocuments() as $key => $_) {
             $rows[] = [null, $key, $input['project'][$key] ?? null];
         }
 
@@ -119,7 +119,7 @@ final class FactExtractor
             'input_schema' => [
                 'type' => 'object',
                 'properties' => [
-                    'project' => ['type' => 'object', 'properties' => $fields(FactKeys::PROJECT)],
+                    'project' => ['type' => 'object', 'properties' => $fields(FactKeys::fromDocuments())],
                     'types' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => ['name' => ['type' => 'string', 'description' => 'Nama tipe, mis. Melati']] + $fields(FactKeys::TYPE)]],
                 ],
             ],

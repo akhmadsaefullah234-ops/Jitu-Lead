@@ -10,9 +10,14 @@ return [
     'intro' => '<p>AI menjawab harga, luas, cara bayar, dan jadwal survei dari data proyek yang Anda isi sekali di <b>Isi properti</b>. Dari isian itu sistem menulis pengetahuan AI standar dengan penulisan yang sama di setiap jawaban, misalnya "38 m2" dan "Rp642.850.000 (sekitar Rp642,85 juta)", dan setiap tipe unit masuk Katalog properti. <b>Kesehatan AI</b> menunjukkan apa yang masih kurang sebelum AI boleh membalas otomatis.</p>',
     'steps' => [
         [
-            'text' => 'Buka <b>AI Asisten > Isi properti</b> dan isi empat langkahnya: <b>Proyek</b> (nama, developer, lokasi, legalitas, serah terima), <b>Tipe unit</b> (harga, luas bangunan, luas tanah, kamar, ketersediaan, bonus), <b>Pembayaran</b> (cara bayar, booking fee, DP, tenor, perkiraan sewa bila ada), lalu <b>Survei</b> (jam, lokasi, dan kontak). Klik <b>Simpan dan perbarui pengetahuan AI</b> di langkah terakhir. Yang dikosongkan tidak dijawab AI, dan chat soal itu diserahkan ke agen.',
+            'text' => 'Buka <b>AI Asisten > Isi properti</b> dan isi empat langkahnya: <b>Proyek</b> (nama, developer, lokasi, legalitas, serah terima), <b>Tipe unit</b> (harga, luas bangunan, luas tanah, kamar, ketersediaan, bonus), <b>Pembayaran</b> (model pembayaran agensi), lalu <b>Survei</b> (jam, lokasi, dan kontak). Klik <b>Simpan dan perbarui pengetahuan AI</b> di langkah terakhir. Yang dikosongkan tidak dijawab AI, dan chat soal itu diserahkan ke agen.',
             'alt' => 'Wizard Isi properti dengan langkah Proyek, Tipe unit, Pembayaran, dan Survei',
             'shot' => ['page' => 'isi-properti', 'highlight' => ['.fi-sc-wizard-header']],
+        ],
+        [
+            'text' => 'Di langkah <b>Pembayaran</b>, centang hanya cara bayar yang benar-benar tersedia: <b>Cash keras</b>, <b>Cash bertahap</b> (tenor maksimal dan ada atau tidaknya bunga), <b>Cicilan developer</b>, <b>KPR</b> (bank rekanan boleh dikosongkan), atau <b>Lainnya</b>. Lalu pilih <b>Model uang muka</b>: tidak ada DP, DP 0%, DP gratis (promo, dengan masa berlakunya), DP ringan, atau DP standar, dan isi <b>Tanda jadi</b> serta apakah tanda jadi mengurangi harga. AI hanya menanyakan dan menawarkan cara bayar yang dicentang. Bila klien menanyakan cara bayar lain, misalnya KPR yang tidak dicentang, AI menjawab bahwa itu belum tersedia lalu menawarkan yang ada. AI juga tidak menyebut "tanpa DP", "DP 0", atau "gratis" kecuali Anda memilihnya, dan tidak pernah menjanjikan KPR disetujui.',
+            'alt' => 'Langkah Pembayaran dengan pilihan cara bayar, uang muka, dan tanda jadi',
+            'shot' => ['page' => 'isi-properti', 'steps' => [['click' => '.fi-sc-wizard-footer button:has-text("Selanjutnya")'], ['waitFor' => 'text="Tipe unit" >> visible=true'], ['click' => '.fi-sc-wizard-footer button:has-text("Selanjutnya")'], ['waitFor' => 'text="Cara bayar yang tersedia" >> visible=true']], 'highlight' => ['.fi-sc-wizard-step.fi-active']],
         ],
         [
             'text' => 'Punya brosur atau daftar harga? Klik <b>Baca dari dokumen</b> dan unggah PDF, Word, Excel, TXT, CSV, atau foto. AI menyalin datanya, tetapi belum dipakai sebelum Anda setujui di <b>Tinjau data AI</b>. Setiap data menyimpan nama file asalnya.',
@@ -31,6 +36,8 @@ return [
         ],
     ],
     'tips' => [
+        'Untuk agensi baru, model pembayaran juga mengatur teks bawaan: tindak lanjut <b>Dihubungi H+2</b> menanyakan cara bayar yang Anda centang, aksi tahap memakai "simulasi pembayaran" dan "proses pembayaran" bila KPR tidak dicentang, dan alasan kalah <b>KPR ditolak</b> hanya ada bila KPR tersedia. Teks yang sudah Anda ubah sendiri tidak disentuh.',
+        'Isian lama (cara bayar, DP, dan tenor dalam bentuk teks) tetap terlihat di langkah Pembayaran sebagai <b>catatan</b> selama masih terisi. Dokumen yang dibaca AI tidak bisa mengisi model pembayaran; hanya Anda yang mengisinya di sini.',
         '<b>Uji otomatis</b> (menyala untuk agensi baru) menguji AI lengkap sekitar 10 menit setelah pengetahuan berubah dan tiap malam. Admin menerima email bila nilainya turun. Agensi lama bisa menyalakannya di Kesehatan AI.',
         'Data yang Anda ubah di wizard menggantikan nilai lama; data dari dokumen yang belum ditinjau tetap menunggu dan ditandai bila berbeda.',
     ],

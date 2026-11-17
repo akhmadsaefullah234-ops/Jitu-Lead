@@ -40,3 +40,8 @@ picker and visible-lead scope):
 existing agency and checks that AI settings, instructions, follow-ups, stage automation, AI tools
 (`ShopTools` vs `PropertyTools`), ad tracking and labels never cross, and that a changed default in
 `config/industries.php` reaches only agencies created afterwards in that industry.
+
+## Payment model (PR 7)
+
+The agency payment model is required before "Naikkan ke Auto". Four demo profiles
+(`AgensiDemoPembayaranSeeder`) each run `ai:evaluate` without AI tuning. See `docs/payment-model.md`.

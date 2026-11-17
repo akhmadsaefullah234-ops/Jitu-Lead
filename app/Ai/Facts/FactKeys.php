@@ -24,10 +24,23 @@ final class FactKeys
         'location' => ['Lokasi', self::TEXT],
         'legal' => ['Legalitas', self::TEXT],
         'handover' => ['Serah terima', self::TEXT],
-        'payment_methods' => ['Cara bayar', self::TEXT],
-        'booking_fee' => ['Booking fee', self::MONEY],
-        'down_payment' => ['Uang muka (DP)', self::TEXT],
-        'tenor' => ['Tenor cicilan', self::TEXT],
+        // The payment model, from the wizard only (App\Ai\Facts\PaymentModel); never read from a document.
+        'pay_options' => ['Cara bayar yang tersedia', self::TEXT],
+        'installment_tenor' => ['Tenor cash bertahap maksimal (bulan)', self::COUNT],
+        'installment_interest' => ['Bunga cash bertahap', self::TEXT],
+        'developer_tenor' => ['Tenor cicilan developer maksimal (bulan)', self::COUNT],
+        'kpr_banks' => ['Bank rekanan KPR', self::TEXT],
+        'pay_other' => ['Cara bayar lainnya', self::TEXT],
+        'dp_model' => ['Model uang muka', self::TEXT],
+        'dp_amount' => ['Besar uang muka', self::TEXT],
+        'dp_promo' => ['Periode promo uang muka', self::TEXT],
+        'booking_fee' => ['Tanda jadi (booking fee)', self::MONEY],
+        'booking_fee_reduces' => ['Tanda jadi mengurangi harga', self::TEXT],
+        'payment_notes' => ['Catatan pembayaran', self::TEXT],
+        // Free text from before the payment model, and what a document says about payment.
+        'payment_methods' => ['Cara bayar (catatan)', self::TEXT],
+        'down_payment' => ['Uang muka (DP) (catatan)', self::TEXT],
+        'tenor' => ['Tenor cicilan (catatan)', self::TEXT],
         'rent_estimate' => ['Perkiraan sewa', self::TEXT],
         'survey_hours' => ['Jam survei', self::TEXT],
         'survey_location' => ['Lokasi survei', self::TEXT],
@@ -46,6 +59,15 @@ final class FactKeys
     ];
 
     public const AVAILABILITY = ['Tersedia' => 'Tersedia', 'Inden' => 'Inden (belum dibangun)', 'Terjual' => 'Terjual habis'];
+
+    /** Keys of the payment model, set only in the wizard. */
+    public const PAYMENT = ['pay_options', 'installment_tenor', 'installment_interest', 'developer_tenor', 'kpr_banks', 'pay_other', 'dp_model', 'dp_amount', 'dp_promo', 'booking_fee_reduces', 'payment_notes'];
+
+    /** @return array<string, array{0: string, 1: string}> the project facts a document may be read into */
+    public static function fromDocuments(): array
+    {
+        return array_diff_key(self::PROJECT, array_flip(self::PAYMENT));
+    }
 
     public static function label(string $key): string
     {

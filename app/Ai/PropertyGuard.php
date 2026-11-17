@@ -26,6 +26,9 @@ final class PropertyGuard
 
     private const DENIAL = '(?:belum|tidak|tdk|bukan|tanpa|blm|gak|nggak|ga)';
 
+    /** Not knowing, in the same clause: "belum punya info soal", "tidak bisa memastikan", "perlu saya cek dulu". */
+    private const DOUBT = '(?:\\b(?:belum|blm)\\b|\\b(?:tidak|tdk|gak|nggak|kurang)\\s+(?:bisa|dapat|tahu|punya|yakin|ada\\s+info)\\b|\\b(?:memastikan|dipastikan|konfirmasi|mengecek|dicek|cek\\s+dulu|tanyakan|info(?:rmasi)?\\s+(?:soal|tentang|mengenai))\\b)';
+
     /** Any number, whatever follows it: "Bangunan 38" grounds "38 m2". */
     private const BARE = '/(?<![\d.,])(\d+(?:[.,]\d+)?)(?![\d])/u';
 
@@ -42,9 +45,10 @@ final class PropertyGuard
      * @param  string  $given  everything the model was given and may repeat: system prompt, chat, tool results
      * @param  list<string>  $phrases  the agency's forbidden phrases
      * @param  string|null  $sources  the agency's knowledge; bare numbers are matched here (else in $given)
+     * @param  list<string>  $granted  phrases the agency's structured facts make true (PaymentModel::granted)
      * @return list<string>
      */
-    public static function problems(string $answer, string $given, array $phrases, ?string $sources = null): array
+    public static function problems(string $answer, string $given, array $phrases, ?string $sources = null, array $granted = []): array
     {
         $problems = [];
         $known = self::money($given);
@@ -75,8 +79,10 @@ final class PropertyGuard
             }
         }
 
+        $granted = array_map(fn (string $g) => mb_strtolower(trim($g)), $granted);
+
         foreach ($phrases as $phrase) {
-            if ($sources !== null && self::promises($sources, $phrase)) {
+            if (in_array(mb_strtolower(trim($phrase)), $granted, true) || ($sources !== null && self::promises($sources, $phrase))) {
                 continue;
             }
 
@@ -156,7 +162,11 @@ final class PropertyGuard
     }
 
     /** The phrase is in the answer and not denied right next to it. */
-    private static function promises(string $answer, string $phrase): bool
+    /**
+     * Whether the answer states the phrase as true: a phrase denied or doubted in its own clause ("belum SHM", "SHM
+     * belum tersedia", "belum punya info soal siap huni", "tidak bisa memastikan siap huni") is not a statement.
+     */
+    public static function states(string $answer, string $phrase): bool
     {
         $quoted = preg_quote(trim($phrase), '/');
         $found = preg_match_all('/(?<![\p{L}\d])'.$quoted.'(?![\p{L}\d])/iu', $answer, $m, PREG_OFFSET_CAPTURE);
@@ -168,8 +178,11 @@ final class PropertyGuard
         foreach ($m[0] as [$text, $offset]) {
             $before = mb_strtolower(substr($answer, max(0, $offset - 30), min(30, $offset)));
             $after = mb_strtolower(substr($answer, $offset + strlen($text), 30));
-            $denied = preg_match('/'.self::DENIAL.'(?:\s+(?:ada|ada\s+yang|bisa|pakai|dengan|termasuk|memakai))?\s*$/iu', $before)
-                || preg_match('/^[\s\/,]*(?:\p{L}+\s+)?'.self::DENIAL.'\b/iu', $after);
+            // The clause the phrase is in, up to the last sentence mark or comma before it.
+            $clause = mb_strtolower((string) preg_replace('/^.*[.!?,;:\n]/su', '', substr($answer, max(0, $offset - 80), min(80, $offset))));
+            $denied = preg_match('/(?<![\p{L}\d])'.self::DENIAL.'(?:\s+(?:ada|ada\s+yang|bisa|pakai|dengan|termasuk|memakai))?\s*$/iu', $before)
+                || preg_match('/^[\s\/,]*(?:\p{L}+\s+)?'.self::DENIAL.'\b/iu', $after)
+                || preg_match('/'.self::DOUBT.'/iu', $clause);
 
             if (! $denied) {
                 return true;
@@ -177,5 +190,10 @@ final class PropertyGuard
         }
 
         return false;
+    }
+
+    private static function promises(string $answer, string $phrase): bool
+    {
+        return self::states($answer, $phrase);
     }
 }

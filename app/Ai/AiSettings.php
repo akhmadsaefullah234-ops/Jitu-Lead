@@ -25,7 +25,8 @@ final class AiSettings
     public const DEFAULT_QUIET_MESSAGE = 'Terima kasih kak, pesannya sudah kami terima 🙏 Kami balas lengkap besok pagi ya kak 😊';
 
     /** Phrases a property agency is offered for the guard; none is checked until the agency saves them. */
-    public const SUGGESTED_PHRASES = ['siap huni', 'pasti disetujui', 'dijamin', 'gratis', 'sudah SHM', 'bersertifikat SHM'];
+    /** "gratis" is not here: a free down payment or bonus is a fact for some agencies, checked against its payment model and knowledge instead. */
+    public const SUGGESTED_PHRASES = ['siap huni', 'pasti disetujui', 'dijamin', 'sudah SHM', 'bersertifikat SHM'];
 
     /** Handoff words offered to a property agency on top of its own list. */
     public const PROPERTY_HANDOFF = ['wna', 'orang asing', 'warga negara asing', 'foreigner', 'notaris', 'sengketa', 'kpr ditolak', 'bi checking', 'slik', 'gugatan', 'pembatalan booking'];

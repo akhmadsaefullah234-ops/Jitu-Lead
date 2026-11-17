@@ -237,7 +237,13 @@ class PropertyKnowledgeTest extends TestCase
         $this->in(fn () => Facts::saveWizard(self::WIZARD));
         $filled = $this->in(fn () => AiReadiness::check());
         $this->assertFalse($filled['passed'], 'Uji AI has not been run yet');
-        $this->assertSame(['test'], collect($filled['items'])->reject(fn ($i) => $i['ok'])->pluck('key')->values()->all());
+        $this->assertSame(['payment', 'test'], collect($filled['items'])->reject(fn ($i) => $i['ok'])->pluck('key')->values()->all(),
+            'free text about paying is not a payment model (PR 7)');
+
+        $withModel = self::WIZARD;
+        $withModel['project'] += ['pay_options' => ['cash', 'kpr'], 'dp_model' => 'standard', 'dp_amount' => '10%'];
+        $this->in(fn () => Facts::saveWizard($withModel));
+        $this->assertSame(['test'], collect($this->in(fn () => AiReadiness::check())['items'])->reject(fn ($i) => $i['ok'])->pluck('key')->values()->all());
 
         $this->in(fn () => AiEvaluation::query()->create(['trigger' => 'quick', 'passed' => 9, 'total' => 10, 'results' => []]));
         $this->assertSame(100, $this->in(fn () => AiReadiness::check())['score']);

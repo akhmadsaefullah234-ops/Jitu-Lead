@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Ai\AiSettings;
+use App\Ai\Facts\PaymentDefaults;
 use App\Automation\PropertyStageAutomationSettings;
 use App\Automation\PropertyStages;
 use App\Automation\RetailStages;
@@ -65,6 +66,9 @@ class IndustryTemplate
 
         // Pelacakan iklan with Jitu's property flow, waiting for a pixel and token; nothing goes out before.
         PropertyAdDefaults::provision($tenant);
+
+        // Jitu's wording about paying (a follow-up, two stage actions, "KPR ditolak") follows the payment model once saved.
+        PaymentDefaults::provision($tenant);
 
         // Jitu's playbook and AI settings, drafts until "Naikkan ke Auto"; an agency that already set its AI keeps it.
         if ($tenant->industry()->key === 'properti' && blank($tenant->ai_settings)) {

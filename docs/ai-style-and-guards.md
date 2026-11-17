@@ -39,6 +39,10 @@ Since PR 4 (2026-11-17) the agency's active knowledge (`PropertyGuard::sources()
 - a forbidden phrase the knowledge itself states ("Promo: gratis biaya KPR") is a fact of the agency, not a promise,
   and is not held.
 
+Since PR 7 a forbidden phrase in a clause of doubt ("saya belum punya info soal siap huni", "tidak bisa memastikan
+siap huni") is not a promise either, and payment claims are checked against the agency payment model: held only when
+they contradict it. See `docs/payment-model.md`.
+
 "What the model was given" is the system prompt (knowledge, client data, memory), the chat and tool results.
 A held answer becomes a pending draft in the Inbox with the reason, and an `ai_held` lead activity.
 
