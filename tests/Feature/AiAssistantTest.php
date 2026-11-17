@@ -218,6 +218,8 @@ class AiAssistantTest extends TestCase
 
         $last = null;
         foreach (range(1, GenerateAiReply::MAX_AUTO_PER_HOUR + 1) as $i) {
+            // A person needs a moment to read and type; instant long replies would look like another bot (OtherBot).
+            $this->travel(20)->seconds();
             $last = $this->inbound($channel, "Pertanyaan nomor $i soal harga");
         }
 

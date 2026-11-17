@@ -18,7 +18,7 @@ WhatsApp. The model is really called: about one request per scenario, not counte
 | --- | --- |
 | Expected outcome | A scenario that belongs to a person (WNA, foreigner, notary and land dispute) is not handed to the team, or one that must be answered (first greeting, the client's name, a survey request) is not. |
 | Numbers | The answer names a rupiah amount, percentage, year, duration or area that is not in what the model was given (system prompt, chat, tool results), using `PropertyGuard`. |
-| Promises | "siap huni", "pasti disetujui", the agency's own forbidden phrases, and per scenario "sudah SHM", "bisa KPR", "gratis". A phrase denied right next to it ("belum bisa KPR") passes. |
+| Promises | "siap huni", "pasti disetujui", the agency's own forbidden phrases, and per scenario "sudah SHM", "bisa KPR", "gratis". A phrase denied right next to it ("belum bisa KPR") passes, and so does one the agency's own knowledge states (a real "gratis biaya KPR" promo), so scenario 10 (promo) and 7 (KPR) follow each agency's facts. Scenario 4 (cicilan) may be answered when the knowledge has the instalment. |
 | Style | 😂, 🤣 or ❤️ used, or more than 3 emoji; the first reply does not greet with "Kak"; the name or survey day the client gave is not repeated. |
 
 The handoff scenarios depend on the agency's handoff words: an agency that has not added the property words

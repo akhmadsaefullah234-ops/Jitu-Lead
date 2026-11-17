@@ -232,7 +232,7 @@ class PropertyPlaybookTest extends TestCase
         $tenant = $this->newAgency();
 
         $this->in($tenant, function () use ($tenant) {
-            $rules = FollowUpRule::query()->whereNull('kind')->with('stage')->get();
+            $rules = FollowUpRule::query()->whereNull('kind')->with('stage')->orderBy('id')->get();
             $this->assertSame([2, 4, 6, 8, 10, 12, 14], $rules->where('stage.name', 'Lead baru')->pluck('delay_days')->values()->all());
             $this->assertSame([1, 2, 3, 4, 5, 6, 7], $rules->where('stage.name', 'Dihubungi')->pluck('delay_days')->values()->all());
             $this->assertSame([1, 2, 3, 4, 5, 6, 7], $rules->where('stage.name', 'Terkualifikasi')->pluck('delay_days')->values()->all());
