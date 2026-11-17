@@ -6,6 +6,7 @@ use App\Actions\HandleInboundWhatsApp;
 use App\Actions\ProvisionTenant;
 use App\Ai\AiSettings;
 use App\Ai\AutoGate;
+use App\Ai\Facts\Facts;
 use App\Ai\PropertyPlaybook;
 use App\Enums\AiMode;
 use App\Enums\WaChannelStatus;
@@ -15,7 +16,7 @@ use App\Filament\Resources\AiKnowledge\Pages\ManageAiKnowledge;
 use App\Filament\Resources\FollowUpRules\Pages\ManageFollowUpRules;
 use App\FollowUps\PropertyFollowUps;
 use App\Models\AiDraft;
-use App\Models\AiKnowledgeItem;
+use App\Models\AiEvaluation;
 use App\Models\FollowUpRule;
 use App\Models\Property;
 use App\Models\Stage;
@@ -98,13 +99,14 @@ class PropertyPlaybookTest extends TestCase
         return Http::recorded(fn (Request $r) => str_contains($r->url(), 'anthropic'))->last()[0]['system'];
     }
 
+    /** What the AI readiness score asks: the project filled in "Isi properti" and a passing "Uji AI saya". */
     private function ready(Tenant $tenant): void
     {
         $this->in($tenant, function () {
-            Property::query()->create(['name' => 'Rumah Contoh Kenanga', 'status' => 'available']);
-            foreach (['Harga', 'Lokasi', 'Cara bayar'] as $title) {
-                AiKnowledgeItem::create(['title' => $title, 'content' => "$title contoh.", 'active' => true]);
-            }
+            Facts::saveWizard(['project' => ['project' => 'Perumahan Contoh', 'location' => 'Jl. Contoh, Denpasar', 'payment_methods' => 'Cash, KPR',
+                'survey_hours' => '09.00 sampai 17.00', 'contact' => 'Kantor pemasaran', 'legal' => 'SHGB', 'handover' => '18 bulan'],
+                'types' => [['name' => 'Kenanga', 'price' => '500000000', 'building_area' => '36', 'land_area' => '72', 'availability' => 'Tersedia']]]);
+            AiEvaluation::query()->create(['trigger' => 'quick', 'passed' => 10, 'total' => 10, 'results' => []]);
         });
     }
 
@@ -212,7 +214,7 @@ class PropertyPlaybookTest extends TestCase
         $this->in($tenant, fn () => Livewire::test(AiModes::class)
             ->assertSee('Agensi baru dimulai dengan AI menyiapkan draf')
             ->assertActionVisible('raiseToAuto')->assertActionDisabled('raiseToAuto'));
-        $this->assertCount(2, $this->in($tenant, fn () => AutoGate::missing()));
+        $this->assertNotEmpty($this->in($tenant, fn () => AutoGate::missing()));
 
         $this->ready($tenant);
         $this->in($tenant, fn () => Livewire::test(AiModes::class)

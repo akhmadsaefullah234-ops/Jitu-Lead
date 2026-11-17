@@ -3,6 +3,9 @@
 namespace Database\Seeders;
 
 use App\Actions\MoveLeadToStage;
+use App\Ai\Evaluation\AiHealth;
+use App\Ai\Evaluation\Scenarios;
+use App\Ai\Facts\Facts;
 use App\Enums\AiMode;
 use App\Enums\Interest;
 use App\Enums\MessageStatus;
@@ -13,6 +16,8 @@ use App\Enums\WaChannelStatus;
 use App\Enums\WaChannelType;
 use App\LandingPages\Templates;
 use App\LeadForms\FormTemplates;
+use App\Models\AiEvaluation;
+use App\Models\AiFact;
 use App\Models\AiKnowledgeItem;
 use App\Models\LandingPage;
 use App\Models\Lead;
@@ -83,6 +88,27 @@ class AgensiDemoSeeder extends DemoSeeder
 
         AiKnowledgeItem::create(['title' => 'Harga dan tipe Cluster Contoh Asri', 'content' => 'Tipe 36/72 mulai Rp 685 juta, tipe 45/90 mulai Rp 820 juta. DP mulai 5%, bisa KPR.', 'source' => 'manual', 'active' => true]);
         AiKnowledgeItem::create(['title' => 'Jadwal survei', 'content' => 'Survei lokasi setiap hari pukul 09.00 sampai 16.00. Mohon konfirmasi H-1.', 'source' => 'manual', 'active' => true]);
+
+        // "Isi properti": the project and its two types, a brochure whose land area disagrees, and one "Uji AI saya" run.
+        foreach ([
+            [null, null, 'project', 'Cluster Contoh Asri'], [null, null, 'developer', 'PT Pengembang Contoh'],
+            [null, null, 'location', 'Jl. Contoh Raya, Kota Contoh Selatan'], [null, null, 'legal', 'SHM'],
+            [null, null, 'handover', 'Sekitar 12 bulan setelah akad'], [null, null, 'payment_methods', 'Cash keras, cash bertahap, KPR'],
+            [null, null, 'down_payment', 'Mulai 5%'], [null, null, 'survey_hours', 'Setiap hari 09.00 sampai 16.00'],
+            [null, null, 'survey_location', 'Rumah contoh Cluster Contoh Asri'], [null, null, 'contact', 'Kantor pemasaran Cluster Contoh Asri'],
+            ['36/72', $cluster->getKey(), 'price', '685000000'], ['36/72', $cluster->getKey(), 'building_area', '36'],
+            ['36/72', $cluster->getKey(), 'land_area', '72'], ['36/72', $cluster->getKey(), 'availability', 'Tersedia'],
+            ['45/90', null, 'price', '820000000'], ['45/90', null, 'building_area', '45'], ['45/90', null, 'land_area', '90'], ['45/90', null, 'availability', 'Inden'],
+        ] as [$subject, $propertyId, $key, $value]) {
+            AiFact::create(['subject' => $subject, 'property_id' => $propertyId, 'key' => $key, 'value' => $value, 'source' => AiFact::WIZARD, 'status' => AiFact::APPROVED]);
+        }
+        AiFact::create(['subject' => '45/90', 'key' => 'land_area', 'value' => '95', 'source' => AiFact::DOCUMENT, 'source_name' => 'brosur-cluster-contoh.pdf', 'status' => AiFact::PENDING]);
+        AiFact::create(['key' => 'rent_estimate', 'value' => 'Sekitar Rp3 juta per bulan', 'source' => AiFact::DOCUMENT, 'source_name' => 'brosur-cluster-contoh.pdf', 'status' => AiFact::PENDING]);
+        Facts::rebuild();
+        AiEvaluation::create(['trigger' => 'quick', 'passed' => 9, 'total' => 10, 'knowledge_version' => AiHealth::version(), 'results' => array_map(
+            fn (array $s, int $i) => ['no' => $i + 1, 'title' => $s['title'], 'passed' => $i !== 1, 'outcome' => 'menjawab',
+                'reply' => $i === 1 ? 'Luas tanah tipe 45/90 sekitar 95 m2 kak 😊' : 'Halo Kak 😊', 'problems' => $i === 1 ? ['tidak menyebut luas tanah tipe 45/90'] : []],
+            $quick = Scenarios::quick($tenant), array_keys($quick))]);
 
         $source = fn (string $name) => LeadSource::query()->where('name', $name)->value('id');
         $stage = fn (string $name) => Stage::query()->where('name', $name)->firstOrFail();

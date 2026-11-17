@@ -36,7 +36,7 @@ final class AiSettings
     ];
 
     /** Kept as they are when the settings form is saved: they are switched by their own buttons. */
-    public const KEPT = ['playbook', 'auto_gate'];
+    public const KEPT = ['playbook', 'auto_gate', 'auto_eval'];
 
     /**
      * What a NEW property agency starts with (IndustryTemplate::fill): WhatsApp format, the guard with the suggested
@@ -47,6 +47,7 @@ final class AiSettings
         'format' => 'whatsapp', 'max_lines' => 10, 'guard' => true, 'forbidden_phrases' => self::SUGGESTED_PHRASES,
         'delay_min' => 5, 'delay_max' => 25, 'typing' => true, 'quiet_from' => null, 'quiet_until' => null,
         'handoff_pause' => 60, 'product_list' => false, 'tone' => 'santai', 'playbook' => true, 'auto_gate' => true,
+        'auto_eval' => true,
     ];
 
     public const MAX_LINES = 20;
@@ -148,6 +149,12 @@ final class AiSettings
     }
 
     /** Whether "AI membalas otomatis" waits for "Naikkan ke Auto" (AutoGate); only new property agencies start so. */
+    /** "Uji otomatis" (Kesehatan AI): the AI is evaluated after knowledge changes and every night. On for new property agencies. */
+    public function autoEval(): bool
+    {
+        return (bool) ($this->values['auto_eval'] ?? false);
+    }
+
     public function autoGate(): bool
     {
         return (bool) ($this->values['auto_gate'] ?? false);

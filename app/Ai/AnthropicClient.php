@@ -97,6 +97,37 @@ class AnthropicClient
         return ['text' => '', 'calls' => $calls, 'trace' => $trace('max_rounds', $maxRounds + 1)];
     }
 
+    /**
+     * Asks the model to fill one tool's input from $content (text and image blocks), and returns that input; null when
+     * the model did not fill it. Thinking is left off: a forced tool choice does not take it.
+     *
+     * @param  list<array<string, mixed>>  $content
+     * @param  array{name: string, description: string, input_schema: array}  $tool
+     */
+    public function structured(string $system, array $content, array $tool, int $maxTokens = 4096): ?array
+    {
+        $response = $this->send([
+            'model' => config('services.anthropic.model'),
+            'max_tokens' => $maxTokens,
+            'system' => $system,
+            'messages' => [['role' => 'user', 'content' => $content]],
+            'tools' => [$tool],
+            'tool_choice' => ['type' => 'tool', 'name' => $tool['name']],
+        ]);
+
+        if (($response['stop_reason'] ?? null) === 'max_tokens') {
+            return null;
+        }
+
+        foreach ($response['content'] ?? [] as $block) {
+            if (($block['type'] ?? null) === 'tool_use' && ($block['name'] ?? null) === $tool['name'] && is_array($block['input'] ?? null)) {
+                return $block['input'];
+            }
+        }
+
+        return null;
+    }
+
     private function body(string $system, array $messages, int $maxTokens): array
     {
         $body = [

@@ -47,10 +47,13 @@ final class Evaluator
 
     /**
      * @param  list<int>|null  $only  scenario numbers (from 1) to run; all when null
+     * @param  list<array>|null  $scenarios  the scenarios to run (Scenarios::for or ::quick); the twenty core ones when null
      * @return list<array{no: int, title: string, passed: bool, outcome: string, reply: ?string, problems: list<string>}>
      */
-    public function run(Tenant $tenant, ?array $only = null): array
+    public function run(Tenant $tenant, ?array $only = null, ?array $scenarios = null): array
     {
+        $scenarios ??= Scenarios::all();
+
         // Nothing leaves the app but the model call: queued work, mail and notifications are held, and any other
         // HTTP request (a gateway) is answered here.
         Queue::fake();
@@ -60,7 +63,7 @@ final class Evaluator
 
         $results = [];
 
-        foreach (Scenarios::all() as $i => $scenario) {
+        foreach ($scenarios as $i => $scenario) {
             if ($only !== null && ! in_array($i + 1, $only, true)) {
                 continue;
             }

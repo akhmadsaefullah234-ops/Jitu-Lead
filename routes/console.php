@@ -27,6 +27,8 @@ Schedule::command('reports:daily')->everyFiveMinutes()->withoutOverlapping();
 Schedule::command('leads:reassign')->everyFiveMinutes()->withoutOverlapping();
 // Shops: delivered, silent and unpaid leads move by themselves (Pengaturan > Otomatisasi tahap).
 Schedule::command('stages:automate')->hourly()->withoutOverlapping();
+// Kesehatan AI: property agencies with "Uji otomatis" are evaluated after a knowledge change and every night.
+Schedule::command('ai:health')->everyFifteenMinutes()->withoutOverlapping()->runInBackground();
 Schedule::command('plan:check')->dailyAt('01:00')->withoutOverlapping();
 // After plan:check, so trials that just ended are already read-only.
 Schedule::command('trial-emails:send')->dailyAt('09:00')->timezone('Asia/Jakarta')->withoutOverlapping();

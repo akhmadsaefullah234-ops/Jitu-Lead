@@ -13,7 +13,10 @@ use ZipArchive;
  */
 class DocumentReader
 {
-    public const EXTENSIONS = ['pdf', 'docx', 'txt', 'md', 'csv'];
+    public const EXTENSIONS = ['pdf', 'docx', 'txt', 'md', 'csv', 'xlsx'];
+
+    /** Pictures (a price list photo, a brochure page) carry no text: the AI reads them itself (App\Ai\Facts\FactExtractor). */
+    public const IMAGES = ['jpg', 'jpeg', 'png', 'webp'];
 
     public const MAX_BYTES = 5 * 1024 * 1024;
 
@@ -25,7 +28,7 @@ class DocumentReader
         $extension = strtolower($extension);
 
         if (! in_array($extension, self::EXTENSIONS, true)) {
-            throw new DocumentException('Jenis file tidak didukung. Gunakan PDF, DOCX, TXT, MD, atau CSV.');
+            throw new DocumentException('Jenis file tidak didukung. Gunakan PDF, DOCX, XLSX, TXT, MD, atau CSV.');
         }
 
         if (! is_file($path) || filesize($path) > self::MAX_BYTES) {
@@ -35,6 +38,7 @@ class DocumentReader
         $text = match ($extension) {
             'pdf' => $this->pdf($path),
             'docx' => $this->docx($path),
+            'xlsx' => $this->xlsx($path),
             default => $this->plain($path),
         };
 
@@ -85,6 +89,60 @@ class DocumentReader
         $xml = preg_replace(['#</w:p>#', '#<w:br\s*/?>#', '#<w:tab\s*/?>#', '#</w:tc>#'], ["\n", "\n", "\t", ' | '], $xml);
 
         return html_entity_decode(strip_tags((string) $xml), ENT_QUOTES | ENT_XML1, 'UTF-8');
+    }
+
+    /** Every sheet of an Excel workbook, one row per line and cells split by " | ". */
+    private function xlsx(string $path): string
+    {
+        $zip = new ZipArchive;
+
+        if ($zip->open($path) !== true) {
+            throw new DocumentException('File Excel tidak bisa dibuka. Pastikan formatnya .xlsx, bukan .xls lama.');
+        }
+
+        try {
+            $strings = [];
+            $shared = $zip->getFromName('xl/sharedStrings.xml');
+
+            if ($shared !== false && strlen($shared) <= self::MAX_XML_BYTES) {
+                preg_match_all('#<si>(.*?)</si>#s', $shared, $items);
+
+                foreach ($items[1] as $item) {
+                    preg_match_all('#<t[^>]*>(.*?)</t>#s', $item, $t);
+                    $strings[] = html_entity_decode(implode('', $t[1]), ENT_QUOTES | ENT_XML1, 'UTF-8');
+                }
+            }
+
+            $lines = [];
+
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $name = (string) $zip->getNameIndex($i);
+
+                if (! preg_match('#^xl/worksheets/sheet\d+\.xml$#', $name) || ($zip->statIndex($i)['size'] ?? 0) > self::MAX_XML_BYTES) {
+                    continue;
+                }
+
+                preg_match_all('#<row[^>]*>(.*?)</row>#s', (string) $zip->getFromIndex($i), $rows);
+
+                foreach ($rows[1] as $row) {
+                    preg_match_all('#<c([^>]*)>(.*?)</c>#s', $row, $cells, PREG_SET_ORDER);
+                    $values = [];
+
+                    foreach ($cells as [$all, $attributes, $inner]) {
+                        $value = preg_match('#<v>(.*?)</v>#s', $inner, $v) ? $v[1] : (preg_match('#<t[^>]*>(.*?)</t>#s', $inner, $t) ? $t[1] : '');
+                        $values[] = str_contains($attributes, 't="s"') ? ($strings[(int) $value] ?? '') : html_entity_decode($value, ENT_QUOTES | ENT_XML1, 'UTF-8');
+                    }
+
+                    if (trim(implode('', $values)) !== '') {
+                        $lines[] = implode(' | ', $values);
+                    }
+                }
+            }
+        } finally {
+            $zip->close();
+        }
+
+        return implode("\n", $lines);
     }
 
     private function plain(string $path): string

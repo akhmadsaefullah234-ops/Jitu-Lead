@@ -24,6 +24,12 @@ WhatsApp. The model is really called: about one request per scenario, not counte
 The handoff scenarios depend on the agency's handoff words: an agency that has not added the property words
 (Pengetahuan AI > Arahan AI > **Tambah kata khusus properti**) fails scenarios 8, 9 and 19, which is the point.
 
+## Per agency (PR 5)
+
+`ai:evaluate` now runs the 20 core scenarios plus questions written from the agency's own approved facts ("Isi properti"):
+price and areas per type, survey hours, payment, location. `--quick` runs the ten questions of "Uji AI saya", and
+`--record=<trigger>` keeps the run for the Kesehatan AI page. See `docs/property-knowledge.md`.
+
 ## Daily summary
 
 The existing daily report (`reports:daily`, Laporan harian) gained three lines in **AI & otomatis**, shown only when
