@@ -19,6 +19,7 @@ use App\LeadForms\FormTemplates;
 use App\Models\AiEvaluation;
 use App\Models\AiFact;
 use App\Models\AiKnowledgeItem;
+use App\Models\ConversionEvent;
 use App\Models\LandingPage;
 use App\Models\Lead;
 use App\Models\LeadForm;
@@ -29,6 +30,8 @@ use App\Models\Stage;
 use App\Models\Tenant;
 use App\Models\WaChannel;
 use App\Models\WaConversation;
+use App\Models\WaLabelEvent;
+use App\Tracking\PropertyAdDefaults;
 use Database\Seeders\Demo\DemoSeeder;
 
 /**
@@ -89,7 +92,8 @@ class AgensiDemoSeeder extends DemoSeeder
         AiKnowledgeItem::create(['title' => 'Harga dan tipe Cluster Contoh Asri', 'content' => 'Tipe 36/72 mulai Rp 685 juta, tipe 45/90 mulai Rp 820 juta. DP mulai 5%, bisa KPR.', 'source' => 'manual', 'active' => true]);
         AiKnowledgeItem::create(['title' => 'Jadwal survei', 'content' => 'Survei lokasi setiap hari pukul 09.00 sampai 16.00. Mohon konfirmasi H-1.', 'source' => 'manual', 'active' => true]);
 
-        // "Isi properti": the project and its two types, a brochure whose land area disagrees, and one "Uji AI saya" run.
+        // "Isi properti": the project and its two types, a brochure (its land area that disagreed was rejected, its rent
+        // estimate waits for review), and one "Uji AI saya" run.
         foreach ([
             [null, null, 'project', 'Cluster Contoh Asri'], [null, null, 'developer', 'PT Pengembang Contoh'],
             [null, null, 'location', 'Jl. Contoh Raya, Kota Contoh Selatan'], [null, null, 'legal', 'SHM'],
@@ -102,7 +106,8 @@ class AgensiDemoSeeder extends DemoSeeder
         ] as [$subject, $propertyId, $key, $value]) {
             AiFact::create(['subject' => $subject, 'property_id' => $propertyId, 'key' => $key, 'value' => $value, 'source' => AiFact::WIZARD, 'status' => AiFact::APPROVED]);
         }
-        AiFact::create(['subject' => '45/90', 'key' => 'land_area', 'value' => '95', 'source' => AiFact::DOCUMENT, 'source_name' => 'brosur-cluster-contoh.pdf', 'status' => AiFact::PENDING]);
+        // Already decided in "Tinjau data AI" (the wizard's 90 kept), so the agency is ready for Auto as it comes.
+        AiFact::create(['subject' => '45/90', 'key' => 'land_area', 'value' => '95', 'source' => AiFact::DOCUMENT, 'source_name' => 'brosur-cluster-contoh.pdf', 'status' => AiFact::REJECTED]);
         AiFact::create(['key' => 'rent_estimate', 'value' => 'Sekitar Rp3 juta per bulan', 'source' => AiFact::DOCUMENT, 'source_name' => 'brosur-cluster-contoh.pdf', 'status' => AiFact::PENDING]);
         Facts::rebuild();
         AiEvaluation::create(['trigger' => 'quick', 'passed' => 9, 'total' => 10, 'knowledge_version' => AiHealth::version(), 'results' => array_map(
@@ -155,8 +160,8 @@ class AgensiDemoSeeder extends DemoSeeder
 
         foreach ([
             ['Andi Contoh', [[40, 'in', 'Halo, Cluster Contoh Asri masih ada tipe 36?'], [38, 'out', 'Halo Pak Andi, masih ada. Mau saya kirim brosur dan simulasi KPR-nya?']], 1],
-            ['Fitri Contoh', [[600, 'in', 'Sabtu jam 10 bisa survei?'], [590, 'out', 'Bisa Bu Fitri, sudah kami jadwalkan Sabtu pukul 10.00 di rumah contoh.']], 0],
-            ['Imam Contoh', [[1500, 'in', 'Berkas KPR apa saja yang perlu disiapkan?'], [1490, 'out', 'KTP, KK, NPWP, slip gaji 3 bulan, dan rekening koran 3 bulan, Pak.']], 0],
+            ['Fitri Contoh', [[600, 'in', 'Sabtu jam 10 bisa survei?'], [590, 'out', 'Bisa Bu Fitri, sudah kami jadwalkan Sabtu pukul 10.00 di rumah contoh.'], [585, 'in', 'Siap, terima kasih.']], 0],
+            ['Imam Contoh', [[1500, 'in', 'Berkas KPR apa saja yang perlu disiapkan?'], [1490, 'out', 'KTP, KK, NPWP, slip gaji 3 bulan, dan rekening koran 3 bulan, Pak.'], [1480, 'in', 'Baik, saya siapkan dulu.']], 0],
         ] as [$name, $messages, $unread]) {
             $lead = $leads[$name];
             $c = WaConversation::create(['lead_id' => $lead->getKey(), 'phone' => $lead->phone, 'unread_count' => $unread]);
@@ -166,8 +171,38 @@ class AgensiDemoSeeder extends DemoSeeder
                     'body' => $body, 'status' => $direction === 'in' ? MessageStatus::Delivered : MessageStatus::Read, 'sent_at' => now()->subMinutes($ago)]);
             }
 
-            $c->forceFill(['last_inbound_at' => now()->subMinutes($messages[0][0]), 'last_inbound_channel_id' => $channel->getKey(),
-                'free_window_ends_at' => now()->subMinutes($messages[0][0])->addDay(), 'last_message_at' => now()->subMinutes(end($messages)[0])])->save();
+            $lastIn = min(array_column(array_filter($messages, fn ($m) => $m[1] === 'in'), 0));
+            $c->forceFill(['last_inbound_at' => now()->subMinutes($lastIn), 'last_inbound_channel_id' => $channel->getKey(),
+                'free_window_ends_at' => now()->subMinutes($lastIn)->addDay(), 'last_message_at' => now()->subMinutes(end($messages)[0])])->save();
+        }
+
+        // "AI dan Survei": surveys the AI booked (by itself, or an agent sending its suggestion), handovers with their
+        // reason, and the Meta events and WhatsApp labels the stages sent. The number carries Jitu's label flow.
+        $note = function (Lead $lead, string $type, string $body, int $hoursAgo) {
+            $lead->activities()->create(['type' => $type, 'body' => $body])->forceFill(['created_at' => now()->subHours($hoursAgo)])->saveQuietly();
+
+            // A survey the AI booked came some time after the lead did (the dashboard shows the time in between).
+            if ($type === 'ai_survey' && $lead->created_at->greaterThan(now()->subHours($hoursAgo))) {
+                $lead->forceFill(['created_at' => now()->subHours($hoursAgo + 30)])->saveQuietly();
+            }
+        };
+        $note($leads['Fitri Contoh'], 'ai_survey', 'Survei dijadwalkan dari chat (AI): '.$leads['Fitri Contoh']->survey_at?->format('j M Y H:i').' di Rumah contoh Cluster Contoh Asri', 10);
+        $note($leads['Gani Contoh'], 'ai_survey', 'Survei dijadwalkan dari chat ('.$team['agent2']->name.', saran AI): '.$leads['Gani Contoh']->survey_at?->format('j M Y H:i').' di Rumah Jl. Contoh No. 10', 7 * 24);
+        $note($leads['Imam Contoh'], 'ai_survey', 'Survei dijadwalkan dari chat (AI): '.$leads['Imam Contoh']->survey_at?->format('j M Y H:i').' di Rumah contoh Cluster Contoh Asri', 13 * 24);
+        $note($leads['Hesti Contoh'], 'ai_handoff', 'AI menyerahkan chat ke agen: Klien siap booking unit', 30);
+        $note($leads['Imam Contoh'], 'ai_handoff', 'AI menyerahkan chat ke agen: Klien siap booking unit', 12 * 24);
+        $note($leads['Dina Contoh'], 'ai_handoff', 'AI menyerahkan chat ke agen: Klien minta bicara dengan agen', 50);
+
+        $channel->forceFill(['label_settings' => PropertyAdDefaults::labels($channel)])->save();
+
+        foreach ([
+            ['Erik Contoh', 'QualifiedLead', 'Prospek', 30], ['Lukman Contoh', 'QualifiedLead', 'Prospek', 26], ['Fitri Contoh', 'Schedule', 'Prospek', 10],
+            ['Imam Contoh', 'InitiateCheckout', 'Order baru', 5 * 24], ['Juli Contoh', 'Purchase', 'Lunas', 3 * 24],
+        ] as [$name, $event, $label, $hoursAgo]) {
+            $lead = $leads[$name];
+            ConversionEvent::create(['lead_id' => $lead->getKey(), 'event_name' => $event, 'event_id' => 'demo-'.$lead->getKey().'-'.$event, 'trigger' => 'stage',
+                'results' => ['meta' => ['ok' => true]]])->forceFill(['created_at' => now()->subHours($hoursAgo)])->saveQuietly();
+            WaLabelEvent::query()->firstOrCreate(['lead_id' => $lead->getKey(), 'label' => $label], ['wa_channel_id' => $channel->getKey(), 'status' => 'sent', 'sent_at' => now()->subHours($hoursAgo)]);
         }
     }
 }
