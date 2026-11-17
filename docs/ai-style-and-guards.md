@@ -28,7 +28,16 @@ Only in Auto mode, only for the `properti` industry, only when `guard` is on. An
 
 - a rupiah amount (with "Rp" or a unit: ribu, juta, jutaan, M, miliar) whose value is not in what the model was given;
 - a percentage, a year (19xx/20xx), a duration in years, or an area (m², meter, are, hektar) not in what it was given;
+- a range with money or a unit ("36-45 m2", "Rp600 sampai 700 juta", "5 s/d 10 tahun") that is not written as the
+  same range in the knowledge or what it was given;
 - a forbidden phrase, unless denied right next to it ("belum SHM", "SHM belum tersedia", "tidak siap huni").
+
+Since PR 4 (2026-11-17) the agency's active knowledge (`PropertyGuard::sources()`) is passed in too:
+
+- a percentage, duration or area counts as grounded when the same number is anywhere in the knowledge, whatever unit
+  is written there ("38 m2" against "Bangunan 38"); a year must still be written as a year;
+- a forbidden phrase the knowledge itself states ("Promo: gratis biaya KPR") is a fact of the agency, not a promise,
+  and is not held.
 
 "What the model was given" is the system prompt (knowledge, client data, memory), the chat and tool results.
 A held answer becomes a pending draft in the Inbox with the reason, and an `ai_held` lead activity.
@@ -65,6 +74,35 @@ client message that already has an AI result (sent, suggestion or handoff) is sk
 refuses a message that has a draft or a newer message, so nothing is answered twice. It does nothing during the
 agency's quiet hours.
 
+### Every failure ends with a person
+
+`GenerateAiReplyJob::failed()` covers what happens outside the AI call (a job timeout, a crash): unless the message
+already has a draft, `GenerateAiReply::failed()` writes the same handoff, activity and e-mail as above.
+
+## Another business's bot (`App\Ai\OtherBot`)
+
+Only in Auto mode. A message that reads like another business's automatic reply ("pesan otomatis", "auto reply",
+"terima kasih telah menghubungi", "ketik 1 untuk", away/closed messages), or the third instant reply in a row (within
+8 seconds) to our own automatic messages, is not answered: the AI is not called, the chat is paused for 24 hours
+(`pauseAiFor`), and it is handed to an agent with the reason "Tampaknya balasan otomatis dari bisnis lain ...".
+AI replies sent by themselves are stored with origin `ai` (`GenerateAiReply::AI_ORIGIN`) so the ping-pong can be seen;
+welcomes, follow-ups and the night greeting count too.
+
+## Consistent answers (`App\Ai\AnswerMemory`)
+
+Property agencies only. Every answer that passes is remembered per agency for 14 days under the normalised question
+and the knowledge version (count and last change of active items; any edit starts afresh). When the same question
+comes again and the model wants to hand it over, it is asked once more with its earlier answer in view
+(`GenerateAiReply::CONSISTENT_NOTE`); a question never answered before is handed over as before. The API's
+`temperature` cannot be set on the current model (400 for non-default values), so consistency comes from this memory
+instead of a lower temperature.
+
+## Internal words
+
+`ReplySignals::internal()` also catches the prompt's own section names in capitals: "PENGETAHUAN", "DATA KLIEN:",
+"PLAYBOOK PROPERTI", "RINGKASAN PERCAKAPAN:", "MEMORI PERCAKAPAN:", a "LAMPIRAN:" line left inside the text,
+"PERBAIKI:", next to the tool names it already caught. Such an answer is rewritten once, then handed to an agent.
+
 ## Property handoff words
 
 New property agencies get `AiSettings::PROPERTY_HANDOFF` (WNA, orang asing, notaris, sengketa, KPR ditolak, BI
@@ -75,6 +113,12 @@ words with **Tambah kata khusus properti**.
 
 Unchanged by default: short format, guard off, no pause, no quiet hours, their own handoff list, product list on.
 Since 2026-11-16 every agency's failed AI answers are handed to a person (before, they were only logged).
+
+PR 4 (2026-11-17), for every agency including shops: another business's bot is no longer answered in Auto mode
+(paused 24 hours, handed to an agent); AI replies sent by themselves carry origin `ai` (before: none); a failed job
+hands the chat to an agent; the capitalised section names above are treated as internal text. For property agencies
+with the guard on: a number grounded only by a different unit in the knowledge, or a forbidden phrase the knowledge
+states, is no longer held, and a range not in the knowledge now is. The consistency memory is property-only.
 
 ## Playbook properti
 

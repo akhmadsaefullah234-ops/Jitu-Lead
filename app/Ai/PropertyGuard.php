@@ -2,6 +2,8 @@
 
 namespace App\Ai;
 
+use App\Models\AiKnowledgeItem;
+
 /**
  * The last check on a property agency's automatic reply: money, percentages, years and areas the answer names must
  * come from what the model was given (PENGETAHUAN, the lead, the chat, tool results), and none of the agency's
@@ -24,14 +26,25 @@ final class PropertyGuard
 
     private const DENIAL = '(?:belum|tidak|tdk|bukan|tanpa|blm|gak|nggak|ga)';
 
+    /** Any number, whatever follows it: "Bangunan 38" grounds "38 m2". */
+    private const BARE = '/(?<![\d.,])(\d+(?:[.,]\d+)?)(?![\d])/u';
+
+    /** "36-45 m2", "Rp600 sampai 700 juta", "5 s/d 10 tahun": a range, with money or a unit so dates and phone numbers are left alone. */
+    private const RANGE = '/(rp\.?\s*)?(?<![\d.,])(\d+(?:[.,]\d+)?)\s*(?:-|–|—|s\.?\/?d\.?|sampai|hingga|sd)\s*(?:rp\.?\s*)?(\d+(?:[.,]\d+)?)\s*(ribu|rb|juta|jutaan|jt|miliar|milyar|M|m2|m²|meter|tahun|thn|bulan|%|persen)?(?![\p{L}\d])/iu';
+
     /**
      * Why the answer may not go out on its own, or [] when it may.
      *
+     * A percentage, year, duration or area counts as grounded when the same number is in the sources, whatever unit
+     * is written next to it there ("38 m2" against "Bangunan 38"); a range must be in what was given as a range. A
+     * forbidden phrase the agency's own knowledge states ("Gratis biaya KPR") is a fact, not a promise.
+     *
      * @param  string  $given  everything the model was given and may repeat: system prompt, chat, tool results
      * @param  list<string>  $phrases  the agency's forbidden phrases
+     * @param  string|null  $sources  the agency's knowledge; bare numbers are matched here (else in $given)
      * @return list<string>
      */
-    public static function problems(string $answer, string $given, array $phrases): array
+    public static function problems(string $answer, string $given, array $phrases, ?string $sources = null): array
     {
         $problems = [];
         $known = self::money($given);
@@ -42,8 +55,10 @@ final class PropertyGuard
             }
         }
 
+        $bare = array_values(self::numbers(self::BARE, ($sources ?? $given)."\n".$given));
+
         foreach ([self::PERCENT => 'persentase', self::YEAR => 'tahun', self::DURATION => 'jangka waktu', self::AREA => 'luas'] as $pattern => $what) {
-            $allowed = self::numbers($pattern, $given);
+            $allowed = [...array_values(self::numbers($pattern, $given)), ...($pattern === self::YEAR ? [] : $bare)];
 
             foreach (self::numbers($pattern, $answer) as $text => $value) {
                 if (! in_array($value, $allowed, true)) {
@@ -52,7 +67,19 @@ final class PropertyGuard
             }
         }
 
+        $ranges = self::ranges($given."\n".($sources ?? ''));
+
+        foreach (self::ranges($answer) as $text => $pair) {
+            if (! in_array($pair, $ranges, true)) {
+                $problems[] = "rentang \"{$text}\" tidak ada di pengetahuan atau data";
+            }
+        }
+
         foreach ($phrases as $phrase) {
+            if ($sources !== null && self::promises($sources, $phrase)) {
+                continue;
+            }
+
             if (self::promises($answer, $phrase)) {
                 $problems[] = "frasa terlarang \"{$phrase}\"";
             }
@@ -89,6 +116,30 @@ final class PropertyGuard
         }
 
         return $out;
+    }
+
+    /** @return array<string, string> each range with money or a unit, as written => "low-high" */
+    private static function ranges(string $text): array
+    {
+        preg_match_all(self::RANGE, $text, $m, PREG_SET_ORDER);
+        $out = [];
+
+        foreach ($m as $match) {
+            if (trim($match[1]) === '' && ($match[4] ?? '') === '') {
+                continue;
+            }
+
+            $out[trim($match[0])] = str_replace(',', '.', $match[2]).'-'.str_replace(',', '.', $match[3]);
+        }
+
+        return $out;
+    }
+
+    /** The agency's active knowledge, all of it: what a forbidden phrase or a bare number may be grounded in. */
+    public static function sources(): string
+    {
+        return AiKnowledgeItem::query()->where('active', true)->get(['title', 'question', 'content'])
+            ->map(fn (AiKnowledgeItem $i) => trim($i->title."\n".$i->question."\n".$i->content))->implode("\n\n");
     }
 
     /** @return array<string, string> each number as written => the number alone, "1,5" and "1.5" alike */

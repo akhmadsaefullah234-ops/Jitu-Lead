@@ -10,7 +10,9 @@ namespace App\Ai\Evaluation;
  *
  * Each scenario: the chat so far ('in' from the client, 'out' from the agency) ending with the client's message,
  * what must happen ('answer', 'handoff', or 'any'), and what the answer must or must not say. Every answer is also
- * checked for numbers that are not in what the AI was given, forbidden promises, and the emoji style.
+ * checked for numbers that are not in what the AI was given, forbidden promises, and the emoji style. A promise
+ * the agency's own knowledge states (a real "gratis" bonus, KPR that is truly available) is not counted against it,
+ * so the scenarios follow each agency's facts instead of assuming none.
  */
 final class Scenarios
 {
@@ -36,7 +38,7 @@ final class Scenarios
                 'expect' => 'any',
             ],
             [
-                'title' => 'Cicilan per bulan (tidak ada di pengetahuan)',
+                'title' => 'Cicilan per bulan',
                 'turns' => [['in', 'Kalau cicilan per bulannya berapa ya kak untuk tipe paling kecil?']],
                 'expect' => 'any',
             ],

@@ -39,6 +39,10 @@ class ReplySignals
         '/\b(?:saya|aku)\s+(?:perlu|harus|akan|sebaiknya)\s+(?:memanggil|menjalankan)\b|\b(?:saya|aku)\s+(?:perlu|harus|sebaiknya)\s+(?:menggunakan|memakai|menyerahkan|mengalihkan)\b/iu',
         '/(?:^|[.!?\n]\s*)(?:pembeli|pelanggan|klien|customer|user)\s+(?:ini\s+)?(?:menanyakan|bertanya|meminta|ingin|mengirim|memilih)\b/iu',
         '/<\/?[a-z_]{2,}[^>]*>/i',
+        // The prompt's own section names, written in capitals ("PENGETAHUAN", "DATA KLIEN:", "PLAYBOOK PROPERTI").
+        '/\bPENGETAHUAN\b/u',
+        '/\b(?:DATA\s+KLIEN|ALAT\s+KLIEN|PLAYBOOK(?:\s+PROPERTI)?|RINGKASAN\s+PERCAKAPAN(?:\s+SEBELUMNYA)?|MEMORI\s+PERCAKAPAN|LAMPIRAN|PERBAIKI)\s*:/u',
+        '/\bPLAYBOOK\s+PROPERTI\b/u',
     ];
 
     /** @return list<array{name: string, description: string, input_schema: array}> */

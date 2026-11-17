@@ -143,8 +143,9 @@ final class Evaluator
         }
 
         if ($reply !== null) {
+            // What the agency's own knowledge states is a fact for it ("Gratis biaya KPR"), not an invented promise.
             $phrases = array_values(array_unique([...self::PROMISES, ...AiSettings::of($tenant)->forbiddenPhrases(), ...($scenario['promises'] ?? [])]));
-            $problems = [...$problems, ...PropertyGuard::problems($reply, $given, $phrases)];
+            $problems = [...$problems, ...PropertyGuard::problems($reply, $given, $phrases, $this->current->run($tenant, fn () => PropertyGuard::sources()))];
 
             foreach ($scenario['must'] ?? [] as $pattern => $what) {
                 if (! preg_match($pattern, $reply)) {

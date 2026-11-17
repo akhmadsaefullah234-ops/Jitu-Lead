@@ -5,6 +5,7 @@ namespace App\Actions;
 use App\Ai\AiException;
 use App\Ai\AiFailureAlert;
 use App\Ai\AiSettings;
+use App\Ai\AnswerMemory;
 use App\Ai\AnthropicClient;
 use App\Ai\AutoGate;
 use App\Ai\BuyerFacts;
@@ -14,6 +15,7 @@ use App\Ai\HandoffRules;
 use App\Ai\KnowledgeBase;
 use App\Ai\LeadQuote;
 use App\Ai\OrderConfirmation;
+use App\Ai\OtherBot;
 use App\Ai\PackageStatus;
 use App\Ai\ProductContext;
 use App\Ai\PropertyClientFacts;
@@ -92,6 +94,12 @@ class GenerateAiReply
     /** The second try after an empty answer (cut off, refused, or only tool calls). */
     public const EMPTY_NOTE = 'PERBAIKI: jawabanmu sebelumnya kosong atau terpotong. Tulis sekarang satu balasan singkat untuk pembeli (paling banyak 6 baris), tanpa memanggil tool lagi kecuali memang perlu.';
 
+    /** The same question answered before from the same knowledge: the model is asked to stay consistent. */
+    public const CONSISTENT_NOTE = 'Pertanyaan yang sama pernah kamu jawab dari PENGETAHUAN dengan: "%s". Jawab lagi dengan isi yang konsisten bila masih sesuai dengan PENGETAHUAN; serahkan ke admin hanya bila memang tidak bisa dijawab.';
+
+    /** Marks a message the AI sent by itself, so a ping-pong with another bot can be seen. */
+    public const AI_ORIGIN = 'ai';
+
     /** Tokens and tool rounds an answer may use: a form order (summary, cek_ongkir, catat_pesanan) needs room. */
     public const MAX_TOKENS = 2048;
 
@@ -153,6 +161,15 @@ class GenerateAiReply
         }
 
         $tenant = $this->current->get();
+
+        // Another business's automatic reply, or a chat answering our automatic replies within seconds again and
+        // again: not a client. The AI keeps out of it for a day, says nothing back, and an agent is told.
+        if ($mode === AiMode::Auto && ($why = OtherBot::detect($conversation, $inbound, $text)) !== null) {
+            // The same instance the handoff draft may pause again, so a shorter "Jeda setelah diserahkan" never shortens it.
+            $inbound->conversation->pauseAiFor(OtherBot::PAUSE_HOURS * 3600);
+
+            return $this->handoffTo($inbound, $why);
+        }
 
         // Quiet hours (Arahan AI > Jam malam): an automatic reply waits for the morning, with a short greeting first if chosen.
         if ($mode === AiMode::Auto && ! $afterHours && ($until = AiSettings::of($tenant)->quietUntil(now()->toImmutable(), $tenant->timezone ?: (string) config('app.timezone'))) !== null) {
@@ -378,6 +395,14 @@ class GenerateAiReply
             }
 
             if (($why = ReplySignals::handoff($calls)) !== null || ReplySignals::silent($calls)) {
+                // The same question was answered before from the same knowledge: answer it again instead of
+                // sometimes answering and sometimes handing it over.
+                if (! $last && $tenant->industry()->key === 'properti' && ! ReplySignals::silent($calls) && ($previous = AnswerMemory::previous($tenant, $text)) !== null) {
+                    $retry = sprintf(self::CONSISTENT_NOTE, $previous);
+
+                    continue;
+                }
+
                 return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed ?? $formOrder, self::OUT_OF_KNOWLEDGE.($why ? ': '.$why : ''));
             }
 
@@ -509,7 +534,7 @@ class GenerateAiReply
         // A property agency that turned the guard on: money, percentages, years and areas only from what the AI was
         // given, and none of its forbidden phrases. Otherwise the answer waits for a person.
         if ($tenant->industry()->key === 'properti' && $settings->guard()) {
-            $problems = PropertyGuard::problems($answer, implode("\n", [$given, ...$notes, ...array_map(fn (array $c) => json_encode([$c['input'] ?? [], $c['result'] ?? []], JSON_UNESCAPED_UNICODE), $calls)]), $settings->forbiddenPhrases());
+            $problems = PropertyGuard::problems($answer, implode("\n", [$given, ...$notes, ...array_map(fn (array $c) => json_encode([$c['input'] ?? [], $c['result'] ?? []], JSON_UNESCAPED_UNICODE), $calls)]), $settings->forbiddenPhrases(), PropertyGuard::sources());
 
             if ($problems !== []) {
                 return $this->hold($inbound, $answer, $problems, $assetIds, $actions);
@@ -517,6 +542,10 @@ class GenerateAiReply
         }
 
         $answer = mb_substr($answer, 0, SendWhatsAppMessage::MAX_LENGTH);
+
+        if ($tenant->industry()->key === 'properti') {
+            AnswerMemory::remember($tenant, $text, $answer);
+        }
 
         if ($mode === AiMode::Draft) {
             return $this->draft($inbound, $answer, AiDraft::PENDING, null, true, $assetIds, $actions);
@@ -818,7 +847,7 @@ class GenerateAiReply
             return $this->draft($inbound, $answer, AiDraft::PENDING, 'Tidak ada jalur gratis untuk membalas otomatis', $apiCall, $assetIds, $actions);
         }
 
-        $message = ($this->send)($conversation, $actor, $answer);
+        $message = ($this->send->from(self::AI_ORIGIN))($conversation, $actor, $answer);
 
         if ($message->status === MessageStatus::Failed) {
             return $this->draft($inbound, $answer, AiDraft::PENDING, 'Pengiriman otomatis gagal: '.$message->error, $apiCall, $assetIds, $actions);
@@ -915,6 +944,19 @@ class GenerateAiReply
         }
 
         return $failed;
+    }
+
+    /**
+     * The job itself failed (a timeout, a crash outside the AI call): the chat still goes to a person, with the
+     * activity and the admin e-mail, unless this message already got a draft or a handoff.
+     */
+    public function failed(WaMessage $inbound, Throwable $e): ?AiDraft
+    {
+        if ($inbound->conversation === null || AiDraft::query()->where('message_id', $inbound->getKey())->exists()) {
+            return null;
+        }
+
+        return $this->aiFailed($inbound, $e);
     }
 
     /**
