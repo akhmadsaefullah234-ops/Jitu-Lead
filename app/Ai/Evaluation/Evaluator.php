@@ -4,6 +4,7 @@ namespace App\Ai\Evaluation;
 
 use App\Actions\GenerateAiReply;
 use App\Ai\AiSettings;
+use App\Ai\Facts\PaymentModel;
 use App\Ai\PropertyGuard;
 use App\Enums\AiMode;
 use App\Enums\MessageStatus;
@@ -148,7 +149,9 @@ final class Evaluator
         if ($reply !== null) {
             // What the agency's own knowledge states is a fact for it ("Gratis biaya KPR"), not an invented promise.
             $phrases = array_values(array_unique([...self::PROMISES, ...AiSettings::of($tenant)->forbiddenPhrases(), ...($scenario['promises'] ?? [])]));
-            $problems = [...$problems, ...PropertyGuard::problems($reply, $given, $phrases, $this->current->run($tenant, fn () => PropertyGuard::sources()))];
+            $payment = $this->current->run($tenant, fn () => PaymentModel::current());
+            $sources = $this->current->run($tenant, fn () => PropertyGuard::sources());
+            $problems = [...$problems, ...PropertyGuard::problems($reply, $given, $phrases, $sources, $payment->granted()), ...$payment->claims($reply, $sources)];
 
             foreach ($scenario['must'] ?? [] as $pattern => $what) {
                 if (! preg_match($pattern, $reply)) {

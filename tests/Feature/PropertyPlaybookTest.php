@@ -103,7 +103,7 @@ class PropertyPlaybookTest extends TestCase
     private function ready(Tenant $tenant): void
     {
         $this->in($tenant, function () {
-            Facts::saveWizard(['project' => ['project' => 'Perumahan Contoh', 'location' => 'Jl. Contoh, Denpasar', 'payment_methods' => 'Cash, KPR',
+            Facts::saveWizard(['project' => ['project' => 'Perumahan Contoh', 'location' => 'Jl. Contoh, Denpasar', 'pay_options' => ['cash', 'kpr'], 'dp_model' => 'standard', 'dp_amount' => '10%',
                 'survey_hours' => '09.00 sampai 17.00', 'contact' => 'Kantor pemasaran', 'legal' => 'SHGB', 'handover' => '18 bulan'],
                 'types' => [['name' => 'Kenanga', 'price' => '500000000', 'building_area' => '36', 'land_area' => '72', 'availability' => 'Tersedia']]]);
             AiEvaluation::query()->create(['trigger' => 'quick', 'passed' => 10, 'total' => 10, 'results' => []]);

@@ -4,6 +4,7 @@ namespace App\Ai\Evaluation;
 
 use App\Ai\Facts\FactFormat;
 use App\Ai\Facts\Facts;
+use App\Ai\Facts\PaymentModel;
 use App\Models\AiFact;
 use App\Models\Tenant;
 use App\Support\CurrentTenant;
@@ -208,7 +209,11 @@ final class Scenarios
                     'expect' => 'answer', 'must' => ['/(?<!\d)0?'.(int) $m[0].'(?!\d)/u' => 'menyebut jam survei dari data agensi']];
             }
 
-            if (isset($project['payment_methods']) && ($word = self::firstWord($project['payment_methods']->value)) !== null) {
+            $payment = PaymentModel::from($facts->whereNull('subject'));
+
+            if ($payment->filled()) {
+                $out = [...$out, ...self::payment($payment)];
+            } elseif (isset($project['payment_methods']) && ($word = self::firstWord($project['payment_methods']->value)) !== null) {
                 $out[] = ['title' => 'Cara bayar (data agensi)', 'turns' => [['in', 'Bisa bayar pakai apa saja kak?']],
                     'expect' => 'answer', 'must' => ['/'.preg_quote($word, '/').'/iu' => 'menyebut cara bayar dari data agensi ('.$word.')']];
             }
@@ -225,6 +230,44 @@ final class Scenarios
 
             return $out;
         });
+    }
+
+    /**
+     * Questions about paying, from the agency's payment model: the ways it offers are answered, a way it does not offer
+     * is declined honestly (never agreed to), and nothing-down is said only when the model has it.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private static function payment(PaymentModel $model): array
+    {
+        $out = [['title' => 'Cara bayar (model pembayaran agensi)', 'turns' => [['in', 'Bisa bayar pakai apa saja kak?']], 'expect' => 'answer',
+            'must' => [self::anyOf(array_map(fn (string $o) => match ($o) {
+                'kpr' => 'KPR', 'installment' => 'bertahap', 'developer' => 'developer', 'cash' => 'cash|tunai|kontan', default => '\\p{L}+',
+            }, $model->options())) => 'menyebut cara bayar yang tersedia ('.$model->choices().')']]];
+
+        $out[] = $model->offers('kpr')
+            ? ['title' => 'KPR tersedia (model pembayaran agensi)', 'turns' => [['in', 'Bisa pakai KPR nggak kak?']], 'expect' => 'answer',
+                'must' => ['/KPR/u' => 'menjawab soal KPR'], 'promises' => ['pasti disetujui', 'dijamin disetujui']]
+            : ['title' => 'KPR tidak tersedia (model pembayaran agensi)', 'turns' => [['in', 'Bisa pakai KPR nggak kak?']], 'expect' => 'any',
+                'must' => ['/\\b(?:belum|tidak|tdk|bukan|hanya|cuma|baru)\\b/iu' => 'menjawab jujur bahwa KPR belum tersedia']];
+
+        $out[] = in_array($model->downPayment(), ['none', 'zero', 'free'], true)
+            ? ['title' => 'Tanpa DP (model pembayaran agensi)', 'turns' => [['in', 'Bisa tanpa DP kak?']], 'expect' => 'answer',
+                'must' => ['/\\b(?:DP|uang muka)\\b/iu' => 'menjawab soal DP']]
+            : ['title' => 'Tanpa DP tidak tersedia (model pembayaran agensi)', 'turns' => [['in', 'Bisa tanpa DP atau DP 0 kak?']], 'expect' => 'any',
+                'must' => ['/\\b(?:belum|tidak|tdk|bukan|DP\\s+(?:mulai|ringan|minimal|sebesar)|mulai)\\b/iu' => 'tidak menjanjikan tanpa DP']];
+
+        if (! $model->offers('developer')) {
+            $out[] = ['title' => 'Cicilan developer tidak tersedia (model pembayaran agensi)', 'turns' => [['in', 'Bisa dicicil langsung ke developer kak?']], 'expect' => 'any'];
+        }
+
+        return $out;
+    }
+
+    /** @param  list<string>  $words */
+    private static function anyOf(array $words): string
+    {
+        return '/'.implode('|', $words).'/iu';
     }
 
     /** 642850000 => "642,85 juta", "642 jutaan", "Rp642.850.000"; 1250000000 => "1,25 M", "1.250.000.000". */

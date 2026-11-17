@@ -41,7 +41,7 @@ class ReplySignals
         '/<\/?[a-z_]{2,}[^>]*>/i',
         // The prompt's own section names, written in capitals ("PENGETAHUAN", "DATA KLIEN:", "PLAYBOOK PROPERTI").
         '/\bPENGETAHUAN\b/u',
-        '/\b(?:DATA\s+KLIEN|ALAT\s+KLIEN|PLAYBOOK(?:\s+PROPERTI)?|RINGKASAN\s+PERCAKAPAN(?:\s+SEBELUMNYA)?|MEMORI\s+PERCAKAPAN|LAMPIRAN|PERBAIKI)\s*:/u',
+        '/\b(?:DATA\s+KLIEN|ALAT\s+KLIEN|PLAYBOOK(?:\s+PROPERTI)?|RINGKASAN\s+PERCAKAPAN(?:\s+SEBELUMNYA)?|MEMORI\s+PERCAKAPAN|MODEL\s+PEMBAYARAN(?:\s+AGENSI)?|LAMPIRAN|PERBAIKI)\s*(?:\([^)\n]{0,60}\))?\s*:/u',
         '/\bPLAYBOOK\s+PROPERTI\b/u',
     ];
 

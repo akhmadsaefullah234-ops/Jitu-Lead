@@ -30,6 +30,12 @@ The handoff scenarios depend on the agency's handoff words: an agency that has n
 price and areas per type, survey hours, payment, location. `--quick` runs the ten questions of "Uji AI saya", and
 `--record=<trigger>` keeps the run for the Kesehatan AI page. See `docs/property-knowledge.md`.
 
+## Payment model (PR 7)
+
+The payment scenarios come from the agency payment model, including questions about a way to pay that is not
+offered, and promises about KPR, DP and "gratis" are judged against it. Four demo profiles cover the shapes; see
+`docs/payment-model.md`.
+
 ## Daily summary
 
 The existing daily report (`reports:daily`, Laporan harian) gained three lines in **AI & otomatis**, shown only when

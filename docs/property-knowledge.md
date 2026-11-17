@@ -8,7 +8,7 @@ A wizard in four steps:
 
 1. **Proyek**: project, developer, location, legality, handover.
 2. **Tipe unit**: one row per type with price, building and land area, bedrooms, bathrooms, availability and bonus.
-3. **Pembayaran**: payment methods, booking fee, DP, tenor, and an optional rent estimate.
+3. **Pembayaran**: the agency payment model (ways to pay, down payment, tanda jadi; see `docs/payment-model.md`) and an optional rent estimate.
 4. **Survei**: survey hours, survey place, contact.
 
 Each answer is stored as a fact (`ai_facts`). A fact records:
@@ -25,7 +25,7 @@ Saving the wizard does three things:
 - **Approved facts:** every approved fact is replaced by what the wizard shows. A value that did not change keeps its fact, and so keeps its source.
 - **Knowledge entries:** the standard entries (`source = fakta`) are rewritten by `Facts::rebuild()`:
   - "Proyek …";
-  - "Cara bayar";
+  - "Model pembayaran" (or "Cara bayar" from the old free-text fields while the model is empty);
   - "Jam dan lokasi survei";
   - "Kontak";
   - "Perkiraan sewa", which always says it is an estimate and not a promise;
@@ -73,7 +73,7 @@ A score out of 100, built from these items:
 | Building and land area for every type | 10 | no |
 | Availability for every type | 5 | no |
 | Project location | 10 | yes |
-| Payment methods | 10 | yes |
+| Payment model (ways to pay and down payment, PR 7) | 10 | yes |
 | Survey hours | 10 | yes |
 | Contact | 5 | no |
 | Legality and handover | 5 | no |
@@ -90,7 +90,7 @@ The agency passes at **80** points with every required item met. `AutoGate::miss
 - "Harga tipe X": the answer must carry the price. It may be written in full, as "642,85 juta", "642 jutaan", or "1,25 M".
 - "Luas tipe X": the answer must carry the building and land area.
 - Survey hours: the answer must carry the first hour.
-- Payment: the answer must carry the first method.
+- Payment: from the payment model when it is filled (see `docs/payment-model.md`), otherwise the answer must carry the first method.
 - Location: the answer must carry the last part of the address.
 
 `Scenarios::quick()` is **Uji AI saya**: up to five of the agency's own questions, then core scenarios 1, 5, 8, 17 and 20, then more core ones, ten in all.

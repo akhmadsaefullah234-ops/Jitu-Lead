@@ -7,10 +7,12 @@ use App\Ai\DocumentReader;
 use App\Ai\Facts\FactExtractor;
 use App\Ai\Facts\FactKeys;
 use App\Ai\Facts\Facts;
+use App\Ai\Facts\PaymentModel;
 use App\Enums\Role;
 use App\Support\CurrentTenant;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Repeater;
@@ -19,6 +21,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Wizard;
 use Filament\Schemas\Components\Wizard\Step;
 use Filament\Schemas\Schema;
@@ -59,9 +62,14 @@ class PropertySetup extends Page
         return $current->roleOf(auth()->user()) === Role::Admin && $current->get()?->industry()->key === 'properti';
     }
 
+    /** @var array<string, string> the free-text payment facts from before the payment model */
+    public array $legacy = [];
+
     public function mount(): void
     {
-        $this->form->fill(Facts::form());
+        $form = Facts::form();
+        $this->legacy = array_filter(array_intersect_key($form['project'], array_flip(['payment_methods', 'down_payment', 'tenor'])), 'filled');
+        $this->form->fill($form);
     }
 
     public function form(Schema $schema): Schema
@@ -93,11 +101,24 @@ class PropertySetup extends Page
                             TextInput::make('bonus')->label('Bonus')->maxLength(300)->columnSpan(2)->placeholder('Kosongkan bila tidak ada'),
                         ]),
                 ]),
-                Step::make('Pembayaran')->description('Cara bayar, tenor, sewa')->columns(2)->schema([
-                    $text('payment_methods', 'Cash keras, cash bertahap 12 kali, KPR')->columnSpanFull(),
+                Step::make('Pembayaran')->description('Cara bayar, uang muka, tanda jadi')->columns(2)->schema([
+                    CheckboxList::make('project.pay_options')->label('Cara bayar yang tersedia')->options(PaymentModel::OPTIONS)->columns(3)->live()->columnSpanFull()
+                        ->helperText('AI hanya menawarkan yang dicentang. Yang tidak dicentang dijawab jujur "belum tersedia".'),
+                    $text('installment_tenor', '24')->suffix('bulan')->visible(fn (Get $get) => in_array('installment', (array) $get('project.pay_options'), true)),
+                    Select::make('project.installment_interest')->label(FactKeys::label('installment_interest'))->options(['tidak' => 'Tanpa bunga', 'ada' => 'Ada bunga'])
+                        ->visible(fn (Get $get) => in_array('installment', (array) $get('project.pay_options'), true)),
+                    $text('developer_tenor', '36')->suffix('bulan')->visible(fn (Get $get) => in_array('developer', (array) $get('project.pay_options'), true)),
+                    $text('kpr_banks', 'Opsional, mis. Bank Contoh')->visible(fn (Get $get) => in_array('kpr', (array) $get('project.pay_options'), true)),
+                    $text('pay_other', 'Mis. tukar tambah')->visible(fn (Get $get) => in_array('other', (array) $get('project.pay_options'), true)),
+                    Select::make('project.dp_model')->label(FactKeys::label('dp_model'))->options(PaymentModel::DOWN_PAYMENTS)->live(),
+                    $text('dp_amount', '5% atau Rp10.000.000')->visible(fn (Get $get) => in_array($get('project.dp_model'), ['light', 'standard'], true)),
+                    $text('dp_promo', 'Mis. sampai 31 Desember')->visible(fn (Get $get) => $get('project.dp_model') === 'free'),
                     $text('booking_fee', '5000000'),
-                    $text('down_payment', '10% dari harga'),
-                    $text('tenor', 'KPR sampai 20 tahun'),
+                    Select::make('project.booking_fee_reduces')->label(FactKeys::label('booking_fee_reduces'))->options(['ya' => 'Ya, mengurangi harga', 'tidak' => 'Tidak, di luar harga']),
+                    $text('payment_notes', 'Opsional')->columnSpanFull(),
+                    // Free text from before the payment model: shown only while it holds something, to be cleared once covered above.
+                    ...array_map(fn (string $key) => $text($key)->columnSpanFull()->visible(fn () => filled($this->legacy[$key] ?? null))
+                        ->helperText('Teks lama. Kosongkan bila sudah tercakup di isian di atas.'), ['payment_methods', 'down_payment', 'tenor']),
                     $text('rent_estimate', 'Kosongkan bila tidak ada')->helperText('Opsional. AI menyebutnya sebagai perkiraan, bukan janji.'),
                 ]),
                 Step::make('Survei')->description('Jam, lokasi, kontak')->columns(2)->schema([

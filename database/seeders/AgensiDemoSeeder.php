@@ -6,6 +6,8 @@ use App\Actions\MoveLeadToStage;
 use App\Ai\Evaluation\AiHealth;
 use App\Ai\Evaluation\Scenarios;
 use App\Ai\Facts\Facts;
+use App\Ai\Facts\PaymentDefaults;
+use App\Ai\Facts\PaymentModel;
 use App\Enums\AiMode;
 use App\Enums\Interest;
 use App\Enums\MessageStatus;
@@ -97,8 +99,11 @@ class AgensiDemoSeeder extends DemoSeeder
         foreach ([
             [null, null, 'project', 'Cluster Contoh Asri'], [null, null, 'developer', 'PT Pengembang Contoh'],
             [null, null, 'location', 'Jl. Contoh Raya, Kota Contoh Selatan'], [null, null, 'legal', 'SHM'],
-            [null, null, 'handover', 'Sekitar 12 bulan setelah akad'], [null, null, 'payment_methods', 'Cash keras, cash bertahap, KPR'],
-            [null, null, 'down_payment', 'Mulai 5%'], [null, null, 'survey_hours', 'Setiap hari 09.00 sampai 16.00'],
+            [null, null, 'handover', 'Sekitar 12 bulan setelah akad'],
+            // Payment model: cash, cash in instalments, or KPR, with a light down payment (profile "KPR + DP ringan").
+            [null, null, 'pay_options', 'cash,installment,kpr'], [null, null, 'installment_tenor', '12'], [null, null, 'installment_interest', 'tidak'],
+            [null, null, 'dp_model', 'light'], [null, null, 'dp_amount', '5%'], [null, null, 'booking_fee', '5000000'], [null, null, 'booking_fee_reduces', 'ya'],
+            [null, null, 'survey_hours', 'Setiap hari 09.00 sampai 16.00'],
             [null, null, 'survey_location', 'Rumah contoh Cluster Contoh Asri'], [null, null, 'contact', 'Kantor pemasaran Cluster Contoh Asri'],
             ['36/72', $cluster->getKey(), 'price', '685000000'], ['36/72', $cluster->getKey(), 'building_area', '36'],
             ['36/72', $cluster->getKey(), 'land_area', '72'], ['36/72', $cluster->getKey(), 'availability', 'Tersedia'],
@@ -110,6 +115,7 @@ class AgensiDemoSeeder extends DemoSeeder
         AiFact::create(['subject' => '45/90', 'key' => 'land_area', 'value' => '95', 'source' => AiFact::DOCUMENT, 'source_name' => 'brosur-cluster-contoh.pdf', 'status' => AiFact::REJECTED]);
         AiFact::create(['key' => 'rent_estimate', 'value' => 'Sekitar Rp3 juta per bulan', 'source' => AiFact::DOCUMENT, 'source_name' => 'brosur-cluster-contoh.pdf', 'status' => AiFact::PENDING]);
         Facts::rebuild();
+        PaymentDefaults::adapt($tenant, PaymentModel::current());
         AiEvaluation::create(['trigger' => 'quick', 'passed' => 9, 'total' => 10, 'knowledge_version' => AiHealth::version(), 'results' => array_map(
             fn (array $s, int $i) => ['no' => $i + 1, 'title' => $s['title'], 'passed' => $i !== 1, 'outcome' => 'menjawab',
                 'reply' => $i === 1 ? 'Luas tanah tipe 45/90 sekitar 95 m2 kak 😊' : 'Halo Kak 😊', 'problems' => $i === 1 ? ['tidak menyebut luas tanah tipe 45/90'] : []],

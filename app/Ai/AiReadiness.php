@@ -3,6 +3,7 @@
 namespace App\Ai;
 
 use App\Ai\Facts\Facts;
+use App\Ai\Facts\PaymentModel;
 use App\Models\AiEvaluation;
 use App\Models\AiFact;
 use App\Models\Property;
@@ -39,7 +40,7 @@ final class AiReadiness
             ['areas', 'Luas bangunan dan tanah tiap tipe', $every('building_area', 'land_area'), 10, false, 'Isi luas bangunan dan luas tanah setiap tipe di "Isi properti".'],
             ['availability', 'Ketersediaan tiap tipe', $every('availability'), 5, false, 'Pilih ketersediaan setiap tipe (tersedia, inden, terjual).'],
             ['location', 'Lokasi proyek', isset($project['location']) || $available->contains(fn (Property $p) => filled($p->location)), 10, true, 'Isi lokasi proyek di "Isi properti".'],
-            ['payment', 'Cara bayar', isset($project['payment_methods']), 10, true, 'Isi cara bayar (cash, cash bertahap, KPR) di "Isi properti".'],
+            ['payment', 'Model pembayaran (cara bayar dan uang muka)', PaymentModel::from($facts->whereNull('subject'))->filled(), 10, true, 'Centang cara bayar yang tersedia dan pilih model uang muka di langkah Pembayaran "Isi properti".'],
             ['survey', 'Jam survei', isset($project['survey_hours']), 10, true, 'Isi jam survei di "Isi properti", supaya AI bisa menawarkan jadwal.'],
             ['contact', 'Kontak', isset($project['contact']), 5, false, 'Isi kontak kantor atau agen di "Isi properti".'],
             ['legal', 'Legalitas dan serah terima', isset($project['legal'], $project['handover']), 5, false, 'Isi legalitas dan perkiraan serah terima di "Isi properti".'],
