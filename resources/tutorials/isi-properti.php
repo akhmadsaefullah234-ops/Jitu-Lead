@@ -21,7 +21,7 @@ return [
         ],
         [
             'text' => 'Di <b>Tinjau data AI</b>, klik <b>Setujui</b> atau <b>Tolak</b> untuk tiap data dari dokumen. Bila dua sumber menyebut nilai berbeda, misalnya luas tanah 90 dan 95 m2, keduanya ditandai <b>Bertentangan</b>. Klik <b>Pakai nilai ini</b> pada yang benar. Selama belum diputuskan, AI tidak menyebut data itu.',
-            'alt' => 'Daftar Tinjau data AI dengan data yang menunggu dan yang bertentangan',
+            'alt' => 'Daftar Tinjau data AI dengan data dari dokumen yang menunggu tinjauan',
             'shot' => ['page' => 'tinjau-data-ai', 'highlight' => ['.fi-ta']],
         ],
         [

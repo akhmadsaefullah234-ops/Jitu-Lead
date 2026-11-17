@@ -37,6 +37,7 @@ return [
         ],
     ],
     'tips' => [
+        'Berapa lead yang digerakkan tiap tahap, dan event serta label yang ikut terkirim, terlihat di <b>AI dan Survei</b>.',
         'Tahap dikenali dari namanya di templat properti atau dari syaratnya (tahap bersyarat survei, tahap bersyarat booking), jadi aturan tetap jalan bila urutan pipeline sedikit berbeda.',
         'Dari terminal: <code>php artisan stages:catch-up --tenant=&lt;slug&gt;</code> menampilkan pratinjau yang sama; tambahkan <code>--apply</code> untuk menerapkan.',
     ],

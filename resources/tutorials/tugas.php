@@ -4,6 +4,7 @@ return [
     'title' => 'Tugas',
     'group' => 'penjualan',
     'order' => 40,
+    'industries' => ['retail'],
     'menu' => 'Tugas',
     'intro' => '<p>Daftar tindak lanjut semua lead yang masih terbuka, dari isian <b>Aksi berikutnya</b> dan <b>Tenggat aksi</b> di lead. Setiap tahap mengisi tindak lanjut bawaannya sendiri. Agen melihat lead miliknya saja.</p>',
     'steps' => [
@@ -21,6 +22,5 @@ return [
     ],
     'tips' => [
         'Tugas hilang dari daftar saat lead masuk tahap Menang atau Gugur. Jumlah tugas terlambat tampil sebagai angka merah di menu Tugas.',
-        'Agensi properti dengan Otomatisasi tahap menyala: tugas "Hubungi lewat WhatsApp atau telepon" selesai sendiri saat AI atau agen membalas, "Gali kebutuhan" selesai saat tujuan klien tercatat, dan chat yang diserahkan AI muncul sebagai tugas "Tanggapi chat yang diserahkan AI" beserta alasannya.',
     ],
 ];

@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'title' => 'Siap iklan Klik ke WhatsApp',
+    'title' => 'Pelacakan iklan CTWA dan label',
     'group' => 'iklan',
     'order' => 30,
     'industries' => ['properti'],
@@ -18,6 +18,11 @@ return [
             'text' => 'Klik <b>Uji kirim event</b>, pilih event, lalu <b>Kirim</b>. Event masuk ke tab Test Events di Events Manager bila <b>Kode uji event</b> sudah diisi di Pelacakan iklan. Di bawahnya, <b>Ringkasan 30 hari</b> menghitung event per pemicu dan label per status untuk dicocokkan dengan Ads Manager.',
             'alt' => 'Tombol Uji kirim event dan Ringkasan 30 hari',
             'shot' => ['page' => 'siap-iklan-ctwa', 'highlight' => ['.fi-header button:has-text("Uji kirim event")', '.fi-section >> nth=1']],
+        ],
+        [
+            'text' => 'Label dipasang dari nomor gateway: buka <b>Koneksi WhatsApp</b>, ubah nomornya, lalu di bagian label klik <b>Pakai bawaan Jitu</b> (Prospek saat Terkualifikasi atau Jadwal survei, Order baru saat Booking, Lunas saat Closing, hanya untuk chat dari iklan). Label yang belum ada di akun WhatsApp Business ditunggu dan dicoba lagi sampai 7 hari. Hasil per tahap, event dan label, terlihat di <b>AI dan Survei</b>.',
+            'alt' => 'Tabel per tahap di AI dan Survei dengan event Meta dan label terpasang',
+            'shot' => ['page' => 'ai-dan-survei', 'highlight' => ['.as-grid > * >> nth=1']],
         ],
     ],
     'tips' => [

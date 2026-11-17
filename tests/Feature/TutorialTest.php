@@ -78,8 +78,8 @@ class TutorialTest extends TestCase
     public function test_the_remaining_shop_and_general_chapters_are_there(): void
     {
         $shop = ['produk', 'promo-ongkir', 'otomatisasi-tahap', 'menghubungkan-everpro', 'cek-ongkir', 'membuat-resi', 'resi-otomatis',
-            'pesan-status-kiriman', 'paket-gagal-antar', 'hubungkan-impor-resi'];
-        $general = ['pesan-sambutan', 'impor-lead', 'koneksi-whatsapp', 'pustaka-media', 'follow-up-otomatis', 'tugas', 'pelacakan-iklan',
+            'pesan-status-kiriman', 'paket-gagal-antar', 'hubungkan-impor-resi', 'tugas'];
+        $general = ['pesan-sambutan', 'impor-lead', 'koneksi-whatsapp', 'pustaka-media', 'follow-up-otomatis', 'pelacakan-iklan',
             'label-whatsapp-business', 'laporan', 'laporan-harian', 'tahap-sumber-alasan', 'notifikasi', 'langganan', 'data-privasi'];
 
         foreach ($shop as $slug) {
@@ -102,7 +102,8 @@ class TutorialTest extends TestCase
     public function test_the_property_chapters_are_there_and_replace_the_shop_ones_on_the_same_page(): void
     {
         $property = ['katalog-properti', 'pipeline-properti', 'menggali-kebutuhan', 'jadwal-survei', 'booking-closing', 'gugur',
-            'landing-properti', 'formulir-properti', 'follow-up-properti', 'dasbor-properti', 'otomatisasi-tahap-properti', 'siap-iklan-ctwa'];
+            'landing-properti', 'formulir-properti', 'follow-up-properti', 'dasbor-properti', 'otomatisasi-tahap-properti', 'siap-iklan-ctwa',
+            'ai-siap-pakai', 'kesiapan-ai', 'tugas-properti'];
 
         foreach ($property as $slug) {
             $this->assertSame(['properti'], Tutorials::all()[$slug]->industries, $slug);
@@ -111,6 +112,7 @@ class TutorialTest extends TestCase
         // The shop versions of the board and the form are shop-only now; each property chapter takes their place.
         $this->assertSame(['retail'], Tutorials::all()['pipeline']->industries);
         $this->assertSame(['retail'], Tutorials::all()['formulir-pemesanan']->industries);
+        $this->assertSame(['retail'], Tutorials::all()['tugas']->industries);
 
         $agency = $this->agency();
         $this->assertSame([], array_diff($property, $this->visibleSlugs($agency, Role::Admin)));
