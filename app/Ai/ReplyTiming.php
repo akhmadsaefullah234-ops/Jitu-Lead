@@ -20,7 +20,7 @@ final class ReplyTiming
 {
     public static function queue(Tenant $tenant, WaChannel $channel, WaMessage $message): void
     {
-        $pause = $channel->ai_mode === AiMode::Auto ? AiSettings::of($tenant)->pause() : 0;
+        $pause = AutoGate::effective($channel->ai_mode, $tenant) === AiMode::Auto ? AiSettings::of($tenant)->pause() : 0;
         $job = GenerateAiReplyJob::dispatch($tenant->getKey(), $message->getKey());
 
         if ($pause <= 0) {

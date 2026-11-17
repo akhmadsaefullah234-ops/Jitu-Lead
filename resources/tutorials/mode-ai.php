@@ -12,7 +12,7 @@ return [
         .'<li><b>AI membalas otomatis</b>: AI langsung membalas bila jawabannya ada di pengetahuan Anda.</li></ul>',
     'steps' => [
         [
-            'text' => 'Buka <b>AI Asisten > Mode AI</b>. Pada kolom <b>Pembalas</b>, pilih mode untuk tiap nomor. Pilihan tersimpan langsung, tanpa tombol simpan.',
+            'text' => 'Buka <b>AI Asisten > Mode AI</b>. Pada kolom <b>Pembalas</b>, pilih mode untuk tiap nomor. Pilihan tersimpan langsung, tanpa tombol simpan. Agensi properti baru dimulai dengan <b>AI menyiapkan, agen yang kirim</b>; pilihan <b>AI membalas otomatis</b> terbuka setelah tombol <b>Naikkan ke Auto</b> diklik, yang aktif bila katalog properti dan minimal 3 catatan pengetahuan sudah ada.',
             'alt' => 'Halaman Siapa yang membalas chat dengan kolom Pembalas untuk tiap nomor WhatsApp',
             'shot' => ['page' => 'ai-modes', 'highlight' => ['td select >> nth=0']],
         ],

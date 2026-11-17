@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\WaChannels;
 
+use App\Ai\AutoGate;
 use App\Enums\AiMode;
 use App\Enums\WaChannelStatus;
 use App\Enums\WaChannelType;
@@ -12,6 +13,7 @@ use App\Filament\Support\NoAutofill;
 use App\Models\Stage;
 use App\Models\WaChannel;
 use App\Models\WaLabelEvent;
+use App\Support\CurrentTenant;
 use App\Support\Industry;
 use App\Tracking\PropertyAdDefaults;
 use App\WhatsApp\BusinessLabels;
@@ -82,7 +84,10 @@ class WaChannelResource extends Resource
                     ->helperText('Untuk gateway: nomor dengan urutan terkecil dipakai dulu, sisanya cadangan.'),
             ]),
             Section::make('Asisten AI')->schema([
-                Select::make('ai_mode')->label('Siapa yang membalas chat di nomor ini')->options(AiMode::class)->default(AiMode::Off->value)->required()
+                Select::make('ai_mode')->label('Siapa yang membalas chat di nomor ini')
+                    // A new property agency starts with drafts, and picks Auto only after "Naikkan ke Auto" (AutoGate).
+                    ->options(fn (?WaChannel $record) => AutoGate::options(app(CurrentTenant::class)->get()) + ($record?->ai_mode === AiMode::Auto ? [AiMode::Auto->value => AiMode::Auto->getLabel()] : []))
+                    ->default(fn () => AutoGate::locked(app(CurrentTenant::class)->get()) ? AiMode::Draft->value : AiMode::Off->value)->required()
                     ->helperText('Saya balas sendiri: tanpa AI. AI menyiapkan: agen memutuskan mengirim. AI membalas otomatis: AI langsung membalas bila jawabannya ada di pengetahuan Anda, selain itu chat diserahkan ke agen. Mudah diganti juga di menu AI Asisten > Mode AI.'),
             ]),
             Section::make('Panduan: menyambungkan WhatsApp Business API resmi')->collapsible()->collapsed(fn (?WaChannel $record) => $record !== null)

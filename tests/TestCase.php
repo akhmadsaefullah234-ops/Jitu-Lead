@@ -18,7 +18,13 @@ abstract class TestCase extends BaseTestCase
     {
         $admin ??= User::factory()->create();
 
-        return app(ProvisionTenant::class)(ucwords(str_replace('-', ' ', $slug)), $slug, $admin);
+        $tenant = app(ProvisionTenant::class)(ucwords(str_replace('-', ' ', $slug)), $slug, $admin);
+
+        // Most tests speak for agencies made before Jitu's new-agency AI defaults (playbook, drafts until "Naikkan ke
+        // Auto"); PropertyPlaybookTest provisions a new agency itself.
+        $tenant->forceFill(['ai_settings' => null])->save();
+
+        return $tenant;
     }
 
     protected function member(Tenant $tenant, Role $role): User

@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Ai\AiSettings;
 use App\Automation\PropertyStageAutomationSettings;
 use App\Automation\PropertyStages;
 use App\Automation\RetailStages;
@@ -53,8 +54,8 @@ class IndustryTemplate
     }
 
     /**
-     * A new property agency (or one switched to property before it had leads) starts with Otomatisasi tahap on and
-     * Jitu's ad-tracking flow. An agency that already chose keeps its choice.
+     * A new property agency (or one switched to property before it had leads) starts with Otomatisasi tahap on,
+     * Jitu's ad-tracking flow, and Jitu's AI playbook and settings. An agency that already chose keeps its choice.
      */
     private function automation(Tenant $tenant): void
     {
@@ -64,6 +65,11 @@ class IndustryTemplate
 
         // Pelacakan iklan with Jitu's property flow, waiting for a pixel and token; nothing goes out before.
         PropertyAdDefaults::provision($tenant);
+
+        // Jitu's playbook and AI settings, drafts until "Naikkan ke Auto"; an agency that already set its AI keeps it.
+        if ($tenant->industry()->key === 'properti' && blank($tenant->ai_settings)) {
+            $tenant->forceFill(['ai_settings' => AiSettings::NEW_PROPERTY])->save();
+        }
     }
 
     private function replace(Tenant $tenant): void

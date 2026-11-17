@@ -11,5 +11,10 @@
         <strong>AI membalas otomatis</strong>: AI langsung membalas klien bila jawabannya ada di pengetahuan Anda. Bila tidak yakin atau klien minta bicara dengan orang, chat diserahkan ke agen. AI berhenti sendiri saat agen mulai mengetik.<br>
         Pilihan bisa diganti kapan saja dan langsung berlaku untuk pesan berikutnya.
     </div>
+    @if ($note = $this->gateNote())
+        <div style="padding:.75rem 1rem;border:1px solid #fde68a;background:#fffbeb;border-radius:.6rem;font-size:.9rem;max-width:48rem" data-gate>
+            {{ $note }}
+        </div>
+    @endif
     {{ $this->table }}
 </x-filament-panels::page>

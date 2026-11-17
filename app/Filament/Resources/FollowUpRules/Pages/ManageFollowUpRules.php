@@ -105,7 +105,7 @@ class ManageFollowUpRules extends ManageRecords
     private function propertySummary(): string
     {
         $follow = PropertyFollowUps::for(app(CurrentTenant::class)->get());
-        $names = implode(', ', [...array_map(fn ($r) => $r['name'], $follow->starters()), SurveyReminder::DEFAULTS['name']]);
+        $names = implode('; ', [...$follow->sequences(), SurveyReminder::DEFAULTS['name']]);
 
         return ($follow->enabled() ? 'Semua aktif' : 'Belum semua aktif').": {$names}. "
             .'Rangkaian berhenti untuk lead yang sudah membalas atau sudah dibalas agen (dari Inbox atau HP); pengingat survei tetap dikirim.';
@@ -117,8 +117,7 @@ class ManageFollowUpRules extends ManageRecords
             ->visible(fn () => ! PropertyFollowUps::for(app(CurrentTenant::class)->get())->enabled())
             ->requiresConfirmation()
             ->modalHeading('Nyalakan follow-up properti bawaan')
-            ->modalDescription(fn () => implode(', ', array_map(fn ($r) => "{$r['name']} (tahap {$r['stage']})", PropertyFollowUps::for(app(CurrentTenant::class)->get())->starters()))
-                .', dan Pengingat survei H-1 dinyalakan. Teks yang sudah Anda ubah tetap dipakai; aturan yang terhapus dibuat lagi dengan teks bawaan. Pesan mulai terkirim pada jadwal berikutnya.')
+            ->modalDescription(fn () => PropertyFollowUps::for(app(CurrentTenant::class)->get())->preview())
             ->action(function () {
                 $result = PropertyFollowUps::for(app(CurrentTenant::class)->get())->enable();
                 Notification::make()->title(count($result['on']).' follow-up aktif')

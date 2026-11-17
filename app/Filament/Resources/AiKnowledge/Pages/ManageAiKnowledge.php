@@ -7,6 +7,7 @@ use App\Ai\AiSettings;
 use App\Ai\AnthropicClient;
 use App\Ai\DocumentException;
 use App\Ai\DocumentReader;
+use App\Ai\PropertyPlaybook;
 use App\Filament\Resources\AiKnowledge\AiKnowledgeResource;
 use App\Models\MediaAsset;
 use App\Privacy\KnowledgeScan;
@@ -91,6 +92,7 @@ class ManageAiKnowledge extends ManageRecords
                 ->label('Unduh template')->icon(Heroicon::OutlinedDocumentText)->color('gray')->button(),
             $this->deactivatePersonalAction(),
             $this->settingsAction(),
+            $this->playbookAction(),
             CreateAction::make()->label('Tulis catatan'),
         ];
     }
@@ -156,57 +158,42 @@ class ManageAiKnowledge extends ManageRecords
     }
 
     /** Defaults are already filled in for every agency; this is only for changing them. */
+    private static function isProperty(): bool
+    {
+        return app(CurrentTenant::class)->get()?->industry()->key === 'properti';
+    }
+
+    /** Jitu's property playbook, to read; an agency made before it turns it on here. It cannot be turned off. */
+    public function playbookAction(): Action
+    {
+        $on = fn () => PropertyPlaybook::applies(app(CurrentTenant::class)->get());
+
+        return Action::make('playbook')->label('Playbook properti')->icon(Heroicon::OutlinedBookOpen)->color('gray')
+            ->visible(fn () => self::isProperty())
+            ->modalHeading(fn () => $on() ? 'Playbook properti Jitu (menyala)' : 'Nyalakan playbook properti Jitu?')
+            ->modalDescription(fn () => new HtmlString(
+                '<p>Aturan inti yang selalu dipakai AI, di atas "Gaya dan aturan khusus" Anda. Arahan agensi hanya menambah gaya bicara; aturan ini tidak bisa dihapus dari sana.</p>'
+                .'<div style="white-space:pre-wrap;font-size:.8rem;margin-top:.5rem;text-align:left">'.e(PropertyPlaybook::instructions(app(CurrentTenant::class)->get())).'</div>'
+                .($on() ? '' : '<p style="margin-top:.5rem"><b>Setelah dinyalakan, playbook tidak bisa dimatikan dari sini.</b> Pengaturan lain tidak berubah.</p>')))
+            ->modalSubmitActionLabel('Nyalakan playbook')
+            ->modalSubmitAction(fn ($action) => $on() ? false : $action)
+            ->modalCancelActionLabel('Tutup')
+            ->action(function () use ($on) {
+                if (! $on()) {
+                    $tenant = app(CurrentTenant::class)->get();
+                    $tenant->forceFill(['ai_settings' => array_merge((array) $tenant->ai_settings, ['playbook' => true])])->save();
+                    Notification::make()->title('Playbook properti menyala')->body('Berlaku untuk balasan AI berikutnya.')->success()->send();
+                }
+            });
+    }
+
     private function settingsAction(): Action
     {
         return Action::make('settings')->label('Arahan AI (lanjutan)')->icon(Heroicon::OutlinedCog6Tooth)->color('gray')
             ->modalHeading('Arahan AI (lanjutan)')
             ->modalDescription('Sudah terisi bawaan yang siap pakai, Anda tidak perlu mengubahnya. Aturan dasar tetap berlaku: AI hanya menjawab dari pengetahuan dan menyerahkan chat ke agen bila tidak yakin.')
             ->fillForm(fn () => app(CurrentTenant::class)->get()->only(['ai_instructions', 'ai_handoff_keywords']) + AiSettings::of(app(CurrentTenant::class)->get())->form())
-            ->schema([
-                Textarea::make('ai_instructions')->label('Gaya dan aturan khusus')->rows(8)->maxLength(2000),
-                Radio::make('format')->label('Bentuk balasan')->options(AiSettings::FORMATS)->live()
-                    ->helperText('Bawaan: singkat tanpa format. Format WhatsApp cocok untuk jawaban berbentuk blok, misalnya harga, legalitas, atau lokasi.'),
-                TextInput::make('max_lines')->label('Paling banyak baris per balasan')->numeric()->minValue(1)->maxValue(AiSettings::MAX_LINES)
-                    ->visible(fn (Get $get) => $get('format') === 'whatsapp'),
-                Toggle::make('product_list')->label('Tanyakan tipe lewat daftar')
-                    ->helperText('Hidup (bawaan): bila tipe atau produk yang ditanyakan klien belum jelas, AI menanyakannya dengan menyebut pilihannya dan belum menyebut harga. Matikan bila sapaan pertama harus mengikuti arahan Anda: AI tidak menyodorkan daftar dan boleh menjawab harga umum dari pengetahuan.'),
-                Textarea::make('ai_handoff_keywords')->label('Kata yang membuat AI menyerahkan chat ke agen')->rows(4)->maxLength(1000)
-                    ->helperText('Pisahkan dengan koma. Jika Anda menghapus sebuah kata, AI akan ikut menjawab pesan yang memuatnya.'),
-                Section::make('Pemeriksa sebelum kirim otomatis')->compact()
-                    ->visible(fn () => app(CurrentTenant::class)->get()?->industry()->key === 'properti')
-                    ->schema([
-                        Toggle::make('guard')->label('Tahan balasan yang memuat angka atau frasa yang tidak ada di pengetahuan')
-                            ->helperText('Harga, persentase, tahun, dan luas harus ada di pengetahuan, data lead, atau chat. Bila tidak, balasan tidak dikirim dan menunggu agen di Inbox, dengan alasannya di aktivitas lead.'),
-                        Textarea::make('forbidden_phrases')->label('Frasa terlarang')->rows(2)
-                            ->placeholder(implode(', ', AiSettings::SUGGESTED_PHRASES))
-                            ->helperText('Pisahkan dengan koma. Frasa yang langsung disangkal ("belum siap huni", "SHM belum tersedia") tidak dihitung.'),
-                    ]),
-                Section::make('Jeda dan jam malam (hanya mode otomatis)')->compact()->columns(2)
-                    ->schema([
-                        TextInput::make('delay_min')->label('Jeda paling cepat (detik)')->numeric()->minValue(0)->maxValue(AiSettings::MAX_DELAY),
-                        TextInput::make('delay_max')->label('Jeda paling lama (detik)')->numeric()->minValue(0)->maxValue(AiSettings::MAX_DELAY)
-                            ->helperText('0 = langsung. Contoh 5 dan 25: balasan dikirim acak 5 sampai 25 detik setelah pesan masuk.'),
-                        Toggle::make('typing')->label('Tampilkan "mengetik..." selama jeda (nomor scan QR)')->columnSpanFull(),
-                        TimePicker::make('quiet_from')->label('Jam malam mulai')->seconds(false),
-                        TimePicker::make('quiet_until')->label('Jam malam selesai')->seconds(false)
-                            ->helperText('Kosongkan keduanya bila AI boleh membalas kapan saja. Zona waktu agensi.'),
-                        Radio::make('quiet_mode')->label('Di jam malam')->options(AiSettings::QUIET_MODES)->columnSpanFull(),
-                        Textarea::make('quiet_message')->label('Sambutan jam malam')->rows(2)->maxLength(500)->columnSpanFull(),
-                    ]),
-                Section::make('Lampiran sambutan (hanya mode otomatis)')->compact()
-                    ->schema([
-                        Select::make('welcome_assets')->label('Lampirkan di balasan otomatis pertama ke tiap lead')->multiple()->maxItems(AiSettings::MAX_WELCOME_ASSETS)
-                            ->options(fn () => MediaAsset::query()->where('active', true)->orderBy('title')->pluck('title', 'id')->all())
-                            ->helperText('Misalnya brosur dan daftar harga dari Pustaka media. Dikirim sekali per lead, sesudah balasan pertama AI. Kosongkan bila tidak perlu.'),
-                    ]),
-                Section::make('Saat chat ditangani agen')->compact()->columns(2)
-                    ->schema([
-                        TextInput::make('agent_pause')->label('AI diam setelah agen membalas (menit)')->numeric()->minValue(1)->maxValue(AiSettings::MAX_PAUSE_MINUTES)
-                            ->helperText('Berlaku untuk balasan dari Inbox dan dari WhatsApp di HP. Bawaan 5 menit.'),
-                        TextInput::make('handoff_pause')->label('AI diam setelah menyerahkan chat (menit)')->numeric()->minValue(0)->maxValue(AiSettings::MAX_PAUSE_MINUTES)
-                            ->helperText('0 (bawaan): pertanyaan berikutnya yang ada di pengetahuan tetap dijawab AI. Isi misalnya 60 agar chat yang diserahkan dijawab agen saja.'),
-                    ]),
-            ])
+            ->schema(fn () => self::settingsFields(self::isProperty()))
             ->extraModalFooterActions([
                 Action::make('propertyHandoff')->label('Tambah kata khusus properti')->color('gray')->cancelParentActions()
                     ->visible(fn () => app(CurrentTenant::class)->get()?->industry()->key === 'properti')
@@ -234,9 +221,68 @@ class ManageAiKnowledge extends ManageRecords
                 app(CurrentTenant::class)->get()->update([
                     'ai_instructions' => $data['ai_instructions'] ?: null,
                     'ai_handoff_keywords' => $data['ai_handoff_keywords'] ?: null,
-                    'ai_settings' => AiSettings::fromForm($data),
+                    'ai_settings' => AiSettings::save(app(CurrentTenant::class)->get()->ai_settings, $data),
                 ]);
                 Notification::make()->title('Arahan disimpan')->success()->send();
             });
+    }
+
+    /** Arahan AI: for a property agency the name and tone first, everything else folded under "Lanjutan". */
+    private static function settingsFields(bool $property): array
+    {
+        return [
+            TextInput::make('assistant_name')->label('Nama asisten')->maxLength(AiSettings::MAX_NAME)
+                ->placeholder(fn () => AiSettings::of(app(CurrentTenant::class)->get())->assistantName((string) app(CurrentTenant::class)->get()?->name))
+                ->helperText('Nama yang dipakai AI saat memperkenalkan diri. Kosongkan untuk memakai bawaan. AI tidak mengaku bot kecuali ditanya; bila ditanya, AI menjawab jujur.')
+                ->visible($property),
+            Radio::make('tone')->label('Nada')->options(AiSettings::TONES)->inline()->visible($property),
+            Section::make($property ? 'Lanjutan' : null)->collapsible($property)->collapsed($property)->compact($property)
+                ->description($property ? 'Gaya tambahan, format, pemeriksa, jeda, dan serah-terima. Sudah terisi bawaan yang siap pakai.' : null)
+                ->schema([
+                    Textarea::make('ai_instructions')->label('Gaya dan aturan khusus')->rows(8)->maxLength(2000),
+                    Radio::make('format')->label('Bentuk balasan')->options(AiSettings::FORMATS)->live()
+                        ->helperText('Bawaan: singkat tanpa format. Format WhatsApp cocok untuk jawaban berbentuk blok, misalnya harga, legalitas, atau lokasi.'),
+                    TextInput::make('max_lines')->label('Paling banyak baris per balasan')->numeric()->minValue(1)->maxValue(AiSettings::MAX_LINES)
+                        ->visible(fn (Get $get) => $get('format') === 'whatsapp'),
+                    Toggle::make('product_list')->label('Tanyakan tipe lewat daftar')
+                        ->helperText('Hidup (bawaan): bila tipe atau produk yang ditanyakan klien belum jelas, AI menanyakannya dengan menyebut pilihannya dan belum menyebut harga. Matikan bila sapaan pertama harus mengikuti arahan Anda: AI tidak menyodorkan daftar dan boleh menjawab harga umum dari pengetahuan.'),
+                    Textarea::make('ai_handoff_keywords')->label('Kata yang membuat AI menyerahkan chat ke agen')->rows(4)->maxLength(1000)
+                        ->helperText('Pisahkan dengan koma. Jika Anda menghapus sebuah kata, AI akan ikut menjawab pesan yang memuatnya.'),
+                    Section::make('Pemeriksa sebelum kirim otomatis')->compact()
+                        ->visible(fn () => app(CurrentTenant::class)->get()?->industry()->key === 'properti')
+                        ->schema([
+                            Toggle::make('guard')->label('Tahan balasan yang memuat angka atau frasa yang tidak ada di pengetahuan')
+                                ->helperText('Harga, persentase, tahun, dan luas harus ada di pengetahuan, data lead, atau chat. Bila tidak, balasan tidak dikirim dan menunggu agen di Inbox, dengan alasannya di aktivitas lead.'),
+                            Textarea::make('forbidden_phrases')->label('Frasa terlarang')->rows(2)
+                                ->placeholder(implode(', ', AiSettings::SUGGESTED_PHRASES))
+                                ->helperText('Pisahkan dengan koma. Frasa yang langsung disangkal ("belum siap huni", "SHM belum tersedia") tidak dihitung.'),
+                        ]),
+                    Section::make('Jeda dan jam malam (hanya mode otomatis)')->compact()->columns(2)
+                        ->schema([
+                            TextInput::make('delay_min')->label('Jeda paling cepat (detik)')->numeric()->minValue(0)->maxValue(AiSettings::MAX_DELAY),
+                            TextInput::make('delay_max')->label('Jeda paling lama (detik)')->numeric()->minValue(0)->maxValue(AiSettings::MAX_DELAY)
+                                ->helperText('0 = langsung. Contoh 5 dan 25: balasan dikirim acak 5 sampai 25 detik setelah pesan masuk.'),
+                            Toggle::make('typing')->label('Tampilkan "mengetik..." selama jeda (nomor scan QR)')->columnSpanFull(),
+                            TimePicker::make('quiet_from')->label('Jam malam mulai')->seconds(false),
+                            TimePicker::make('quiet_until')->label('Jam malam selesai')->seconds(false)
+                                ->helperText('Kosongkan keduanya bila AI boleh membalas kapan saja. Zona waktu agensi.'),
+                            Radio::make('quiet_mode')->label('Di jam malam')->options(AiSettings::QUIET_MODES)->columnSpanFull(),
+                            Textarea::make('quiet_message')->label('Sambutan jam malam')->rows(2)->maxLength(500)->columnSpanFull(),
+                        ]),
+                    Section::make('Lampiran sambutan (hanya mode otomatis)')->compact()
+                        ->schema([
+                            Select::make('welcome_assets')->label('Lampirkan di balasan otomatis pertama ke tiap lead')->multiple()->maxItems(AiSettings::MAX_WELCOME_ASSETS)
+                                ->options(fn () => MediaAsset::query()->where('active', true)->orderBy('title')->pluck('title', 'id')->all())
+                                ->helperText('Misalnya brosur dan daftar harga dari Pustaka media. Dikirim sekali per lead, sesudah balasan pertama AI. Kosongkan bila tidak perlu.'),
+                        ]),
+                    Section::make('Saat chat ditangani agen')->compact()->columns(2)
+                        ->schema([
+                            TextInput::make('agent_pause')->label('AI diam setelah agen membalas (menit)')->numeric()->minValue(1)->maxValue(AiSettings::MAX_PAUSE_MINUTES)
+                                ->helperText('Berlaku untuk balasan dari Inbox dan dari WhatsApp di HP. Bawaan 5 menit.'),
+                            TextInput::make('handoff_pause')->label('AI diam setelah menyerahkan chat (menit)')->numeric()->minValue(0)->maxValue(AiSettings::MAX_PAUSE_MINUTES)
+                                ->helperText('0 (bawaan): pertanyaan berikutnya yang ada di pengetahuan tetap dijawab AI. Isi misalnya 60 agar chat yang diserahkan dijawab agen saja.'),
+                        ]),
+                ]),
+        ];
     }
 }

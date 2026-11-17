@@ -11,8 +11,8 @@ use Carbon\CarbonInterface;
 
 /**
  * A property agency's built-in follow-ups switched on in one click (Follow-up > "Nyalakan follow-up properti"): the
- * starter sequence from config/industries.php (Sapaan H+1, Tanya kebutuhan H+3, Tawarkan survei H+7) and the survey
- * reminder H-1. A starter rule the agency already has is switched on as it is, its wording kept; one it deleted is
+ * starter sequence from config/industries.php (Lead baru every 2 days, Dihubungi and Terkualifikasi daily, 7 messages
+ * each) and the survey reminder H-1. A starter rule the agency already has is switched on as it is, its wording kept; one it deleted is
  * made again with the built-in text, when its stage still exists and the plan allows another rule. A sequence step
  * stops for a lead once the client wrote back (as for every agency) or once a person took the chat over
  * (tookOver). Runs inside the tenant.
@@ -31,6 +31,29 @@ class PropertyFollowUps
     {
         return array_map(fn (array $r) => ['name' => $r[0], 'stage' => $r[1], 'days' => (int) $r[2], 'body' => $r[3]],
             (array) $this->tenant->industry()->config('follow_ups', []));
+    }
+
+    /** @return list<string> the sequences in words, e.g. "Lead baru: hari ke-2, 4, 6 (3 pesan)" */
+    public function sequences(): array
+    {
+        return collect($this->starters())->groupBy('stage')
+            ->map(fn ($rules, $stage) => "{$stage}: hari ke-".$rules->pluck('days')->implode(', ').' ('.$rules->count().' pesan)')
+            ->values()->all();
+    }
+
+    /** What "Nyalakan semua" will do, for its confirmation: what is made or switched on, and what stays as it is. */
+    public function preview(): string
+    {
+        $starters = collect($this->starters());
+        $have = FollowUpRule::query()->whereNull('property_id')->whereNull('kind')->with('stage')->get();
+        $existing = $starters->filter(fn ($r) => $have->contains(fn ($h) => $h->name === $r['name'] && $h->stage?->name === $r['stage']))->count();
+        $others = $have->filter(fn ($h) => $h->active && ! $starters->contains(fn ($r) => $r['name'] === $h->name && $r['stage'] === $h->stage?->name))->pluck('name');
+
+        return 'Dinyalakan: '.implode('; ', $this->sequences()).', dan '.SurveyReminder::DEFAULTS['name'].'. '
+            .($starters->count() - $existing).' aturan dibuat dengan teks bawaan, '.$existing.' yang sudah ada dinyalakan dengan teks Anda. '
+            .'Rangkaian berhenti untuk lead yang membalas atau dibalas agen. '
+            .($others->isNotEmpty() ? 'Follow-up lain yang sudah aktif tetap aktif: '.$others->implode(', ').'; matikan bila tidak perlu dobel. ' : '')
+            .'Pesan mulai terkirim pada jadwal berikutnya.';
     }
 
     /**
