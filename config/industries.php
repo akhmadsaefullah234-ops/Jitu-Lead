@@ -41,10 +41,29 @@ return [
                 ['Referral', 'manual'], ['Pameran', 'manual'], ['Walk-in', 'manual'],
             ],
             'follow_ups' => [
-                // [name, stage, days, body]; created switched off until the agency checks the wording
-                ['Sapaan H+1', 'Lead baru', 1, 'Halo {nama}, saya {agen} dari {agensi}. Kemarin Anda menanyakan {properti}. Boleh saya bantu dengan informasi unit dan harganya?'],
-                ['Tanya kebutuhan H+3', 'Dihubungi', 3, 'Halo {nama}, apakah masih mencari properti? Kalau berkenan, ceritakan budget dan lokasi yang Anda inginkan, nanti saya carikan pilihan terbaik.'],
-                ['Tawarkan survei H+7', 'Terkualifikasi', 7, 'Halo {nama}, bagaimana kalau kita jadwalkan survei ke {properti}? Saya bisa atur waktunya sesuai jadwal Anda.'],
+                // [name, stage, days, body]; created switched off until the agency checks the wording.
+                // Lead baru every 2 days, Dihubungi and Terkualifikasi daily, 7 each; a reply from the client stops the rest.
+                ['Lead baru H+2', 'Lead baru', 2, 'Halo Kak {nama}, saya {agen} dari {agensi} 😊 Kemarin Kakak sempat menanyakan {properti}. Boleh tahu, rumahnya untuk ditinggali sendiri atau untuk investasi?'],
+                ['Lead baru H+4', 'Lead baru', 4, 'Kak {nama}, kalau masih mencari hunian, saya siap bantu carikan yang pas. Area mana yang paling Kakak incar?'],
+                ['Lead baru H+6', 'Lead baru', 6, 'Halo Kak {nama} 🙏 Biar saya tidak salah kasih info, kira-kira budget yang Kakak siapkan di kisaran berapa?'],
+                ['Lead baru H+8', 'Lead baru', 8, 'Kak {nama}, banyak klien kami lebih yakin setelah lihat unitnya langsung. Kalau Kakak berkenan, akhir pekan ini bisa saya bantu atur kunjungan ke {properti}.'],
+                ['Lead baru H+10', 'Lead baru', 10, 'Halo Kak {nama}, kalau belum sempat datang, saya bisa kirim video unit atau video call dari lokasi. Mau dicoba?'],
+                ['Lead baru H+12', 'Lead baru', 12, 'Kak {nama}, apakah masih ada pertanyaan soal {properti}? Cara bayar, lokasi, atau lainnya, tinggal tanya saja ya.'],
+                ['Lead baru H+14', 'Lead baru', 14, 'Halo Kak {nama}, ini pesan terakhir dari saya supaya tidak mengganggu 🙏 Kapan pun Kakak siap, balas saja chat ini, saya bantu lagi.'],
+                ['Dihubungi H+1', 'Dihubungi', 1, 'Kak {nama}, terima kasih sudah membalas 😊 Supaya saya bisa kasih pilihan yang pas, rumahnya nanti untuk siapa saja?'],
+                ['Dihubungi H+2', 'Dihubungi', 2, 'Halo Kak {nama}, kalau boleh tahu rencananya mau bayar tunai, cicilan developer, atau KPR?'],
+                ['Dihubungi H+3', 'Dihubungi', 3, 'Kak {nama}, area kerja atau sekolah anak di mana? Biar saya cocokkan dengan lokasi {properti}.'],
+                ['Dihubungi H+4', 'Dihubungi', 4, 'Halo Kak {nama} 🙏 Ada tipe atau ukuran rumah yang Kakak bayangkan? Nanti saya bandingkan pilihannya.'],
+                ['Dihubungi H+5', 'Dihubungi', 5, 'Kak {nama}, kalau mau lihat langsung, saya bisa bantu jadwalkan survei. Lebih enak Sabtu atau Minggu?'],
+                ['Dihubungi H+6', 'Dihubungi', 6, 'Halo Kak {nama}, apakah ada yang masih membuat ragu? Ceritakan saja, saya bantu jelaskan.'],
+                ['Dihubungi H+7', 'Dihubungi', 7, 'Kak {nama}, saya tidak akan mengganggu lagi 🙏 Kalau nanti siap melanjutkan, balas chat ini kapan saja ya.'],
+                ['Terkualifikasi H+1', 'Terkualifikasi', 1, 'Kak {nama}, dari obrolan kita {properti} sepertinya cocok. Mau saya jadwalkan survei Sabtu pagi atau Minggu siang?'],
+                ['Terkualifikasi H+2', 'Terkualifikasi', 2, 'Halo Kak {nama} 😊 Melihat unit langsung biasanya paling membantu memutuskan. Hari apa yang paling longgar minggu ini?'],
+                ['Terkualifikasi H+3', 'Terkualifikasi', 3, 'Kak {nama}, kalau belum sempat datang, saya bisa video call dari unit contoh. Mau dicoba sore ini atau besok?'],
+                ['Terkualifikasi H+4', 'Terkualifikasi', 4, 'Halo Kak {nama}, apakah ada pertanyaan soal cara bayar atau berkas yang perlu disiapkan? Saya bantu jelaskan.'],
+                ['Terkualifikasi H+5', 'Terkualifikasi', 5, 'Kak {nama}, jadwal survei akhir pekan ini masih bisa saya atur. Mau saya catatkan?'],
+                ['Terkualifikasi H+6', 'Terkualifikasi', 6, 'Halo Kak {nama} 🙏 Kalau ada pertimbangan lain, misalnya lokasi atau budget, cerita saja, saya carikan alternatifnya.'],
+                ['Terkualifikasi H+7', 'Terkualifikasi', 7, 'Kak {nama}, ini pesan terakhir dari saya untuk sementara. Kapan pun mau survei atau tanya lagi, balas chat ini ya 😊'],
             ],
             // The property texts live in code too: an early migration backfills them.
             'ai_instructions' => Defaults::INSTRUCTIONS,

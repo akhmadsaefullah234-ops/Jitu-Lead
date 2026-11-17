@@ -232,7 +232,7 @@ class FollowUpTest extends TestCase
     {
         $rules = FollowUpRule::withoutGlobalScopes()->where('tenant_id', $this->tenant->getKey())->get();
 
-        $this->assertCount(3, $rules);
+        $this->assertCount(21, $rules);
         $this->assertTrue($rules->every(fn ($r) => $r->active === false && $r->stage_id !== null));
     }
 
@@ -240,7 +240,7 @@ class FollowUpTest extends TestCase
     {
         $this->actingInTenant($this->adminOf($this->tenant), $this->tenant);
         Livewire::test(ManageFollowUpRules::class)
-            ->assertSee('Sapaan H+1')
+            ->assertSee('Lead baru H+2')
             ->callAction('create', [
                 'name' => 'Baru', 'delay_days' => 2, 'send_time' => '09:00', 'body' => 'Halo {nama}', 'active' => true,
             ])->assertHasNoActionErrors();

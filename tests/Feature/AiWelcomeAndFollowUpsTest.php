@@ -160,26 +160,28 @@ class AiWelcomeAndFollowUpsTest extends TestCase
     public function test_one_click_switches_the_property_follow_ups_on_and_keeps_the_agencys_wording(): void
     {
         $this->in(function () {
-            FollowUpRule::query()->where('name', 'Sapaan H+1')->update(['body' => 'Teks agensi sendiri {nama}']);
-            FollowUpRule::query()->where('name', 'Tawarkan survei H+7')->delete();
+            FollowUpRule::query()->where('name', 'Lead baru H+2')->update(['body' => 'Teks agensi sendiri {nama}']);
+            FollowUpRule::query()->where('name', 'Terkualifikasi H+7')->delete();
         });
         $this->assertFalse($this->in(fn () => PropertyFollowUps::for($this->tenant)->enabled()));
 
         $result = $this->in(fn () => PropertyFollowUps::for($this->tenant)->enable());
 
-        $this->assertSame(['Sapaan H+1', 'Tanya kebutuhan H+3', 'Tawarkan survei H+7', 'Pengingat survei H-1'], $result['on']);
+        $this->assertCount(22, $result['on']);
+        $this->assertSame(['Lead baru H+2', 'Lead baru H+4'], array_slice($result['on'], 0, 2));
+        $this->assertSame('Pengingat survei H-1', end($result['on']));
         $this->assertSame([], $result['missing']);
         $this->in(function () {
-            $this->assertSame(3, FollowUpRule::query()->whereNull('kind')->where('active', true)->count());
-            $this->assertSame('Teks agensi sendiri {nama}', FollowUpRule::query()->where('name', 'Sapaan H+1')->value('body'));
-            $this->assertSame(7, FollowUpRule::query()->where('name', 'Tawarkan survei H+7')->value('delay_days'));
+            $this->assertSame(21, FollowUpRule::query()->whereNull('kind')->where('active', true)->count());
+            $this->assertSame('Teks agensi sendiri {nama}', FollowUpRule::query()->where('name', 'Lead baru H+2')->value('body'));
+            $this->assertSame(7, FollowUpRule::query()->where('name', 'Terkualifikasi H+7')->value('delay_days'));
             $this->assertTrue(SurveyReminder::rule()->active);
             $this->assertTrue(PropertyFollowUps::for($this->tenant)->enabled());
         });
 
         // Twice is the same as once.
         $this->in(fn () => PropertyFollowUps::for($this->tenant)->enable());
-        $this->assertSame(4, $this->in(fn () => FollowUpRule::query()->count()));
+        $this->assertSame(22, $this->in(fn () => FollowUpRule::query()->count()));
     }
 
     public function test_the_follow_up_page_offers_the_one_click_to_a_property_admin(): void
@@ -188,7 +190,7 @@ class AiWelcomeAndFollowUpsTest extends TestCase
         $this->in(fn () => Livewire::test(ManageFollowUpRules::class)
             ->assertSee('Follow-up properti bawaan')
             ->callAction('propertyFollowUps')
-            ->assertNotified('4 follow-up aktif'));
+            ->assertNotified('22 follow-up aktif'));
 
         $this->assertTrue($this->in(fn () => PropertyFollowUps::for($this->tenant)->enabled()));
     }
@@ -216,7 +218,8 @@ class AiWelcomeAndFollowUpsTest extends TestCase
         });
         Carbon::setTestNow(CarbonImmutable::parse('2026-11-15 12:00', 'Asia/Makassar'));
         $this->says('Halo kak, saya Susan', '6289900003333', fromMe: true);
-        Carbon::setTestNow(CarbonImmutable::parse('2026-11-16 10:00', 'Asia/Makassar'));
+        // Lead baru H+2: two days after the leads came in.
+        Carbon::setTestNow(CarbonImmutable::parse('2026-11-17 10:00', 'Asia/Makassar'));
 
         $result = app(RunFollowUps::class)($this->tenant);
 

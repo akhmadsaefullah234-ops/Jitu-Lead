@@ -42,8 +42,8 @@ class DefaultsAndOwnerFallbackTest extends TestCase
     public function test_backfill_leaves_agencies_that_already_have_rules_alone_and_is_repeatable(): void
     {
         $has = $this->makeTenant('punya-aturan');
-        $this->rules($has)->where('name', 'Sapaan H+1')->update(['active' => true, 'body' => 'Teks saya sendiri']);
-        $this->rules($has)->where('name', '!=', 'Sapaan H+1')->delete();
+        $this->rules($has)->where('name', 'Lead baru H+2')->update(['active' => true, 'body' => 'Teks saya sendiri']);
+        $this->rules($has)->where('name', '!=', 'Lead baru H+2')->delete();
         $none = $this->makeTenant('tanpa-aturan');
         $this->rules($none)->delete();
 

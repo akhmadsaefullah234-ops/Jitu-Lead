@@ -75,3 +75,8 @@ words with **Tambah kata khusus properti**.
 
 Unchanged by default: short format, guard off, no pause, no quiet hours, their own handoff list, product list on.
 Since 2026-11-16 every agency's failed AI answers are handed to a person (before, they were only logged).
+
+## Playbook properti
+
+Untuk agensi properti yang memakai playbook Jitu, aturan inti percakapan (sambutan, kualifikasi, ajakan survei,
+pagar, identitas asisten) datang dari kode: lihat `docs/property-playbook.md`.

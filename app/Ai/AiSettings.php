@@ -30,7 +30,28 @@ final class AiSettings
     /** Handoff words offered to a property agency on top of its own list. */
     public const PROPERTY_HANDOFF = ['wna', 'orang asing', 'warga negara asing', 'foreigner', 'notaris', 'sengketa', 'kpr ditolak', 'bi checking', 'slik', 'gugatan', 'pembatalan booking'];
 
+    public const TONES = [
+        'santai' => 'Santai dan akrab',
+        'formal' => 'Sopan dan formal (Bapak/Ibu)',
+    ];
+
+    /** Kept as they are when the settings form is saved: they are switched by their own buttons. */
+    public const KEPT = ['playbook', 'auto_gate'];
+
+    /**
+     * What a NEW property agency starts with (IndustryTemplate::fill): WhatsApp format, the guard with the suggested
+     * phrases, a human-like pause with "typing", no quiet hours, an hour's pause after a handoff, no type list,
+     * Jitu's playbook (PropertyPlaybook), and AI that prepares drafts until "Naikkan ke Auto" (AutoGate).
+     */
+    public const NEW_PROPERTY = [
+        'format' => 'whatsapp', 'max_lines' => 10, 'guard' => true, 'forbidden_phrases' => self::SUGGESTED_PHRASES,
+        'delay_min' => 5, 'delay_max' => 25, 'typing' => true, 'quiet_from' => null, 'quiet_until' => null,
+        'handoff_pause' => 60, 'product_list' => false, 'tone' => 'santai', 'playbook' => true, 'auto_gate' => true,
+    ];
+
     public const MAX_LINES = 20;
+
+    public const MAX_NAME = 40;
 
     public const MAX_DELAY = 60;
 
@@ -51,6 +72,8 @@ final class AiSettings
     public function form(): array
     {
         return [
+            'assistant_name' => $this->values['assistant_name'] ?? null,
+            'tone' => $this->tone(),
             'format' => $this->format(),
             'max_lines' => $this->maxLines(),
             'guard' => $this->guard(),
@@ -78,7 +101,11 @@ final class AiSettings
         $from = $time($data['quiet_from'] ?? null);
         $until = $time($data['quiet_until'] ?? null);
 
+        $name = trim(preg_replace('/\s+/u', ' ', strip_tags((string) ($data['assistant_name'] ?? ''))));
+
         return [
+            'assistant_name' => $name !== '' ? mb_substr($name, 0, self::MAX_NAME) : null,
+            'tone' => array_key_exists($data['tone'] ?? '', self::TONES) ? $data['tone'] : 'santai',
             'format' => array_key_exists($data['format'] ?? '', self::FORMATS) ? $data['format'] : 'short',
             'max_lines' => max(1, min(self::MAX_LINES, (int) ($data['max_lines'] ?? 8))),
             'guard' => (bool) ($data['guard'] ?? false),
@@ -95,6 +122,35 @@ final class AiSettings
             'handoff_pause' => max(0, min(self::MAX_PAUSE_MINUTES, (int) ($data['handoff_pause'] ?? 0))),
             'product_list' => (bool) ($data['product_list'] ?? true),
         ];
+    }
+
+    /** The form's values, with what the form does not show (KEPT) carried over from the stored settings. */
+    public static function save(?array $stored, array $data): array
+    {
+        return self::fromForm($data) + array_intersect_key((array) $stored, array_flip(self::KEPT));
+    }
+
+    /** The name the AI goes by: the agency's choice, else "Asisten {agency}". */
+    public function assistantName(string $agency): string
+    {
+        return filled($this->values['assistant_name'] ?? null) ? (string) $this->values['assistant_name'] : "Asisten {$agency}";
+    }
+
+    public function tone(): string
+    {
+        return array_key_exists($this->values['tone'] ?? '', self::TONES) ? $this->values['tone'] : 'santai';
+    }
+
+    /** Whether Jitu's property playbook (PropertyPlaybook) is part of every prompt. Once on, the form cannot take it off. */
+    public function playbook(): bool
+    {
+        return (bool) ($this->values['playbook'] ?? false);
+    }
+
+    /** Whether "AI membalas otomatis" waits for "Naikkan ke Auto" (AutoGate); only new property agencies start so. */
+    public function autoGate(): bool
+    {
+        return (bool) ($this->values['auto_gate'] ?? false);
     }
 
     /** @return list<string> */
