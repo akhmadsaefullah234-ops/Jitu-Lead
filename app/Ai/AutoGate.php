@@ -3,16 +3,13 @@
 namespace App\Ai;
 
 use App\Enums\AiMode;
-use App\Models\AiKnowledgeItem;
-use App\Models\Property;
 use App\Models\Tenant;
 use App\Models\WaChannel;
 
 /**
  * A NEW property agency's AI starts by preparing drafts: "AI membalas otomatis" waits until the agency is ready and an
- * admin presses "Naikkan ke Auto" (Mode AI). Agencies made before this, and every shop, are never gated. The checks
- * here are the minimum (a property and knowledge to answer from); the AI readiness score replaces them later.
- * Must run inside the tenant.
+ * admin presses "Naikkan ke Auto" (Mode AI). Agencies made before this, and every shop, are never gated. The button
+ * waits for the AI readiness score (App\Ai\AiReadiness). Must run inside the tenant.
  */
 final class AutoGate
 {
@@ -22,13 +19,10 @@ final class AutoGate
         return $tenant !== null && AiSettings::of($tenant)->autoGate();
     }
 
-    /** @return list<string> what is still missing before "Naikkan ke Auto" can be pressed */
+    /** @return list<string> what is still missing before "Naikkan ke Auto" can be pressed (the AI readiness score) */
     public static function missing(): array
     {
-        return array_values(array_filter([
-            Property::query()->where('status', '!=', 'sold')->exists() ? null : 'Belum ada properti yang tersedia di Katalog properti.',
-            AiKnowledgeItem::query()->where('active', true)->count() >= 3 ? null : 'Pengetahuan AI masih kurang dari 3 catatan aktif (harga, lokasi, cara bayar, jam survei).',
-        ]));
+        return AiReadiness::missing();
     }
 
     /** The mode a reply really runs in: Auto counts as Draft while the gate is locked. */

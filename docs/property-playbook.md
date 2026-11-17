@@ -36,8 +36,8 @@ Di **Arahan AI** agensi properti melihat Nama asisten dan Nada di atas; pengatur
 
 Selama `auto_gate` hidup, nomor baru dimulai dengan "AI menyiapkan, agen yang kirim", pilihan "AI membalas otomatis"
 tidak ditawarkan, dan nomor yang tetap disetel Auto diperlakukan sebagai Draft (tidak ada yang terkirim sendiri).
-Tombol **Naikkan ke Auto** di *Mode AI* aktif setelah ada properti tersedia dan minimal 3 catatan pengetahuan aktif
-(syarat minimum; skor kesiapan AI menggantikannya nanti). Menekannya membuka gerbang dan menaikkan semua nomor Draft
+Tombol **Naikkan ke Auto** di *Mode AI* aktif setelah skor Kesiapan AI lulus (`App\Ai\AiReadiness`, sejak PR 5; lihat
+`docs/property-knowledge.md`). Menekannya membuka gerbang dan menaikkan semua nomor Draft
 ke Auto. Agensi lama dan toko tidak pernah punya gerbang ini.
 
 ## Follow-up bawaan properti

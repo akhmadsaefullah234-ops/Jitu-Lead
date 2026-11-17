@@ -3,15 +3,17 @@
 namespace App\Console\Commands;
 
 use App\Ai\AnthropicClient;
+use App\Ai\Evaluation\AiHealth;
 use App\Ai\Evaluation\Evaluator;
 use App\Ai\Evaluation\Scenarios;
+use App\Models\AiEvaluation;
 use App\Models\Tenant;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
-#[Signature('ai:evaluate {--tenant= : slug agensi} {--only= : nomor skenario, dipisah koma (mis. 1,8,20)} {--json : hasil dalam JSON}')]
-#[Description('Uji AI WhatsApp satu agensi properti dengan 20 skenario playbook (tanpa mengirim apa pun dan tanpa menyimpan data); lulus/gagal per skenario')]
+#[Signature('ai:evaluate {--tenant= : slug agensi} {--only= : nomor skenario, dipisah koma (mis. 1,8,20)} {--quick : 10 pertanyaan "Uji AI saya"} {--record= : simpan hasil untuk Kesehatan AI (manual, quick, knowledge, nightly)} {--json : hasil dalam JSON}')]
+#[Description('Uji AI WhatsApp satu agensi properti dengan 20 skenario playbook ditambah pertanyaan dari data agensi itu sendiri (tanpa mengirim apa pun dan tanpa menyimpan chat); lulus/gagal per skenario')]
 class AiEvaluateCommand extends Command
 {
     public function handle(Evaluator $evaluator, AnthropicClient $ai): int
@@ -34,11 +36,17 @@ class AiEvaluateCommand extends Command
             $this->warn("{$tenant->name} bukan agensi properti; skenario ini ditulis untuk properti.");
         }
 
+        $scenarios = $this->option('quick') ? Scenarios::quick($tenant) : Scenarios::for($tenant);
         $only = filled($this->option('only'))
-            ? array_values(array_filter(array_map('intval', explode(',', (string) $this->option('only'))), fn (int $n) => $n >= 1 && $n <= count(Scenarios::all())))
+            ? array_values(array_filter(array_map('intval', explode(',', (string) $this->option('only'))), fn (int $n) => $n >= 1 && $n <= count($scenarios)))
             : null;
 
-        $results = $evaluator->run($tenant, $only);
+        $results = $evaluator->run($tenant, $only, $scenarios);
+
+        if (filled($trigger = $this->option('record')) && array_key_exists((string) $trigger, AiEvaluation::TRIGGERS)) {
+            AiHealth::record($tenant, (string) $trigger, $results);
+        }
+
         $passed = count(array_filter($results, fn (array $r) => $r['passed']));
 
         if ($this->option('json')) {
