@@ -64,6 +64,24 @@ Since PR 9 a phrase named as the topic is not a claim either:
 "Untuk tipe 45/90 sudah siap huni" and "Soal KPR, bisa pakai KPR kok" (the second "bisa pakai KPR") are still held.
 The rule is the same for every phrase (siap huni, KPR, DP 0, gratis) and in the evaluator.
 
+Since PR 10 a phrase in a list that is said not to exist is a denial for the whole list: "Cash keras, cicilan
+developer, dan KPR belum tersedia", "kami tidak menyediakan cash keras, cicilan developer, atau KPR", "cicilan
+developer maupun KPR tidak ada". The list may hold up to four words an item; the sentence must say "belum/tidak"
+with "tersedia", "ada", "bisa", "berlaku" or "kami sediakan/tawarkan/layani", or start with "tidak menyediakan/
+menawarkan/melayani/menerima/ada". "Tersedia cicilan developer" and "Bisa cicilan developer, dan KPR juga bisa" are
+still held.
+
+## An answer written next to simpan_kebutuhan (PR 10)
+
+The model often writes its reply and calls `simpan_kebutuhan` in the same turn ("Bisa Kak, pakai KPR ..." while it
+saves `cara_bayar: kpr`), then ends with nothing after the tool result. That reply used to be dropped: the answer
+was empty twice and the chat went to a person as "Di luar pengetahuan AI, atau jawabannya tidak bisa dipercaya
+(terpotong atau ditolak)" (dp-nol #27, "Bisa pakai KPR?" where KPR is offered). Now, when the only tool called was
+`simpan_kebutuhan` and the model stopped normally (`end_turn`), the text written next to it is the answer and goes
+through every check as usual. A survey (`jadwalkan_survei`) is left on the old path, because text written before its
+result may confirm a time that was refused. An empty answer is still logged ("AI answer empty", lead activity
+`ai_trace`) with stop_reason, rounds and tools.
+
 "What the model was given" is the system prompt (knowledge, client data, memory), the chat and tool results.
 A held answer becomes a pending draft in the Inbox with the reason, and an `ai_held` lead activity.
 
