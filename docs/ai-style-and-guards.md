@@ -54,6 +54,16 @@ Since PR 8 the whole sentence counts (`PropertyGuard::states`). A phrase is not 
 
 "Unit ini siap huni" and "Rumahnya siap huni tanpa renovasi" are still held.
 
+Since PR 9 a phrase named as the topic is not a claim either:
+
+- right after "soal", "terkait", "mengenai", "tentang", "perihal", "seputar", "info soal" (optionally "status",
+  "masalah", "pilihan", "opsi"): "soal siap huni, saya cek dulu", "terkait DP 0, yang berlaku DP 30%";
+- right after "untuk", "kalau", "status", "masalah" when the clause stops at the phrase: "untuk status siap huni,
+  unit 36/72 tersedia ...", "untuk KPR, saat ini belum tersedia".
+
+"Untuk tipe 45/90 sudah siap huni" and "Soal KPR, bisa pakai KPR kok" (the second "bisa pakai KPR") are still held.
+The rule is the same for every phrase (siap huni, KPR, DP 0, gratis) and in the evaluator.
+
 "What the model was given" is the system prompt (knowledge, client data, memory), the chat and tool results.
 A held answer becomes a pending draft in the Inbox with the reason, and an `ai_held` lead activity.
 

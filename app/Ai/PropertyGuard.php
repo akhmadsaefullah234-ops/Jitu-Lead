@@ -35,6 +35,12 @@ final class PropertyGuard
     /** "SHM belum tersedia", "tanpa DP tidak bisa ya Kak": a no right after the phrase (not "tidak perlu", "tanpa bunga"). */
     private const DENIED_AFTER = '/^[\s\/,]*(?:\p{L}+\s+)?(?:belum|tidak|tdk|bukan|blm|gak|nggak)\b(?!\s+(?:perlu|usah|lama|kalah|hanya|cuma|sekadar|sekedar|ribet|repot|mahal))/iu';
 
+    /** "soal siap huni", "terkait KPR", "mengenai status DP 0": the phrase is what the sentence is about. */
+    private const TOPIC_WORD = '/(?<![\p{L}\d])(?:soal|terkait|mengenai|tentang|perihal|seputar|menyangkut|pertanyaan|info(?:rmasi)?(?:\s+(?:soal|tentang|mengenai))?)\s+(?:status\s+|masalah\s+|pilihan\s+|opsi\s+)?$/iu';
+
+    /** "untuk status siap huni, ...", "kalau KPR, ...": a topic only when the clause stops right after the phrase. */
+    private const TOPIC_LEAD = '/(?<![\p{L}\d])(?:untuk|utk|kalau|kalo|klo|status|masalah)\s+(?:status\s+|masalah\s+|pilihan\s+|opsi\s+)?$/iu';
+
     /** Not knowing, anywhere in the sentence: "saya belum punya info pastinya", "belum bisa dipastikan". */
     private const UNSURE = '(?:\b(?:belum|blm|tidak|tdk|gak|nggak)\s+(?:punya|ada|tahu|memegang|mendapat|dapat)\b[^.!?\n]{0,30}\b(?:info|informasi|data|kepastian|pastinya|kabar)\b|\b(?:tidak|tdk|belum|blm)\s+(?:bisa|dapat)\s+(?:memastikan|dipastikan|menjamin|dijamin|menjanjikan)\b|\bbelum\s+(?:bisa\s+)?(?:dipastikan|pasti)\b|\b(?:saya|kami)\s+(?:cek|cekkan|tanyakan|konfirmasi|konfirmasikan)\s+(?:dulu|ke\s+tim|ke\s+developer|ke\s+kantor))';
 
@@ -201,7 +207,10 @@ final class PropertyGuard
                 || preg_match(self::DENIED_AFTER, $after)
                 || preg_match('/'.self::DOUBT.'/iu', $clause)
                 || preg_match('/(?<![\p{L}\d])'.self::NEGATION.'\s+(?:\p{L}+\s+)?(?:'.self::NEGATED_VERBS.')\b/iu', $clause)
-                || preg_match('/'.self::UNSURE.'/iu', $sentence);
+                || preg_match('/'.self::UNSURE.'/iu', $sentence)
+                // A topic, not a claim: "untuk status siap huni, ...", "soal KPR ...", "terkait DP 0 ...".
+                || preg_match(self::TOPIC_WORD, $before)
+                || (preg_match(self::TOPIC_LEAD, $before) && preg_match('/^(?:nya)?\s*[,:?]/u', $after));
 
             if (! $denied) {
                 return true;

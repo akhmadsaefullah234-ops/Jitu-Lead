@@ -15,6 +15,11 @@ Bagian prompt dari kode, dipasang tepat setelah kalimat gaya dan sebelum "Arahan
 - **Kualifikasi bertahap** lewat `simpan_kebutuhan`; tidak menanyakan ulang yang sudah diketahui.
 - **Ajak survei lebih cepat**: begitu ada minat, tawarkan dua pilihan jadwal konkret sesuai jam survei di
   pengetahuan; bila ragu, video show unit atau video call. Setelah klien memilih, `jadwalkan_survei` dan konfirmasi.
+  Sejak PR 9: bila klien sudah menyebut hari ("Sabtu besok bisa?"), AI mengulang hari itu lebih dulu dan menawarkan
+  dua jam konkret di hari itu (atau mengulang jam yang disebut klien), baru menanyakan tipe bila belum jelas, dalam
+  satu pesan. `PropertyPlaybook::dayNote()` memeriksanya: bila klien menyebut hari untuk kunjungan (ada kata survei,
+  lihat, datang, jam, pagi, dst.) dan jawaban tidak mengulangnya, AI diminta memperbaiki sekali; jawaban kedua dikirim
+  apa adanya. "2 minggu lagi" atau "kerja Senin sampai Jumat" tidak dihitung.
 - **Pagar**: tidak mengarang angka atau janji, tidak bilang siap huni bila inden, tidak menjanjikan KPR atau hasil
   sewa, tidak mengubah perkiraan menjadi tahun kalender, tidak menulis kata internal, brosur/price list hanya bila
   diminta jelas.

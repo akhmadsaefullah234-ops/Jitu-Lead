@@ -185,7 +185,10 @@ final class PaymentModel
         return "MODEL PEMBAYARAN AGENSI (data dari agensi, ikuti persis):\n{$lines}\n"
             .'Tanyakan atau tawarkan cara bayar HANYA dari yang tersedia di atas ('.$this->choices().'). '
             .'Cara bayar yang tidak tersedia jangan ditawarkan; bila klien menanyakannya, jawab jujur bahwa belum tersedia lalu tawarkan yang ada. '
-            .'Jangan menyebut "tanpa DP", "DP 0", atau "gratis" kecuali tertulis di atas. Jangan menjanjikan KPR disetujui.';
+            .'Jangan menyebut "tanpa DP", "DP 0", atau "gratis" kecuali tertulis di atas. Jangan menjanjikan KPR disetujui.'
+            .($this->hasDownPayment()
+                ? ' Bila klien menanyakan tanpa DP atau DP 0, jawab tegas dulu bahwa pilihan tanpa DP tidak tersedia, lalu sebut yang berlaku, mis. "'.$this->noDownPaymentAnswer().'". Jangan hanya menyebut besaran DP.'
+                : ' Bila klien menanyakan tanpa DP atau DP 0, jawab bahwa yang tersedia: '.$this->downPaymentText().'.');
     }
 
     /**
@@ -221,6 +224,46 @@ final class PaymentModel
         }
 
         return $problems;
+    }
+
+    /** "Bisa tanpa DP?", "DP 0 ada?": the client asks for nothing down. */
+    public const ASKS_NO_DP = '/\\b(?:tanpa\\s+(?:dp|uang\\s+muka)|dp\\s*(?:0|nol)|bebas\\s+dp|(?:gak|nggak|ga|tidak|tdk)\\s+(?:pake|pakai)\\s+dp)\\b/iu';
+
+    /** "tidak ada pilihan tanpa DP", "DP 0 belum tersedia": an answer that says nothing down is not offered. */
+    public const DENIES_NO_DP = '/\\b(?:tidak|tdk|belum|blm|bukan)\\s+(?:ada\\s+|menawarkan\\s+|menyediakan\\s+|melayani\\s+|bisa\\s+)?(?:pilihan\\s+|opsi\\s+|skema\\s+|program\\s+)?(?:tanpa\\s+(?:dp|uang\\s+muka)|dp\\s*(?:0|nol)|bebas\\s+dp)|(?:tanpa\\s+dp|dp\\s*(?:0|nol))[^.!?\\n]{0,30}\\b(?:tidak|tdk|belum|blm)\\b/iu';
+
+    /** The agency asks for money down (light or standard), so "tanpa DP?" is a no. */
+    public function hasDownPayment(): bool
+    {
+        return in_array($this->downPayment(), ['light', 'standard'], true);
+    }
+
+    /** "Untuk DP, tidak ada pilihan tanpa DP ya Kak. Yang berlaku DP 30% dan tanda jadi Rp5.000.000 (Rp5 juta) di luar harga." */
+    public function noDownPaymentAnswer(): string
+    {
+        $fee = $this->lines()['Tanda jadi'] ?? null;
+
+        return 'Untuk DP, tidak ada pilihan tanpa DP ya Kak. Yang berlaku '.$this->downPaymentText()
+            .($fee !== null ? ' dan tanda jadi '.str_replace(', ', ' ', preg_replace('/, (?:di luar harga \\(tidak mengurangi harga\\))$/u', ' di luar harga', $fee)) : '').'.';
+    }
+
+    /**
+     * What the AI is asked to fix when a client asked for nothing down and the answer did not say plainly whether it
+     * exists; null when it did, when the client did not ask, or when the model is empty.
+     */
+    public function noDownPaymentNote(string $question, string $answer): ?string
+    {
+        if (! $this->filled() || ! preg_match(self::ASKS_NO_DP, $question)) {
+            return null;
+        }
+
+        if ($this->hasDownPayment()) {
+            return preg_match(self::DENIES_NO_DP, $answer) ? null
+                : 'PERBAIKI: klien menanyakan tanpa DP atau DP 0. Jawab tegas dulu bahwa pilihan tanpa DP tidak tersedia, lalu sebut yang berlaku, mis. "'.$this->noDownPaymentAnswer().'". Jangan hanya menyebut besaran DP.';
+        }
+
+        return preg_match('/\\b(?:dp\\s*0|dp\\s+nol|tanpa\\s+dp|dp\\s+gratis|gratis\\s+dp|tidak\\s+ada\\s+dp)/iu', $answer) ? null
+            : 'PERBAIKI: klien menanyakan tanpa DP atau DP 0. Jawab jelas bahwa yang tersedia: '.$this->downPaymentText().'.';
     }
 
     /** A down payment of nothing reads the same whether it is "none", "0%" or free. */
