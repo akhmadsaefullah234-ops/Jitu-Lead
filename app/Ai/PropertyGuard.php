@@ -48,7 +48,7 @@ final class PropertyGuard
     private const UNAVAILABLE = 'tersedia|ada|bisa|berlaku|disediakan|ditawarkan|dilayani|kami\\s+(?:sediakan|tawarkan|layani)';
 
     /** Not knowing, anywhere in the sentence: "saya belum punya info pastinya", "belum bisa dipastikan". */
-    private const UNSURE = '(?:\b(?:belum|blm|tidak|tdk|gak|nggak)\s+(?:punya|ada|tahu|memegang|mendapat|dapat)\b[^.!?\n]{0,30}\b(?:info|informasi|data|kepastian|pastinya|kabar)\b|\b(?:tidak|tdk|belum|blm)\s+(?:bisa|dapat)\s+(?:memastikan|dipastikan|menjamin|dijamin|menjanjikan)\b|\bbelum\s+(?:bisa\s+)?(?:dipastikan|pasti)\b|\b(?:saya|kami)\s+(?:cek|cekkan|tanyakan|konfirmasi|konfirmasikan)\s+(?:dulu|ke\s+tim|ke\s+developer|ke\s+kantor))';
+    private const UNSURE = '(?:\\b(?:belum|blm|tidak|tdk|gak|nggak)\\s+(?:punya|ada|tahu|memegang|mendapat|dapat)\\b[^.!?\\n]{0,30}\\b(?:info|informasi|data|kepastian|pastinya|kabar)(?:nya)?\\b|\\b(?:tidak|tdk|belum|blm|gak|nggak)\\s+(?:bisa|dapat)\\s+(?:saya\\s+|kami\\s+)?(?:memastikan|pastikan|dipastikan|menjamin|jamin|dijamin|menjanjikan|janjikan|dijanjikan|mengonfirmasi|konfirmasi|dikonfirmasi)\\b|\\bbelum\\s+(?:bisa\\s+)?(?:dipastikan|pasti)\\b|\\b(?:saya|kami)\\s+(?:cek|cekkan|tanyakan|konfirmasi|konfirmasikan)\\s+(?:dulu|ke\\s+tim|ke\\s+developer|ke\\s+kantor))';
 
     /** Not knowing, in the same clause: "belum punya info soal", "tidak bisa memastikan", "perlu saya cek dulu". */
     private const DOUBT = '(?:\\b(?:belum|blm)\\b|\\b(?:tidak|tdk|gak|nggak|kurang)\\s+(?:bisa|dapat|tahu|punya|yakin|ada\\s+info)\\b|\\b(?:memastikan|dipastikan|konfirmasi|mengecek|dicek|cek\\s+dulu|tanyakan|info(?:rmasi)?\\s+(?:soal|tentang|mengenai))\\b)';
