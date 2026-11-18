@@ -217,7 +217,8 @@ class GenerateAiReply
         $retail = $tenant->industry()->key === 'retail';
         $lead = $conversation->lead;
         $shop = ShopTools::for($tenant, $lead);
-        $products = new ProductContext($lead);
+        // A property type the client names ("harga tipe 36/72?") is read even before the lead has a product.
+        $products = (new ProductContext($lead))->asked($text);
         $buyer = new BuyerFacts($lead);
         // "ok", "siap", "terima kasih", 🙏: answered briefly or not at all, never handed to a person.
         $ack = ReplySignals::acknowledgement($text);
@@ -491,6 +492,10 @@ class GenerateAiReply
 
             // "PRODUK: 3": the buyer named or switched product; the lead follows once the answer is really sent.
             [$answer, $productIds] = $products->split($answer);
+            // A type the client named, when the AI did not write the line itself: the lead gets it all the same.
+            if ($productIds === [] && ($named = $products->named()) !== null && $named->getKey() !== $lead?->property_id) {
+                $productIds = [$named->getKey()];
+            }
             if ($productIds !== [] && $productIds[0] !== $lead?->property_id) {
                 $actions[] = ['type' => 'product', 'product_ids' => $productIds,
                     'names' => $products->products()->whereIn('id', $productIds)->sortBy(fn ($p) => array_search($p->id, $productIds, true))->pluck('name')->values()->all()];
@@ -1059,7 +1064,7 @@ class GenerateAiReply
             $lead && self::paymentNotAsked($lead) ? self::PAYMENT_NOT_ASKED : null,
             $facts,
             $memory,
-            self::KNOWLEDGE_HEADER."\n".($context !== '' ? $context : '(kosong)'),
+            self::KNOWLEDGE_HEADER."\n".(($all = trim(($products?->summary() ?? '')."\n\n".$context)) !== '' ? $all : '(kosong)'),
             $property?->instructions(),
             $files !== '' ? "LAMPIRAN yang boleh dikirim (id | judul | folder | kapan dipakai):\n{$files}\nJika klien jelas membutuhkan salah satunya (misalnya menanyakan harga lalu price list ada), tambahkan di baris terakhir jawabanmu, setelah teks balasan: LAMPIRAN: <id>. Maksimal dua id dipisah koma. Jangan menulis id selain yang ada di daftar. Jika tidak perlu, jangan tulis baris itu. Lampirkan foto hanya untuk varian yang dipesan atau ditanyakan pembeli, dan jangan melampirkan foto saat merangkum atau mengonfirmasi pesanan kecuali pembeli memintanya." : null,
         ]));

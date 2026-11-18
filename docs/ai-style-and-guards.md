@@ -43,6 +43,17 @@ Since PR 7 a forbidden phrase in a clause of doubt ("saya belum punya info soal 
 siap huni") is not a promise either, and payment claims are checked against the agency payment model: held only when
 they contradict it. See `docs/payment-model.md`.
 
+Since PR 8 the whole sentence counts (`PropertyGuard::states`). A phrase is not a statement when:
+
+- a no comes before it in its clause and governs it: "kami tidak menawarkan tanpa DP atau DP 0", "tidak bisa
+  memberikan DP 0";
+- a no comes right after it: "DP 0 belum bisa kami penuhi", "SHM belum tersedia" (not "tidak perlu", and "tanpa"
+  after a phrase is no longer a denial: "DP 0 tanpa bunga" is a claim);
+- its sentence says the AI does not know: "status siap huni saya belum punya info pastinya", "belum bisa
+  dipastikan", "saya tanyakan dulu ke tim".
+
+"Unit ini siap huni" and "Rumahnya siap huni tanpa renovasi" are still held.
+
 "What the model was given" is the system prompt (knowledge, client data, memory), the chat and tool results.
 A held answer becomes a pending draft in the Inbox with the reason, and an `ai_held` lead activity.
 

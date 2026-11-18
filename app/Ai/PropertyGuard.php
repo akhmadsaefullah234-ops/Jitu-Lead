@@ -26,6 +26,18 @@ final class PropertyGuard
 
     private const DENIAL = '(?:belum|tidak|tdk|bukan|tanpa|blm|gak|nggak|ga)';
 
+    /** A "no" that governs what follows it in the clause: "kami tidak menawarkan tanpa DP atau DP 0". */
+    private const NEGATION = '(?:belum|tidak|tdk|bukan|blm|gak|nggak)';
+
+    /** What a negation is about when the phrase comes after it: offering, having, allowing, promising. */
+    private const NEGATED_VERBS = 'ada|bisa|dapat|pakai|memakai|dengan|termasuk|menawarkan|ditawarkan|melayani|menyediakan|menerima|berlaku|mendukung|tersedia|menjanjikan|menjamin|memberikan|memberi';
+
+    /** "SHM belum tersedia", "tanpa DP tidak bisa ya Kak": a no right after the phrase (not "tidak perlu", "tanpa bunga"). */
+    private const DENIED_AFTER = '/^[\s\/,]*(?:\p{L}+\s+)?(?:belum|tidak|tdk|bukan|blm|gak|nggak)\b(?!\s+(?:perlu|usah|lama|kalah|hanya|cuma|sekadar|sekedar|ribet|repot|mahal))/iu';
+
+    /** Not knowing, anywhere in the sentence: "saya belum punya info pastinya", "belum bisa dipastikan". */
+    private const UNSURE = '(?:\b(?:belum|blm|tidak|tdk|gak|nggak)\s+(?:punya|ada|tahu|memegang|mendapat|dapat)\b[^.!?\n]{0,30}\b(?:info|informasi|data|kepastian|pastinya|kabar)\b|\b(?:tidak|tdk|belum|blm)\s+(?:bisa|dapat)\s+(?:memastikan|dipastikan|menjamin|dijamin|menjanjikan)\b|\bbelum\s+(?:bisa\s+)?(?:dipastikan|pasti)\b|\b(?:saya|kami)\s+(?:cek|cekkan|tanyakan|konfirmasi|konfirmasikan)\s+(?:dulu|ke\s+tim|ke\s+developer|ke\s+kantor))';
+
     /** Not knowing, in the same clause: "belum punya info soal", "tidak bisa memastikan", "perlu saya cek dulu". */
     private const DOUBT = '(?:\\b(?:belum|blm)\\b|\\b(?:tidak|tdk|gak|nggak|kurang)\\s+(?:bisa|dapat|tahu|punya|yakin|ada\\s+info)\\b|\\b(?:memastikan|dipastikan|konfirmasi|mengecek|dicek|cek\\s+dulu|tanyakan|info(?:rmasi)?\\s+(?:soal|tentang|mengenai))\\b)';
 
@@ -161,10 +173,11 @@ final class PropertyGuard
         return $out;
     }
 
-    /** The phrase is in the answer and not denied right next to it. */
     /**
-     * Whether the answer states the phrase as true: a phrase denied or doubted in its own clause ("belum SHM", "SHM
-     * belum tersedia", "belum punya info soal siap huni", "tidak bisa memastikan siap huni") is not a statement.
+     * Whether the answer states the phrase as true. A phrase is not a statement when its sentence denies or doubts
+     * it: "belum SHM", "SHM belum tersedia", "kami tidak menawarkan tanpa DP atau DP 0", "belum punya info soal siap
+     * huni", "status siap huni saya belum punya info pastinya", "DP 0 belum bisa kami berikan". "Unit ini siap huni"
+     * and "DP 0 tanpa bunga" are.
      */
     public static function states(string $answer, string $phrase): bool
     {
@@ -176,13 +189,19 @@ final class PropertyGuard
         }
 
         foreach ($m[0] as [$text, $offset]) {
-            $before = mb_strtolower(substr($answer, max(0, $offset - 30), min(30, $offset)));
-            $after = mb_strtolower(substr($answer, $offset + strlen($text), 30));
+            $before = mb_strtolower(substr($answer, max(0, $offset - 40), min(40, $offset)));
+            $after = mb_strtolower(substr($answer, $offset + strlen($text), 40));
             // The clause the phrase is in, up to the last sentence mark or comma before it.
             $clause = mb_strtolower((string) preg_replace('/^.*[.!?,;:\n]/su', '', substr($answer, max(0, $offset - 80), min(80, $offset))));
-            $denied = preg_match('/(?<![\p{L}\d])'.self::DENIAL.'(?:\s+(?:ada|ada\s+yang|bisa|pakai|dengan|termasuk|memakai))?\s*$/iu', $before)
-                || preg_match('/^[\s\/,]*(?:\p{L}+\s+)?'.self::DENIAL.'\b/iu', $after)
-                || preg_match('/'.self::DOUBT.'/iu', $clause);
+            // The whole sentence, for a doubt written after the phrase ("Status siap huni ... saya belum punya info").
+            $sentence = mb_strtolower((string) preg_replace('/^.*[.!?\n]/su', '', substr($answer, max(0, $offset - 160), min(160, $offset)))
+                .$text.preg_replace('/[.!?\n].*$/su', '', substr($answer, $offset + strlen($text), 160)));
+
+            $denied = preg_match('/(?<![\p{L}\d])'.self::DENIAL.'(?:\s+(?:'.self::NEGATED_VERBS.'|ada\s+yang))?\s*$/iu', $before)
+                || preg_match(self::DENIED_AFTER, $after)
+                || preg_match('/'.self::DOUBT.'/iu', $clause)
+                || preg_match('/(?<![\p{L}\d])'.self::NEGATION.'\s+(?:\p{L}+\s+)?(?:'.self::NEGATED_VERBS.')\b/iu', $clause)
+                || preg_match('/'.self::UNSURE.'/iu', $sentence);
 
             if (! $denied) {
                 return true;

@@ -36,6 +36,7 @@ return [
         ],
     ],
     'tips' => [
+        'Setiap tipe unit menjadi satu properti di katalog. Bila klien menyebut tipenya di chat, misalnya "berapa harga tipe 36/72?", "tipe 36-72", atau nama tipe, AI langsung membaca data tipe itu dan tipe itu menjadi produk lead, walau lead belum punya produk. Agensi dengan paling banyak 10 tipe juga mendapat <b>Ringkasan tipe</b> otomatis (harga, luas, kamar, ketersediaan dari katalog), sehingga pertanyaan harga atau luas yang belum menyebut tipe tetap terjawab. Entri pengetahuan buatan Anda tidak diubah.',
         'Untuk agensi baru, model pembayaran juga mengatur teks bawaan: tindak lanjut <b>Dihubungi H+2</b> menanyakan cara bayar yang Anda centang, aksi tahap memakai "simulasi pembayaran" dan "proses pembayaran" bila KPR tidak dicentang, dan alasan kalah <b>KPR ditolak</b> hanya ada bila KPR tersedia. Teks yang sudah Anda ubah sendiri tidak disentuh.',
         'Isian lama (cara bayar, DP, dan tenor dalam bentuk teks) tetap terlihat di langkah Pembayaran sebagai <b>catatan</b> selama masih terisi. Dokumen yang dibaca AI tidak bisa mengisi model pembayaran; hanya Anda yang mengisinya di sini.',
         '<b>Uji otomatis</b> (menyala untuk agensi baru) menguji AI lengkap sekitar 10 menit setelah pengetahuan berubah dan tiap malam. Admin menerima email bila nilainya turun. Agensi lama bisa menyalakannya di Kesehatan AI.',

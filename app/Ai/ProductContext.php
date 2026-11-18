@@ -26,7 +26,38 @@ class ProductContext
     /** @var Collection<int, Property>|null */
     private ?Collection $products = null;
 
+    /** The type the client's message names (property agencies only), read before the lead's own product. */
+    private ?Property $named = null;
+
     public function __construct(private ?Lead $lead) {}
+
+    /**
+     * What the client just wrote: a property agency's type named in it ("harga tipe 36/72?") becomes the product
+     * the chat is about, even before the lead has one. Shops are left as they were.
+     */
+    public function asked(string $text): self
+    {
+        $this->named = self::forTypes() && $this->products()->count() > 1 ? PropertyTypes::named($text, $this->products()) : null;
+
+        return $this;
+    }
+
+    /** The type the client's last message named, if any. */
+    public function named(): ?Property
+    {
+        return $this->named;
+    }
+
+    /** "RINGKASAN TIPE" for a property agency with a few types (PropertyTypes::MAX); null otherwise. */
+    public function summary(): ?string
+    {
+        return self::forTypes() ? PropertyTypes::summary($this->products()) : null;
+    }
+
+    private static function forTypes(): bool
+    {
+        return Industry::current()->key === 'properti';
+    }
 
     /** @return Collection<int, Property> */
     public function products(): Collection
@@ -34,9 +65,13 @@ class ProductContext
         return $this->products ??= Property::query()->orderBy('name')->limit(self::MAX_PRODUCTS)->get();
     }
 
-    /** The product the chat is about: the lead's, or the only one in the catalogue. */
+    /** The product the chat is about: the type the client just named, the lead's, or the only one in the catalogue. */
     public function product(): ?Property
     {
+        if ($this->named !== null) {
+            return $this->named;
+        }
+
         $own = $this->lead?->property_id ? Property::query()->find($this->lead->property_id) : null;
 
         return $own ?? ($this->products()->count() === 1 ? $this->products()->first() : null);
@@ -61,10 +96,12 @@ class ProductContext
         } else {
             $names = $products->take(10)->pluck('name')->implode(', ');
             $lines[] = "PRODUK PELANGGAN: belum diketahui {$term} mana yang ditanyakan pelanggan ini.";
-            $lines[] = $this->asksWithList()
-                ? "Bila dari chat belum jelas, tanyakan dulu dengan sopan {$term} mana yang dimaksud, sebutkan pilihannya: {$names}. Bila foto {$term} ada di LAMPIRAN, boleh disertakan. Jangan menyebut harga sebelum {$term}nya jelas."
+            $summary = $this->summary() !== null;
+            $lines[] = match (true) {
+                $this->asksWithList() => "Bila dari chat belum jelas, tanyakan dulu dengan sopan {$term} mana yang dimaksud, sebutkan pilihannya: {$names}. Bila foto {$term} ada di LAMPIRAN, boleh disertakan. Jangan menyebut harga sebelum {$term}nya jelas.",
                 // Arahan AI > "Tanyakan tipe lewat daftar" off: the agency's own flow (greeting, name, purpose) leads.
-                : "Jangan menyodorkan daftar atau pilihan bernomor {$term} kepada pelanggan, dan jangan menunda jawaban sampai {$term}nya jelas. Ikuti alur di arahan agensi. Bila pelanggan menanyakan harga, jawab dengan harga umum yang tertulis di PENGETAHUAN. Bila pelanggan menyebut {$term} tertentu, jawab tentang {$term} itu.";
+                default => "Jangan menyodorkan daftar atau pilihan bernomor {$term} kepada pelanggan, dan jangan menunda jawaban sampai {$term}nya jelas. Ikuti alur di arahan agensi. Bila pelanggan menanyakan harga, jawab dengan harga umum yang tertulis di PENGETAHUAN".($summary ? ' (RINGKASAN TIPE memuat harga dan luas setiap '.$term.'; bila belum menyebut '.$term.', jawab singkat dari situ)' : '').". Bila pelanggan menyebut {$term} tertentu, jawab tentang {$term} itu.",
+            };
         }
 
         if ($products->count() > 1) {
