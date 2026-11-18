@@ -531,6 +531,15 @@ class GenerateAiReply
                 $answer .= "\n\n".self::surveyLine($lead, $survey[0], $survey[1], $property->timezone());
             }
 
+            // Property: a survey day the client named is repeated (playbook on), and "tanpa DP?" gets a plain answer
+            // from the payment model. Asked once; the second answer goes as it is.
+            if (! $last && $tenant->industry()->key === 'properti'
+                && ($note = (PropertyPlaybook::applies($tenant) ? PropertyPlaybook::dayNote($text, $answer) : null) ?? PaymentModel::current()->noDownPaymentNote($text, $answer)) !== null) {
+                $retry = $note;
+
+                continue;
+            }
+
             break;
         }
 

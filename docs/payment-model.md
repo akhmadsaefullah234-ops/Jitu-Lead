@@ -81,3 +81,16 @@ A text the agency changed itself is never rewritten.
 Run `php artisan ai:evaluate --tenant=<tenant>` for each (needs `ANTHROPIC_API_KEY`).
 
 Tests: `tests/Feature/PaymentModelTest.php`.
+
+## "Ada yang tanpa DP?" (PR 9)
+
+- An agency with a down payment (`light` or `standard`, `PaymentModel::hasDownPayment()`): the prompt asks for a
+  plain no first, then what applies, e.g. "Untuk DP, tidak ada pilihan tanpa DP ya Kak. Yang berlaku DP 30% dan
+  tanda jadi Rp5.000.000 (Rp5 juta) di luar harga." (`noDownPaymentAnswer()`).
+- An agency with `none`, `zero` or `free`: the prompt asks to answer that it is available, as the model says.
+- `noDownPaymentNote()`: when the client asked (`ASKS_NO_DP`: "tanpa DP", "DP 0", "bebas DP", "gak pake DP") and the
+  answer does not say it plainly (`DENIES_NO_DP` for a down payment; "DP 0", "tanpa DP", "DP gratis" otherwise),
+  the AI is asked once to fix it. The scenario "Tanpa DP tidak tersedia" now needs that plain no, and "Tanpa DP"
+  needs the nothing-down answer.
+
+Agencies without a filled payment model are unchanged.

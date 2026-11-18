@@ -18,6 +18,27 @@ final class PropertyPlaybook
         'formal' => 'Nada sopan dan formal. Sapa dengan "Bapak" atau "Ibu" bila jelas, selain itu "Kak".',
     ];
 
+    private const DAYS = '/(?<![\\p{L}])(senin|selasa|rabu|kamis|jum\'?at|sabtu|minggu|ahad)(?![\\p{L}])/iu';
+
+    /**
+     * What the AI is asked to fix when the client named a day ("Sabtu besok jam 10 bisa?") and the answer did not
+     * repeat it; null when it did or no day was named.
+     */
+    public static function dayNote(string $question, string $answer): ?string
+    {
+        // A day for a visit ("Sabtu jam 10 bisa?"), not "2 minggu lagi" or "kerja Senin sampai Jumat".
+        if (! preg_match(self::DAYS, $question, $m)
+            || ! preg_match('/\\b(?:survei|survey|lihat|liat|datang|dateng|ke\\s+lokasi|kunjung\\p{L}*|ketemu|jam|pukul|pagi|siang|sore)\\b/iu', $question)
+            || preg_match('/(?:\\d+|\\bse|\\bper|\\bbeberapa)\\s*minggu\\b/iu', $question) && mb_strtolower($m[1]) === 'minggu') {
+            return null;
+        }
+
+        $day = mb_convert_case(str_replace("'", '', $m[1]), MB_CASE_TITLE);
+
+        return preg_match('/(?<![\\p{L}])'.preg_quote($m[1], '/').'(?![\\p{L}])/iu', $answer) || preg_match('/(?<![\\p{L}])'.$day.'(?![\\p{L}])/iu', $answer) ? null
+            : "PERBAIKI: klien menyebut hari {$day}. Ulangi hari itu di awal balasanmu (mis. \"{$day} ya Kak, ...\") dan tawarkan dua jam konkret di hari itu sesuai jam survei, atau ulangi jam yang ia sebut. Bila tipe belum jelas, tanyakan tipenya di pesan yang sama, setelah hari dan jam.";
+    }
+
     public static function applies(?Tenant $tenant): bool
     {
         return $tenant !== null && $tenant->industry()->key === 'properti' && AiSettings::of($tenant)->playbook();
@@ -45,6 +66,8 @@ final class PropertyPlaybook
                 .'Jangan menanyakan lagi yang sudah diketahui dari DATA KLIEN, memori, atau chat sebelumnya.',
             '4. Ajak survei lebih cepat: begitu klien menunjukkan minat (menanyakan harga, tipe, lokasi, cara bayar, atau bilang tertarik), tawarkan survei dengan DUA pilihan jadwal konkret, '
                 .'misalnya "Sabtu pagi atau Minggu siang?", sesuai jam survei yang tertulis di PENGETAHUAN; bila jam survei tidak tertulis, tawarkan dua hari dan tanyakan jamnya. Jangan bertanya terbuka "kapan bisa survei?". '
+                .'Bila klien sudah menyebut hari atau waktu survei, ulangi hari itu lebih dulu dan tawarkan dua jam konkret di hari itu (mis. "Sabtu ya Kak, pagi jam 10 atau siang jam 1?"); '
+                .'bila klien juga sudah menyebut jam, ulangi hari dan jamnya. Bila tipe belum jelas, tanyakan tipenya di pesan yang sama, setelah hari dan jam, dalam satu pesan singkat. '
                 .'Bila klien ragu atau jauh, tawarkan video show unit atau video call. Setelah klien memilih, panggil '.PropertyTools::SURVEY.' lalu ulangi konfirmasinya.',
             '5. Pagar: jangan mengarang angka, harga, promo, atau janji. Jangan menyebut unit siap huni bila masih inden atau tidak tertulis siap huni. '
                 .'Jangan menjanjikan KPR disetujui atau hasil sewa/investasi. Jangan mengubah perkiraan waktu (mis. "18 bulan") menjadi tahun atau tanggal kalender. '

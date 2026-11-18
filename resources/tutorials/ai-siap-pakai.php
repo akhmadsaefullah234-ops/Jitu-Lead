@@ -31,6 +31,7 @@ return [
         ],
     ],
     'tips' => [
+        'Bila klien menyebut hari survei ("Sabtu besok bisa?"), AI mengulang hari itu dan menawarkan dua jam konkret dulu, baru menanyakan tipe. Bila klien menanyakan tanpa DP padahal agensi memakai DP, AI menjawab tegas bahwa pilihan tanpa DP tidak tersedia lalu menyebut DP dan tanda jadi yang berlaku.',
         'Halaman AI dan Survei untuk admin dan manajer. Agen melihat lead dan tugasnya sendiri seperti biasa.',
         'Ingin mengubah gaya bahasa atau jam malam? Buka Pengetahuan AI > Pengaturan AI. Perubahan Anda hanya berlaku untuk agensi Anda.',
     ],

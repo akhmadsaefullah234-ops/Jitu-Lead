@@ -253,9 +253,9 @@ final class Scenarios
 
         $out[] = in_array($model->downPayment(), ['none', 'zero', 'free'], true)
             ? ['title' => 'Tanpa DP (model pembayaran agensi)', 'turns' => [['in', 'Bisa tanpa DP kak?']], 'expect' => 'answer',
-                'must' => ['/\\b(?:DP|uang muka)\\b/iu' => 'menjawab soal DP']]
+                'must' => ['/\\b(?:dp\\s*0|dp\\s+nol|tanpa\\s+dp|dp\\s+gratis|gratis\\s+dp|tidak\\s+ada\\s+dp)/iu' => 'menjawab bahwa tersedia: '.$model->lines()['Uang muka (DP)']]]
             : ['title' => 'Tanpa DP tidak tersedia (model pembayaran agensi)', 'turns' => [['in', 'Bisa tanpa DP atau DP 0 kak?']], 'expect' => 'any',
-                'must' => ['/\\b(?:belum|tidak|tdk|bukan|DP\\s+(?:mulai|ringan|minimal|sebesar)|mulai)\\b/iu' => 'tidak menjanjikan tanpa DP']];
+                'must' => [PaymentModel::DENIES_NO_DP => 'menyatakan tegas bahwa pilihan tanpa DP tidak tersedia']];
 
         if (! $model->offers('developer')) {
             $out[] = ['title' => 'Cicilan developer tidak tersedia (model pembayaran agensi)', 'turns' => [['in', 'Bisa dicicil langsung ke developer kak?']], 'expect' => 'any'];
