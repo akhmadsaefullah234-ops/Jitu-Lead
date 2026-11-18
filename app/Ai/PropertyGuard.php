@@ -41,6 +41,12 @@ final class PropertyGuard
     /** "untuk status siap huni, ...", "kalau KPR, ...": a topic only when the clause stops right after the phrase. */
     private const TOPIC_LEAD = '/(?<![\p{L}\d])(?:untuk|utk|kalau|kalo|klo|status|masalah)\s+(?:status\s+|masalah\s+|pilihan\s+|opsi\s+)?$/iu';
 
+    /** ", dan KPR", ", cash keras, atau KPR": the rest of a list the phrase is in (up to four words an item). */
+    private const LIST_ITEMS = '(?:\\s*(?:,|\\bdan\\b|\\batau\\b|\\bserta\\b|\\bmaupun\\b)\\s*(?:[\\p{L}\\d%\\/\\-]+\\s*){1,4}?)*';
+
+    /** What a list is said not to be: "belum tersedia", "tidak ada", "belum bisa", "tidak kami sediakan". */
+    private const UNAVAILABLE = 'tersedia|ada|bisa|berlaku|disediakan|ditawarkan|dilayani|kami\\s+(?:sediakan|tawarkan|layani)';
+
     /** Not knowing, anywhere in the sentence: "saya belum punya info pastinya", "belum bisa dipastikan". */
     private const UNSURE = '(?:\b(?:belum|blm|tidak|tdk|gak|nggak)\s+(?:punya|ada|tahu|memegang|mendapat|dapat)\b[^.!?\n]{0,30}\b(?:info|informasi|data|kepastian|pastinya|kabar)\b|\b(?:tidak|tdk|belum|blm)\s+(?:bisa|dapat)\s+(?:memastikan|dipastikan|menjamin|dijamin|menjanjikan)\b|\bbelum\s+(?:bisa\s+)?(?:dipastikan|pasti)\b|\b(?:saya|kami)\s+(?:cek|cekkan|tanyakan|konfirmasi|konfirmasikan)\s+(?:dulu|ke\s+tim|ke\s+developer|ke\s+kantor))';
 
@@ -200,8 +206,9 @@ final class PropertyGuard
             // The clause the phrase is in, up to the last sentence mark or comma before it.
             $clause = mb_strtolower((string) preg_replace('/^.*[.!?,;:\n]/su', '', substr($answer, max(0, $offset - 80), min(80, $offset))));
             // The whole sentence, for a doubt written after the phrase ("Status siap huni ... saya belum punya info").
-            $sentence = mb_strtolower((string) preg_replace('/^.*[.!?\n]/su', '', substr($answer, max(0, $offset - 160), min(160, $offset)))
-                .$text.preg_replace('/[.!?\n].*$/su', '', substr($answer, $offset + strlen($text), 160)));
+            $head = mb_strtolower((string) preg_replace('/^.*[.!?\n]/su', '', substr($answer, max(0, $offset - 160), min(160, $offset))));
+            $rest = mb_strtolower((string) preg_replace('/[.!?\n].*$/su', '', substr($answer, $offset + strlen($text), 160)));
+            $sentence = $head.mb_strtolower($text).$rest;
 
             $denied = preg_match('/(?<![\p{L}\d])'.self::DENIAL.'(?:\s+(?:'.self::NEGATED_VERBS.'|ada\s+yang))?\s*$/iu', $before)
                 || preg_match(self::DENIED_AFTER, $after)
@@ -210,7 +217,11 @@ final class PropertyGuard
                 || preg_match('/'.self::UNSURE.'/iu', $sentence)
                 // A topic, not a claim: "untuk status siap huni, ...", "soal KPR ...", "terkait DP 0 ...".
                 || preg_match(self::TOPIC_WORD, $before)
-                || (preg_match(self::TOPIC_LEAD, $before) && preg_match('/^(?:nya)?\s*[,:?]/u', $after));
+                || (preg_match(self::TOPIC_LEAD, $before) && preg_match('/^(?:nya)?\s*[,:?]/u', $after))
+                // One of a list that is said not to exist: "cash keras, cicilan developer, dan KPR belum tersedia",
+                // "kami tidak menyediakan cash keras, cicilan developer, atau KPR".
+                || preg_match('/^'.self::LIST_ITEMS.'\s*(?:juga\s+|masih\s+|semuanya\s+|saat\s+ini\s+|untuk\s+saat\s+ini\s+)?'.self::NEGATION.'\s+(?:'.self::UNAVAILABLE.')\b/iu', $rest)
+                || preg_match('/(?<![\p{L}\d])'.self::NEGATION.'\s+(?:\p{L}+\s+)?(?:menyediakan|menawarkan|melayani|menerima|ada)\s+(?:pilihan\s+|opsi\s+)?(?:(?:[\p{L}\d%\/\-]+\s*){1,4}?\s*(?:,|\bdan\b|\batau\b|\bserta\b|\bmaupun\b)\s*)+$/iu', $head);
 
             if (! $denied) {
                 return true;

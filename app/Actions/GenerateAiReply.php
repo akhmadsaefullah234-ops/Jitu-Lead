@@ -387,6 +387,13 @@ class GenerateAiReply
                 $answer = $trace['tool_text'];
             }
 
+            // A property answer written next to simpan_kebutuhan ("Bisa KPR Kak ..." while the need is saved), with
+            // nothing after the result: that text is the answer. A survey is left alone (its text came before the result).
+            if ($answer === '' && $trace['stop_reason'] === 'end_turn' && $property !== null && trim($trace['tool_text']) !== ''
+                && $trace['tools'] !== [] && collect($trace['tools'])->every(fn (string $t) => $t === PropertyTools::NEEDS)) {
+                $answer = trim($trace['tool_text']);
+            }
+
             if (ReplySignals::silent($calls) && $ack) {
                 return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed ?? $formOrder, '');
             }
