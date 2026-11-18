@@ -123,3 +123,19 @@ It runs the agency when the knowledge changed, at least 10 minutes after the las
 - The new pages are there for every property agency, but nothing changes until an admin uses them. Existing knowledge entries and catalogue properties are untouched until the wizard is saved.
 - Only new property agencies have the Auto gate, so the stricter readiness score does not affect existing agencies.
 - Shops do not see the pages. The only shared change is that the knowledge upload's `DocumentReader` now also reads .xlsx; the shop's upload button does not offer it.
+
+## Unit types in a chat (PR 8)
+
+`App\Ai\PropertyTypes`, property agencies only (shops keep `ProductMatcher` as it was):
+
+- **A type the client names.** `ProductContext::asked($text)` looks for a catalogue type in the client's message:
+  the size ("36/72", "36 / 72", "36-72", "45x90", "tipe 45"), the type or listing name with one typo allowed
+  ("melatti"), or a size in a listing's details ("tipe: 36/72 dan 45/90"). One clear match becomes the product the
+  chat is about, before the lead's own: its knowledge (entries linked to that property) and catalogue data are read,
+  and once the answer is sent the lead gets it (`product_source = ai`), as if the AI had written "PRODUK: <id>".
+  Two types named equally ("bedanya 36/72 dan 45/90?") pick none.
+- **Ringkasan tipe.** An agency with 2 to `PropertyTypes::MAX` (10) catalogue products gets "RINGKASAN TIPE" at the
+  top of PENGETAHUAN, built at reply time from the catalogue: name, price (`FactFormat::money`), building and land
+  area ("36 m2"), bedrooms, bathrooms and availability. It is not stored, so an agency's own entries (a manual
+  "Ringkasan lima tipe") are never touched. With "Tanyakan tipe lewat daftar" off (new agencies, Rumahkudotcom),
+  the AI is told to answer a price question that names no type from it; with the list on, it still asks first.

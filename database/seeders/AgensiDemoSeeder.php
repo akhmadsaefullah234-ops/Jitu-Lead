@@ -69,7 +69,8 @@ class AgensiDemoSeeder extends DemoSeeder
 
         $cluster = Property::create(['kind' => PropertyKind::Primary, 'name' => 'Cluster Contoh Asri', 'property_type' => 'Rumah', 'location' => 'Kota Contoh Selatan',
             'developer' => 'PT Pengembang Contoh', 'price_from' => 685_000_000, 'status' => 'available',
-            'details' => ['tipe' => '36/72 dan 45/90', 'sertifikat' => 'SHM', 'kpr' => 'DP mulai 5%']]);
+            'details' => ['tipe' => '36/72 dan 45/90', 'Tipe 36/72' => 'luas bangunan 36 m2, luas tanah 72 m2', 'Tipe 45/90' => 'luas bangunan 45 m2, luas tanah 90 m2',
+                'sertifikat' => 'SHM', 'kpr' => 'DP mulai 5%']]);
         $tower = Property::create(['kind' => PropertyKind::Primary, 'name' => 'Apartemen Contoh Tower A', 'property_type' => 'Apartemen', 'location' => 'Kota Contoh Pusat',
             'developer' => 'PT Hunian Contoh', 'price_from' => 540_000_000, 'status' => 'available', 'details' => ['tipe' => 'Studio dan 2BR', 'lantai' => '5-20']]);
         $second = Property::create(['kind' => PropertyKind::Secondary, 'name' => 'Rumah Jl. Contoh No. 10', 'property_type' => 'Rumah', 'location' => 'Kota Contoh Timur',
@@ -91,7 +92,7 @@ class AgensiDemoSeeder extends DemoSeeder
         LandingPage::create(['title' => 'Cluster Contoh Asri - KPR ringan', 'slug' => 'cluster-contoh-asri', 'status' => 'published', 'published_at' => now()->subDays(3),
             'template' => 'kpr', 'property_id' => $cluster->getKey(), 'color' => '#16a34a', 'font' => 'ramah', 'blocks' => $blocks]);
 
-        AiKnowledgeItem::create(['title' => 'Harga dan tipe Cluster Contoh Asri', 'content' => 'Tipe 36/72 mulai Rp 685 juta, tipe 45/90 mulai Rp 820 juta. DP mulai 5%, bisa KPR.', 'source' => 'manual', 'active' => true]);
+        AiKnowledgeItem::create(['title' => 'Harga dan tipe Cluster Contoh Asri', 'content' => 'Tipe 36/72 (luas bangunan 36 m2, luas tanah 72 m2) mulai Rp 685 juta, tipe 45/90 (luas bangunan 45 m2, luas tanah 90 m2) mulai Rp 820 juta. DP mulai 5%, bisa KPR.', 'source' => 'manual', 'active' => true]);
         AiKnowledgeItem::create(['title' => 'Jadwal survei', 'content' => 'Survei lokasi setiap hari pukul 09.00 sampai 16.00. Mohon konfirmasi H-1.', 'source' => 'manual', 'active' => true]);
 
         // "Isi properti": the project and its two types, a brochure (its land area that disagreed was rejected, its rent
