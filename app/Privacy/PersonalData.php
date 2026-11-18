@@ -58,6 +58,20 @@ class PersonalData
         'tunggu', 'kurang', 'tau', 'tahu', 'lihat', 'liat', 'cari', 'coba', 'perlu', 'butuh', 'sangat', 'benar', 'betul', 'tertarik', 'jadi', 'kurir', 'resi',
     ];
 
+    /**
+     * Everyday words that start a sentence ("Saat ini", "Untuk tipe", "Kalau mau"): after "Kak" they are the next
+     * sentence, never a name. Only for spotting names in an answer; scrubbing keeps its own, stricter rules.
+     */
+    private const SENTENCE_WORDS = [
+        'saat', 'untuk', 'kalau', 'kalo', 'jika', 'bila', 'apabila', 'setelah', 'sesudah', 'sebelum', 'dengan', 'karena', 'sambil', 'selama', 'ketika', 'waktu',
+        'sejak', 'hingga', 'sampai', 'meski', 'meskipun', 'walau', 'walaupun', 'namun', 'tetapi', 'tapi', 'lalu', 'kemudian', 'sehingga', 'maka', 'jadi',
+        'berikut', 'terkait', 'soal', 'mengenai', 'tentang', 'sesuai', 'khusus', 'termasuk', 'mulai', 'sekitar', 'harga', 'tipe', 'unit', 'rumah', 'lokasi',
+        'jadwal', 'survei', 'survey', 'pembayaran', 'cicilan', 'status', 'nah', 'oh', 'wah', 'iya', 'ya', 'tentu', 'pastinya', 'baik', 'siap', 'oke', 'boleh',
+        'bisa', 'ada', 'kami', 'saya', 'semoga', 'terima', 'mohon', 'maaf', 'silakan', 'silahkan', 'sekarang', 'nanti', 'besok', 'hari', 'minggu', 'bulan',
+        'tahun', 'semua', 'setiap', 'tiap', 'yang', 'ini', 'itu', 'dan', 'atau', 'juga', 'agar', 'supaya', 'apakah', 'berapa', 'kapan', 'mau', 'sudah', 'belum',
+        'masih', 'tidak', 'tersedia', 'sedangkan', 'selain', 'selanjutnya', 'sebagai', 'contohnya', 'misalnya', 'pada', 'dalam', 'di', 'ke', 'dari',
+    ];
+
     /** One-word city and regency names that are also everyday words: only a place after "Kota" or "Kab.". */
     private const COMMON_WORDS = [
         'batu', 'metro', 'batang', 'pati', 'palu', 'tual', 'ende', 'banjar', 'agam', 'buru', 'jaya', 'kaur', 'lahat', 'sigi', 'alor', 'bone', 'malaka',
@@ -261,8 +275,13 @@ class PersonalData
     {
         $names = [];
 
-        if (preg_match_all('/(?<![\p{L}])(?i:'.self::HONORIFICS.')\.?\s+(\p{Lu}[\p{Ll}\']+(?:\s+\p{Lu}[\p{Ll}\']+){0,2})/u', $text, $m)) {
+        // "Kak Budi", on one line: "...ya Kak. Saat ini ..." and "Halo Kak\nUntuk ..." start a sentence, not a name.
+        if (preg_match_all('/(?<![\p{L}])(?i:'.self::HONORIFICS.')[ \t]+(\p{Lu}[\p{Ll}\']+(?:[ \t]+\p{Lu}[\p{Ll}\']+){0,2})/u', $text, $m)) {
             foreach ($m[1] as $name) {
+                if (in_array(mb_strtolower((string) strtok($name, " \t")), self::SENTENCE_WORDS, true)) {
+                    continue;
+                }
+
                 if (($name = self::trimName($name)) !== null) {
                     $names[] = $name;
                 }

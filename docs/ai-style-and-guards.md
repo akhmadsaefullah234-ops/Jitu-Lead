@@ -71,6 +71,18 @@ with "tersedia", "ada", "bisa", "berlaku" or "kami sediakan/tawarkan/layani", or
 menawarkan/melayani/menerima/ada". "Tersedia cicilan developer" and "Bisa cicilan developer, dan KPR juga bisa" are
 still held.
 
+Since PR 11 a refusal or doubt anywhere in the sentence also covers "belum/tidak bisa (saya) pastikan, janjikan,
+jamin, konfirmasi" and "belum ada informasinya": "untuk siap huni bulan depan belum bisa saya janjikan", "status
+siap huni-nya saya belum bisa pastikan". Regression sentences: `tests/Feature/GuardFalseHoldsTest.php`.
+
+## Names after "Kak" (PR 11)
+
+`PersonalData::names()` (used only by the answer guard `BuyerFacts::foreign`) reads a name after an honorific on the
+same line only, without a full stop in between, and never when the next word is an everyday sentence word
+(`SENTENCE_WORDS`: Saat, Untuk, Kalau, Jika, Setelah, Dengan, Bila, Karena, Sambil, Selama, ...). "...ya Kak. Saat ini
+..." no longer names "Saat"; "Halo Pak Budi" (another buyer) is still held. Scrubbing learned knowledge
+(`PersonalData::scrub`) keeps its own stricter rule.
+
 ## An answer written next to simpan_kebutuhan (PR 10)
 
 The model often writes its reply and calls `simpan_kebutuhan` in the same turn ("Bisa Kak, pakai KPR ..." while it
