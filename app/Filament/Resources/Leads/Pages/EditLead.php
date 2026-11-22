@@ -9,6 +9,7 @@ use App\Filament\Resources\Leads\LeadResource;
 use App\Filament\Support\LocationActions;
 use App\Filament\Support\ShipmentActions;
 use App\Models\Shipment;
+use App\Payments\PaymentInstructions;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
@@ -32,7 +33,7 @@ class EditLead extends EditRecord
                 ->badge(fn () => $this->record->payment_proof_at ? 'bukti masuk' : null)
                 ->requiresConfirmation()
                 ->modalHeading('Pembayaran sudah masuk?')
-                ->modalDescription('Pastikan dana sudah ada di rekening. Lead pindah ke tahap Dikemas & dikirim.')
+                ->modalDescription(fn () => PaymentInstructions::confirmDescription($this->record))
                 ->action(function () {
                     app(StageAutomation::class)->paymentReceived($this->record, auth()->user());
                     $this->refreshFormData(['next_action', 'next_action_due_at']);

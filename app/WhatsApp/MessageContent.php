@@ -3,6 +3,7 @@
 namespace App\WhatsApp;
 
 use App\Models\WaMessage;
+use App\Payments\PaymentInstructions;
 
 /**
  * What a WhatsApp message other than plain text holds (voice note, sticker, video, location, contact card,
@@ -198,6 +199,11 @@ final class MessageContent
     public static function forAi(WaMessage $message): ?string
     {
         $body = trim((string) $message->body);
+
+        // The system's payment instruction: the AI reads that it was sent, never the account number.
+        if ($message->origin === PaymentInstructions::ORIGIN && $body !== '') {
+            return PaymentInstructions::forAi($body);
+        }
 
         return match ($message->type) {
             'location' => self::locationText($message),

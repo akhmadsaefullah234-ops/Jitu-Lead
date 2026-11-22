@@ -8,6 +8,7 @@ use App\Leads\ChatShippingDetails;
 use App\Models\Lead;
 use App\Models\Stage;
 use App\Models\User;
+use App\Payments\PaymentInstructions;
 use App\Shipping\Shipping;
 use App\Shipping\ShippingItem;
 use App\Shipping\ShippingQuote;
@@ -112,6 +113,11 @@ class RecordOrder
 
         $this->structure($lead);
 
+        // Tenant yang mengisi rekening (Pengaturan > Pembayaran): instruksi bayar disusun dan dikirim sistem dari total ini.
+        // Tenant tanpa rekening aktif: tidak ada yang berubah, rekening tetap dari pengetahuan AI.
+        $instruction = $payment === 'transfer' && $total !== null && $lead->paid_at === null && PaymentInstructions::applies($lead->tenant)
+            ? app(PaymentInstructions::class)->send($lead, $total, $actor) : null;
+
         return array_filter([
             'status' => 'tercatat',
             'pesan' => 'Pesanan tercatat'.($stage ? ' dan lead dipindah ke tahap '.$stage : '').'.',
@@ -124,6 +130,9 @@ class RecordOrder
             'total' => $total,
             'total_teks' => $total !== null ? ShippingQuote::rupiah($total) : null,
             'tahap' => $stage,
+            'instruksi_bayar' => $instruction['status'] ?? null,
+            'nominal_transfer' => $instruction['nominal'] ?? null,
+            'kode_unik' => $instruction['kode_unik'] ?? null,
         ], fn ($v) => $v !== null);
     }
 

@@ -145,10 +145,11 @@ class SendWhatsAppMessage
             'welcome' => 'Pesan sambutan WhatsApp',
             'shipping' => 'Pesan status kiriman',
             'ai_quiet' => 'Sambutan jam malam AI',
+            'payment' => 'Instruksi bayar transfer',
             PropertyStageAutomation::ORIGIN => 'Pesan terima kasih setelah survei',
             default => 'Chat WhatsApp',
         };
-        $automatic = in_array($this->origin, ['welcome', 'shipping', 'ai_quiet', PropertyStageAutomation::ORIGIN], true);
+        $automatic = in_array($this->origin, ['welcome', 'shipping', 'ai_quiet', 'payment', PropertyStageAutomation::ORIGIN], true);
 
         $conversation->lead->activities()->create([
             // An automatic welcome is not the owner answering, so it never counts as the lead being attended to.

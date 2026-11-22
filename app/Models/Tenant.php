@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
-#[Fillable(['name', 'slug', 'plan', 'status', 'timezone', 'trial_ends_at', 'ai_instructions', 'ai_handoff_keywords', 'ai_settings', 'lead_reassign_mode', 'lead_reassign_minutes', 'lead_reassign_max', 'show_property_fields', 'industry', 'shipping', 'stage_automation', 'general_follow_ups', 'pipeline_settings'])]
+#[Fillable(['name', 'slug', 'plan', 'status', 'timezone', 'trial_ends_at', 'ai_instructions', 'ai_handoff_keywords', 'ai_settings', 'lead_reassign_mode', 'lead_reassign_minutes', 'lead_reassign_max', 'show_property_fields', 'industry', 'shipping', 'stage_automation', 'general_follow_ups', 'pipeline_settings', 'payment_settings'])]
 class Tenant extends Model
 {
     protected $hidden = ['capture_token'];
@@ -28,6 +28,7 @@ class Tenant extends Model
             'daily_report' => 'array',
             'pipeline_settings' => 'array',
             'ai_settings' => 'array',
+            'payment_settings' => 'array',
         ];
     }
 
@@ -188,5 +189,11 @@ class Tenant extends Model
     public function properties(): HasMany
     {
         return $this->hasMany(Property::class);
+    }
+
+    /** Rekening bank untuk pembayaran transfer (Pengaturan > Pembayaran), urut sesuai pengaturan. */
+    public function paymentAccounts(): HasMany
+    {
+        return $this->hasMany(PaymentAccount::class)->orderBy('sort_order')->orderBy('id');
     }
 }
