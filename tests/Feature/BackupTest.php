@@ -26,6 +26,7 @@ use App\WhatsApp\MessageContent;
 use Filament\Facades\Filament;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -597,6 +598,14 @@ class BackupTest extends TestCase
                 $this->markTestSkipped("$tool tidak terpasang");
             }
         }
+        // A dump from a newer pg_dump uses settings an older server rejects (e.g. transaction_timeout on 16), so it
+        // cannot load there by design. Production dumps with the server's own version.
+        $client = (int) preg_replace('/\D.*$/', '', (string) preg_replace('/^\D+/', '', (string) shell_exec('pg_dump --version')));
+        $server = intdiv((int) DB::selectOne('show server_version_num')->server_version_num, 10000);
+        if ($client > $server) {
+            $this->markTestSkipped("pg_dump $client lebih baru dari server $server: dump-nya tidak bisa dimuat ke server ini");
+        }
+
         $this->app->instance(Shell::class, new Shell);
         $this->app->instance(DatabaseOwnership::class, new DatabaseOwnership);
     }
@@ -610,10 +619,11 @@ class BackupTest extends TestCase
         $this->assertNotNull($run->database_file, (string) $run->message);
         $this->assertGreaterThanOrEqual(30, BackupRestoreCheckCommand::tables($run->database_file));
 
-        $this->artisan('backup:restore-check')
-            ->expectsOutputToContain('gzip -t: arsip utuh')
-            ->expectsOutputToContain('Uji muat: dimuat ke jitu_restore_check_')
-            ->assertSuccessful();
+        $code = Artisan::call('backup:restore-check');
+        $output = Artisan::output();
+        $this->assertSame(0, $code, $output);
+        $this->assertStringContainsString('gzip -t: arsip utuh', $output);
+        $this->assertStringContainsString('Uji muat: dimuat ke jitu_restore_check_', $output);
 
         // The temporary database is gone again; the test database is untouched.
         $this->assertSame([], DB::select("select datname from pg_database where datname like 'jitu_restore_check_%'"));
