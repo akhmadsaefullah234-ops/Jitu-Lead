@@ -10,14 +10,36 @@ use Illuminate\Support\Facades\Http;
  */
 class IpaymuClient
 {
+    /** An agency's own account (digital products); null: JITU's account for subscriptions (config/services.php). */
+    private ?array $account = null;
+
+    /** A copy of this client that signs with an agency's own iPaymu account instead of JITU's. */
+    public function using(string $va, string $apiKey, bool $sandbox): static
+    {
+        $client = clone $this;
+        $client->account = ['va' => $va, 'api_key' => $apiKey, 'sandbox' => $sandbox];
+
+        return $client;
+    }
+
     public function enabled(): bool
     {
-        return filled(config('services.ipaymu.va')) && filled(config('services.ipaymu.api_key'));
+        return filled($this->va()) && filled($this->apiKey());
     }
 
     public function baseUrl(): string
     {
-        return config('services.ipaymu.sandbox') ? 'https://sandbox.ipaymu.com' : 'https://my.ipaymu.com';
+        return ($this->account !== null ? $this->account['sandbox'] : config('services.ipaymu.sandbox')) ? 'https://sandbox.ipaymu.com' : 'https://my.ipaymu.com';
+    }
+
+    private function va(): string
+    {
+        return (string) ($this->account['va'] ?? config('services.ipaymu.va'));
+    }
+
+    private function apiKey(): string
+    {
+        return (string) ($this->account['api_key'] ?? config('services.ipaymu.api_key'));
     }
 
     public function signature(string $jsonBody, string $va, string $apiKey): string
@@ -59,8 +81,8 @@ class IpaymuClient
 
     private function post(string $path, array $body): array
     {
-        $va = (string) config('services.ipaymu.va');
-        $key = (string) config('services.ipaymu.api_key');
+        $va = $this->va();
+        $key = $this->apiKey();
 
         if ($va === '' || $key === '') {
             throw new \RuntimeException('iPaymu belum dikonfigurasi.');

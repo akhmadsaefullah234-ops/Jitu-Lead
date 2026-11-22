@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['kind', 'name', 'property_type', 'location', 'developer', 'price_from', 'status', 'details', 'weight_grams', 'length_cm', 'width_cm', 'height_cm', 'ad_keywords', 'compare_price', 'promo_text', 'welcome_text', 'shipping_promos'])]
+#[Fillable(['kind', 'name', 'property_type', 'location', 'developer', 'price_from', 'status', 'details', 'weight_grams', 'length_cm', 'width_cm', 'height_cm', 'ad_keywords', 'compare_price', 'promo_text', 'welcome_text', 'shipping_promos', 'access_url'])]
 class Property extends Model
 {
     use BelongsToTenant;

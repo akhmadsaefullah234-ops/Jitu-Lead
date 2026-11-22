@@ -101,8 +101,8 @@ class PaymentInstructions
         return ['status' => 'terkirim', 'pesan' => 'Instruksi bayar dikirim sistem.', 'nominal' => $amount] + array_filter(['kode_unik' => $code]);
     }
 
-    /** Null bila terkirim, else alasannya. */
-    private function deliver(Lead $lead, User $actor, string $text): ?string
+    /** Null bila terkirim, else alasannya. Dipakai juga untuk tautan bayar dan akses produk digital (App\Payments\DigitalCheckout). */
+    public function deliver(Lead $lead, User $actor, string $text, string $origin = self::ORIGIN): ?string
     {
         if (blank($lead->phone)) {
             return 'lead belum punya nomor WhatsApp';
@@ -116,7 +116,7 @@ class PaymentInstructions
         }
 
         try {
-            $message = app(SendWhatsAppMessage::class)->from(self::ORIGIN)($conversation->refresh(), $actor, $text);
+            $message = app(SendWhatsAppMessage::class)->from($origin)($conversation->refresh(), $actor, $text);
         } catch (WhatsAppException $e) {
             return 'pengiriman gagal';
         } catch (Throwable $e) {

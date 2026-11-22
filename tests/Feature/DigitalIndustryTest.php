@@ -469,7 +469,7 @@ class DigitalIndustryTest extends TestCase
         }
 
         // The scheduler leaves them alone: a shop lead waiting for payment is moved by the shop rules only.
-        $this->assertSame(['no_payment' => 0], app(DigitalStageAutomation::class)->runScheduled($shop));
-        $this->assertSame(['no_payment' => 0], app(DigitalStageAutomation::class)->runScheduled($agency));
+        $this->assertSame(['no_payment' => 0, 'reminded' => 0], app(DigitalStageAutomation::class)->runScheduled($shop));
+        $this->assertSame(['no_payment' => 0, 'reminded' => 0], app(DigitalStageAutomation::class)->runScheduled($agency));
     }
 }

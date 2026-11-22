@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Public\DigitalPaymentController;
 use App\Http\Controllers\Public\LandingPageController;
 use App\Http\Controllers\Public\LeadFormController;
 use App\Http\Controllers\Public\RegionController;
@@ -29,3 +30,10 @@ Route::get('harga', fn () => view('billing.pricing', [
     'plans' => config('plans.plans'), 'addons' => config('plans.addons'),
     'limitLabels' => config('plans.limit_labels'), 'featureLabels' => config('plans.feature_labels'), 'trialDays' => config('plans.trial_days'),
 ]))->middleware('throttle:public-pages')->name('pricing');
+
+// Digital products paid through the agency's iPaymu account: the buyer's payment page (by its unguessable token) and
+// the signed, time-limited access link sent once iPaymu confirmed the payment.
+Route::middleware('throttle:public-pages')->group(function () {
+    Route::get('bayar/{token}', [DigitalPaymentController::class, 'show'])->where('token', '[A-Za-z0-9]{40}')->name('digital.pay.show');
+    Route::get('akses/{token}', [DigitalPaymentController::class, 'access'])->where('token', '[A-Za-z0-9]{40}')->middleware('signed')->name('digital.access');
+});

@@ -77,6 +77,23 @@ class Alerts
         ]);
     }
 
+    /** A digital purchase was paid through iPaymu but the product has no access link: a person sends the access. */
+    public function accessNeeded(Lead $lead): void
+    {
+        $tenant = $this->current->get();
+
+        if ($tenant === null) {
+            return;
+        }
+
+        $this->send($this->recipients($tenant, $lead, withAdmins: true), 'notify_messages', [
+            'title' => 'Lunas lewat iPaymu, kirim akses',
+            'body' => collect([$lead->name, $lead->property?->name])->filter()->implode(' · '),
+            'url' => Inbox::getUrl(['lead' => $lead->getKey()], tenant: $tenant),
+            'tag' => 'access-'.$lead->getKey(),
+        ]);
+    }
+
     public function newMessage(Lead $lead, WaMessage $message): void
     {
         $tenant = $this->current->get();

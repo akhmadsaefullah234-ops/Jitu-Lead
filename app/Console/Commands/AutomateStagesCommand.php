@@ -34,7 +34,7 @@ class AutomateStagesCommand extends Command
             if (array_sum($r) > 0) {
                 $this->line(match ($tenant->industry) {
                     'retail' => "{$tenant->slug}: selesai {$r['done']}, batal tanpa respons {$r['no_reply']}, batal tanpa pembayaran {$r['no_payment']}",
-                    'digital' => "{$tenant->slug}: tidak jadi bayar {$r['no_payment']}",
+                    'digital' => "{$tenant->slug}: tidak jadi bayar {$r['no_payment']}, pengingat bayar {$r['reminded']}",
                     default => "{$tenant->slug}: sudah survei {$r['surveyed']}, gugur tanpa respons {$r['silent']}",
                 });
             }

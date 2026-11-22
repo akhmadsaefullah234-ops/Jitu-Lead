@@ -16,6 +16,7 @@ use App\Models\LeadForm;
 use App\Models\Property;
 use App\Models\Tenant;
 use App\Models\TrackingSetting;
+use App\Payments\DigitalCheckout;
 use App\Push\Alerts;
 use App\Tracking\ConversionPayload;
 use App\Tracking\PipelineConversions;
@@ -322,6 +323,11 @@ Alamat belum diisi.',
             if ($url !== null) {
                 return ['type' => 'redirect', 'url' => $url, 'new_tab' => ! empty($after['new_tab']), 'message' => $message];
             }
+        }
+
+        // Digital products with Pembayaran otomatis: the purchase is recorded and the buyer goes straight to iPaymu.
+        if (($after['type'] ?? 'message') === 'payment' && ($url = app(DigitalCheckout::class)->fromForm($lead)) !== null) {
+            return ['type' => 'redirect', 'url' => $url, 'new_tab' => false, 'message' => $message];
         }
 
         if (($after['type'] ?? 'message') === 'whatsapp') {

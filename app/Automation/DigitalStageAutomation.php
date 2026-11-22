@@ -8,7 +8,9 @@ use App\Billing\PlanLimits;
 use App\Enums\MessageStatus;
 use App\Enums\Role;
 use App\Enums\StageType;
+use App\Mail\DigitalAccessReady;
 use App\Mail\PaymentProofReceived;
+use App\Models\DigitalPayment;
 use App\Models\Lead;
 use App\Models\LostReason;
 use App\Models\Stage;
@@ -16,7 +18,10 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Models\WaConversation;
 use App\Models\WaMessage;
+use App\Payments\DigitalCheckout;
+use App\Payments\PaymentInstructions;
 use App\Push\Alerts;
+use App\Shipping\ShippingQuote;
 use App\Support\CurrentTenant;
 use App\WhatsApp\RouteSelector;
 use Illuminate\Support\Facades\DB;
@@ -33,6 +38,10 @@ use Throwable;
  */
 class DigitalStageAutomation
 {
+    public const GATEWAY_ACCESS_MESSAGE = "Halo {nama}, pembayaran {produk} sebesar {total} sudah kami terima lewat {cara}. Terima kasih 🙏\nAkses Anda (berlaku {hari} hari, khusus untuk Anda): {tautan}\nKalau ada kendala membuka, balas chat ini ya.";
+
+    public const GATEWAY_NO_ACCESS_MESSAGE = "Halo {nama}, pembayaran {produk} sebesar {total} sudah kami terima lewat {cara}. Terima kasih 🙏\nAdmin segera mengirim akses Anda di chat ini.";
+
     public const ACCESS_MESSAGE = "Halo {nama}, pembayaran {produk} sudah kami terima. Terima kasih 🙏\nAkses Anda: {tautan}\nKalau ada kendala membuka, balas chat ini ya.";
 
     private ?DigitalStages $stages = null;
@@ -150,6 +159,87 @@ class DigitalStageAutomation
         return $link !== null && $send ? $note.' '.$this->sendAccess($lead->refresh(), $actor) : $note;
     }
 
+    /**
+     * iPaymu said this invoice is paid (App\Payments\DigitalCheckout, after the signed callback was checked again with
+     * iPaymu): the lead is marked paid, moves to "Lunas & akses terkirim", and the buyer gets a signed access link on
+     * WhatsApp and by email. Runs once per invoice; a lead already paid only gets the note.
+     */
+    public function paidByGateway(DigitalPayment $payment): void
+    {
+        $lead = Lead::query()->with('property')->find($payment->lead_id);
+
+        if ($lead === null) {
+            return;
+        }
+
+        $way = 'iPaymu'.(filled($payment->channel) ? ' ('.$payment->channel.')' : '');
+        $total = ShippingQuote::rupiah((int) $payment->amount);
+        $already = $lead->paid_at !== null;
+
+        DB::transaction(function () use ($lead, $payment, $way, $total, $already) {
+            $lead->forceFill(['paid_at' => $lead->paid_at ?? now(), 'payment_proof_at' => null, 'payment_type' => $lead->payment_type ?: 'other'])->save();
+            $lead->activities()->create(['type' => 'payment_received', 'body' => "Pembayaran {$total} diterima lewat {$way}".($already ? ' (lead sudah lunas sebelumnya, cek pembayaran ganda)' : ''),
+                'meta' => ['digital_payment_id' => $payment->getKey(), 'trx_id' => $payment->trx_id, 'nominal' => (int) $payment->amount]]);
+
+            $target = $this->stages()->stage(DigitalStages::PAID);
+            $lead->loadMissing('stage');
+
+            if ($already || $target === null || ! $this->before($lead->stage, $target)) {
+                return;
+            }
+
+            try {
+                ($this->move)($lead, $target, $this->staffActor($lead), $this->paidDetails($lead) + ['deal_value' => max(1, (int) $payment->amount)], 'pembayaran diterima lewat iPaymu');
+            } catch (ValidationException $e) {
+                report($e);
+            }
+        });
+
+        if ($already) {
+            return;
+        }
+
+        $this->sendGatewayAccess($lead->refresh(), $payment, $way, $total);
+    }
+
+    private function sendGatewayAccess(Lead $lead, DigitalPayment $payment, string $way, string $total): void
+    {
+        $gateway = DigitalCheckout::gateway($this->current->get());
+        $target = $lead->access_link ?: $lead->property?->access_url;
+        $link = filled($target) ? DigitalCheckout::accessUrl($payment, $gateway) : null;
+        $text = strtr($link ? self::GATEWAY_ACCESS_MESSAGE : self::GATEWAY_NO_ACCESS_MESSAGE, [
+            '{nama}' => $lead->name ?: 'Kak', '{produk}' => $lead->property?->name ?? 'produk', '{total}' => $total, '{cara}' => $way,
+            '{tautan}' => (string) $link, '{hari}' => (string) max(1, (int) ($gateway?->access_days ?? 7)),
+        ]);
+        $actor = $this->staffActor($lead);
+        $why = $actor ? app(PaymentInstructions::class)->deliver($lead, $actor, $text, 'digital_access') : 'tidak ada admin';
+
+        $lead->activities()->create(['type' => $why === null && $link ? 'access_sent' : 'access_not_sent', 'body' => match (true) {
+            $link === null => 'Produk belum punya tautan akses (isi di katalog atau di lead): kirim akses manual dari Inbox.'.($why ? " Pesan lunas tidak terkirim ({$why})." : ''),
+            $why !== null => "Tautan akses belum terkirim lewat WhatsApp ({$why}).",
+            default => 'Tautan akses bertanda tangan dikirim ke pembeli lewat WhatsApp.',
+        }]);
+
+        if ($link === null) {
+            try {
+                app(Alerts::class)->accessNeeded($lead);
+            } catch (Throwable $e) {
+                report($e);
+            }
+
+            return;
+        }
+
+        if (filter_var((string) $lead->email, FILTER_VALIDATE_EMAIL)) {
+            try {
+                Mail::to($lead->email)->send(new DigitalAccessReady($this->current->get(), $lead, $link, max(1, (int) ($gateway?->access_days ?? 7))));
+                $lead->activities()->create(['type' => 'access_sent', 'body' => 'Tautan akses dikirim ke email pembeli.']);
+            } catch (Throwable $e) {
+                report($e);
+            }
+        }
+    }
+
     private function sendAccess(Lead $lead, User $actor): string
     {
         $conversation = filled($lead->phone) ? WaConversation::query()->firstOrCreate(['lead_id' => $lead->getKey()], ['phone' => $lead->phone]) : null;
@@ -180,9 +270,18 @@ class DigitalStageAutomation
     {
         return $this->current->run($tenant, function () {
             $this->stages = null;
-            $count = ['no_payment' => 0];
+            $count = ['no_payment' => 0, 'reminded' => 0];
 
-            if (! $this->applies() || PlanLimits::for($this->current->get())->readOnly() || ! $this->on('no_payment')) {
+            if (! $this->applies() || PlanLimits::for($this->current->get())->readOnly()) {
+                return $count;
+            }
+
+            // Pembayaran otomatis: one reminder before an iPaymu invoice expires.
+            if (($admin = $this->staffActor(new Lead)) !== null) {
+                $count['reminded'] = app(DigitalCheckout::class)->remind($this->current->get(), $admin);
+            }
+
+            if (! $this->on('no_payment')) {
                 return $count;
             }
 

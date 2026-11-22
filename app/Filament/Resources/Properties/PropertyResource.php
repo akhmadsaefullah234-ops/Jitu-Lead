@@ -81,6 +81,8 @@ class PropertyResource extends Resource
     public static function form(Schema $schema): Schema
     {
         $property = self::isProperty();
+        // Digital products are never shipped: no weight, size or shipping promo, but the link the paid buyer opens.
+        $shipped = ! $property && Industry::current()->key !== 'digital';
         $onTab = fn (bool $promo) => fn ($livewire) => ! $livewire instanceof EditProperty || ($livewire->activeRelationManager === EditProperty::PROMO) === $promo;
 
         return $schema->components([
@@ -94,13 +96,16 @@ class PropertyResource extends Resource
                 TextInput::make('price_from')->label($property ? 'Harga mulai (Rp)' : 'Harga (Rp)')->numeric()->minValue(0)->prefix('Rp'),
                 Select::make('status')->label($property ? 'Status' : 'Stok')->options(self::statuses())->default('available')->required(),
                 // Shipping cost is counted from these (Pengaturan > Pengiriman)
-                TextInput::make('weight_grams')->label('Berat (gram)')->numeric()->integer()->minValue(1)->maxValue(1000000)->suffix('g')->visible(! $property)
+                TextInput::make('weight_grams')->label('Berat (gram)')->numeric()->integer()->minValue(1)->maxValue(1000000)->suffix('g')->visible($shipped)
                     ->helperText('Berat siap kirim, termasuk kemasan. Kosong = berat bawaan di pengaturan Pengiriman.'),
-                Grid::make(3)->columnSpanFull()->visible(! $property)->schema([
+                Grid::make(3)->columnSpanFull()->visible($shipped)->schema([
                     TextInput::make('length_cm')->label('Panjang (cm)')->numeric()->integer()->minValue(1)->maxValue(1000),
                     TextInput::make('width_cm')->label('Lebar (cm)')->numeric()->integer()->minValue(1)->maxValue(1000),
                     TextInput::make('height_cm')->label('Tinggi (cm)')->numeric()->integer()->minValue(1)->maxValue(1000),
                 ]),
+                TextInput::make('access_url')->label('Tautan akses produk')->url()->maxLength(500)->placeholder('https://...')->columnSpanFull()
+                    ->visible(! $property && ! $shipped)
+                    ->helperText('Tautan unduhan, kelas, atau grup yang dibuka pembeli setelah lunas. Tidak pernah dibaca AI; pembeli menerima tautan bertanda tangan yang berlaku terbatas.'),
                 KeyValue::make('details')->label('Rincian tambahan')->keyLabel('Nama')->valueLabel('Isi')
                     ->helperText($property ? 'Contoh: luas tanah, luas bangunan, sertifikat.' : 'Contoh: ukuran, warna, bahan, berat.')->columnSpanFull(),
             ]),
@@ -123,7 +128,7 @@ class PropertyResource extends Resource
                     Text::make(fn (Get $get) => 'Contoh yang diterima pembeli (data contoh): '."\n".WelcomeFields::example(filled($get('welcome_text')) ? (string) $get('welcome_text') : WelcomeSettings::builtIn(app(CurrentTenant::class)->get())))
                         ->extraAttributes(['style' => 'white-space:pre-line;padding:.6rem .8rem;border-radius:.5rem;background:rgba(37,211,102,.08);border:1px solid rgba(37,211,102,.25)'])->columnSpanFull(),
                     // Taken off every shipping quote that holds this product: the AI, the recorded order and "Buat resi"
-                    Repeater::make('shipping_promos')->label('Promo ongkir')->columnSpanFull()->visible(! $property)->defaultItems(0)
+                    Repeater::make('shipping_promos')->label('Promo ongkir')->columnSpanFull()->visible($shipped)->defaultItems(0)
                         ->addActionLabel('Tambah promo ongkir')->columns(2)->collapsible()
                         ->itemLabel(fn (array $state) => ($rule = ShippingPromos::rules([$state])[0] ?? null) ? ShippingPromos::describe($rule, 'produk ini') : null)
                         ->helperText('Opsional. Dipotong otomatis dari ongkir saat AI cek ongkir, saat pesanan dicatat, dan di Buat resi. Bila ada beberapa promo, dipakai satu yang paling hemat.')
