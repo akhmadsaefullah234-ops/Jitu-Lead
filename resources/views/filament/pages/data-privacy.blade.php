@@ -11,7 +11,7 @@
             <h3 style="font-weight:700;margin:0 0 .3rem;color:#b91c1c">Hapus agensi</h3>
             <p style="color:#4b5563;margin:0">
                 Anda sebagai admin dapat menghapus agensi sendiri tanpa persetujuan pemilik aplikasi. Penghapusan permanen dan berlaku seketika pada data aktif.
-                Cadangan harian menyimpan salinan paling lama {{ config('jitu.backup.remote_keep_days') }} hari, lalu hilang otomatis.
+                Cadangan harian menyimpan salinan paling lama {{ max((int) config('jitu.backup.remote_keep_days'), (int) config('jitu.backup.database.remote_keep_days')) }} hari, lalu hilang otomatis.
             </p>
         </section>
         <p style="color:#6b7280;font-size:.85rem;margin:0">

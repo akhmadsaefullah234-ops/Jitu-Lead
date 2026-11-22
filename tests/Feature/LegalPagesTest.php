@@ -55,10 +55,11 @@ class LegalPagesTest extends TestCase
 
     public function test_placeholders_use_the_real_company_contact_and_retention_numbers(): void
     {
-        config(['jitu.backup.keep_days' => 7, 'jitu.backup.remote_keep_days' => 30]);
+        // The longest retention is shown: database dumps (14 days here, 60 off the server) outlast the other copies.
+        config(['jitu.backup.keep_days' => 7, 'jitu.backup.remote_keep_days' => 30, 'jitu.backup.database.keep_days' => 14, 'jitu.backup.database.remote_keep_days' => 60]);
         PlatformSetting::write('contact', ['email' => 'privasi@example.com', 'address' => 'Jl. Contoh 1, Jakarta']);
 
-        $this->get('/kebijakan-privasi')->assertSee('PT Contoh')->assertSee('Jl. Contoh 1, Jakarta')->assertSee('7 hari di server')->assertSee('30 hari di penyimpanan luar server')
+        $this->get('/kebijakan-privasi')->assertSee('PT Contoh')->assertSee('Jl. Contoh 1, Jakarta')->assertSee('14 hari di server')->assertSee('60 hari di penyimpanan luar server')
             ->assertDontSee('{kontak}', false)->assertDontSee('{backup_hari}', false);
     }
 
