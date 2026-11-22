@@ -5,6 +5,7 @@ namespace App\Ai;
 use App\Models\Lead;
 use App\Models\Property;
 use App\Models\Tenant;
+use App\Payments\DigitalCheckout;
 use App\Payments\PaymentInstructions;
 use App\Shipping\ShippingQuote;
 use Illuminate\Support\Collection;
@@ -30,6 +31,10 @@ class DigitalTools
     public const SYSTEM_SENDS_NOTE = 'Pembelian dicatat, bayar transfer. Rekening tujuan, nominal transfer (bisa termasuk kode unik) dan batas bayar DIKIRIM OTOMATIS oleh sistem '
         .'di pesan berikutnya. Konfirmasi singkat bahwa pembelian dicatat dan sebut total dari hasil ini, lalu katakan instruksi pembayaran dikirim di pesan berikut. '
         .'Jangan menulis nomor rekening, nama bank, atau kode unik sendiri. Jangan menyatakan pembayaran diterima atau akses aktif.';
+
+    public const SYSTEM_SENDS_LINK_NOTE = 'Pembelian dicatat. Tautan bayar QRIS atau virtual account DIKIRIM OTOMATIS oleh sistem di pesan berikutnya. '
+        .'Konfirmasi singkat bahwa pembelian dicatat dan sebut total dari hasil ini, lalu katakan tautan bayar dikirim di pesan berikut. '
+        .'Jangan menulis tautan, nomor rekening, atau nomor virtual account sendiri. Jangan menyatakan pembayaran diterima atau akses aktif.';
 
     /** @var list<array{type: string, input: array, result: array}> */
     private array $actions = [];
@@ -91,8 +96,8 @@ class DigitalTools
             'status' => $draft ? 'draft_tercatat' : 'tercatat',
             'pesan' => $draft
                 ? 'Rangkum pembeliannya (produk, jumlah, total) lalu minta pembeli memastikan. Jangan menanyakan alamat atau kurir.'
-                : (PaymentInstructions::applies($this->tenant) ? self::SYSTEM_SENDS_NOTE
-                    : 'Pembelian dicatat. Minta pembeli membayar sebesar total dengan cara bayar yang tertulis di pengetahuan. Jangan menyatakan pembayaran diterima atau akses aktif.'),
+                : (DigitalCheckout::applies($this->tenant) ? self::SYSTEM_SENDS_LINK_NOTE : (PaymentInstructions::applies($this->tenant) ? self::SYSTEM_SENDS_NOTE
+                    : 'Pembelian dicatat. Minta pembeli membayar sebesar total dengan cara bayar yang tertulis di pengetahuan. Jangan menyatakan pembayaran diterima atau akses aktif.')),
             'produk' => collect($priced['lines'])->map(fn ($l) => $l['name'].($l['quantity'] > 1 ? ' x'.$l['quantity'] : ''))->implode(', '),
             'total' => $priced['total'],
             'total_teks' => $priced['total'] !== null ? ShippingQuote::rupiah($priced['total']) : null,
@@ -167,7 +172,8 @@ class DigitalTools
             'Setelah pembeli memastikan, panggil '.self::RECORD.' dengan status konfirmasi dan sampaikan total dari hasil tool. Sebut hanya angka yang tertulis di hasil tool.',
             'Bila pembeli menyebut email atau perangkatnya, isi di '.self::RECORD.'. Minta email bila belum ada, untuk pengiriman akses.',
             'Jangan pernah menyatakan pembayaran sudah diterima, lunas, atau akses sudah aktif. Bila pembeli mengirim atau menyebut bukti transfer, katakan admin akan mengeceknya dulu dan akses dikirim setelah pembayaran dikonfirmasi.',
-            PaymentInstructions::applies($this->tenant) ? 'REKENING: nomor rekening dan instruksi bayar dikirim otomatis oleh sistem setelah pembelian dikonfirmasi. Jangan pernah menulis nomor rekening atau nama bank sendiri.' : null,
+            DigitalCheckout::applies($this->tenant) ? 'PEMBAYARAN OTOMATIS: setelah pembelian dikonfirmasi, sistem mengirim tautan bayar QRIS atau virtual account, dan akses dikirim otomatis begitu pembayaran diterima. Jangan pernah menulis tautan bayar, nomor rekening, atau nomor virtual account sendiri.' : null,
+            ! DigitalCheckout::applies($this->tenant) && PaymentInstructions::applies($this->tenant) ? 'REKENING: nomor rekening dan instruksi bayar dikirim otomatis oleh sistem setelah pembelian dikonfirmasi. Jangan pernah menulis nomor rekening atau nama bank sendiri.' : null,
             $products !== '' ? "PRODUK DIGITAL (id | nama | harga):\n".$products : null,
         ]));
     }

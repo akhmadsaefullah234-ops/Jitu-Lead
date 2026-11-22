@@ -41,6 +41,7 @@ class EditLead extends EditRecord
                     Notification::make()->title('Pembayaran dicatat diterima')->success()->send();
                 }),
             DigitalPaymentAction::make(fn () => $this->record, after: fn () => $this->refreshFormData(['paid_at', 'access_link', 'stage_id'])),
+            DigitalPaymentAction::sendLink(fn () => $this->record),
             Action::make('chat')->label('Chat WhatsApp')->icon(Heroicon::OutlinedChatBubbleLeftRight)
                 ->visible(fn () => filled($this->record->phone) && ! $this->record->trashed())
                 ->url(fn () => Inbox::getUrl(['lead' => $this->record->getKey()])),

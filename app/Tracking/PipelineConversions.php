@@ -174,11 +174,11 @@ class PipelineConversions
         }
     }
 
-    /** "lead-12-Lead"; a Purchase carries its order ("lead-12-Purchase-345") so a new order counts again. */
+    /** "lead-12-Lead"; a Purchase carries its order or digital purchase ("lead-12-Purchase-345") so a new one counts again. */
     public static function eventId(Lead $lead, string $event): string
     {
         $order = $event === 'Purchase'
-            ? LeadActivity::query()->where('lead_id', $lead->getKey())->where('type', 'order_recorded')->max('id')
+            ? LeadActivity::query()->where('lead_id', $lead->getKey())->whereIn('type', ['order_recorded', 'purchase_recorded'])->max('id')
             : null;
 
         return 'lead-'.$lead->getKey().'-'.$event.($order ? '-'.$order : '');

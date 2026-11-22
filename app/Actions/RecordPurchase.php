@@ -6,6 +6,7 @@ use App\Ai\DigitalTools;
 use App\Automation\DigitalStageAutomation;
 use App\Models\Lead;
 use App\Models\User;
+use App\Payments\DigitalCheckout;
 use App\Payments\PaymentInstructions;
 use App\Shipping\ShippingQuote;
 use Illuminate\Support\Facades\DB;
@@ -50,8 +51,9 @@ class RecordPurchase
                 'quantity' => array_sum(array_column($lines, 'quantity')),
                 'order_items' => array_map(fn ($l) => ['product_id' => $l['product_id'], 'name' => $l['name'], 'variant' => null, 'quantity' => $l['quantity'], 'price' => $l['price']], $lines),
             ] + ($confirmed ? [
-                'payment_type' => 'transfer',
-                'payment_type_source' => $lead->payment_type === 'transfer' ? $lead->payment_type_source : 'chat',
+                // Paid through iPaymu (QRIS / virtual account) when the agency switched it on, else by transfer.
+                'payment_type' => $payment = DigitalCheckout::applies($lead->tenant) ? 'other' : 'transfer',
+                'payment_type_source' => $lead->payment_type === $payment ? $lead->payment_type_source : 'chat',
                 'deal_value' => $total ?? $lead->deal_value,
             ] : []))->save();
 
@@ -66,9 +68,14 @@ class RecordPurchase
             return $confirmed ? $this->automation->purchaseRecorded($lead) : null;
         });
 
-        // Agencies with an active bank account (Pengaturan > Pembayaran): the system writes and sends the instructions.
-        $instruction = $confirmed && $total !== null && $lead->paid_at === null && PaymentInstructions::applies($lead->tenant)
-            ? app(PaymentInstructions::class)->send($lead, $total, $actor) : null;
+        // Pembayaran otomatis (iPaymu) first: the system sends a QRIS/VA payment link. Else, agencies with an active bank
+        // account (Pengaturan > Pembayaran) get the transfer instructions written and sent by the system.
+        $gateway = $confirmed && $total !== null && $lead->paid_at === null && DigitalCheckout::applies($lead->tenant);
+        $instruction = match (true) {
+            $gateway => app(DigitalCheckout::class)->start($lead->refresh(), $total, $actor),
+            $confirmed && $total !== null && $lead->paid_at === null && PaymentInstructions::applies($lead->tenant) => app(PaymentInstructions::class)->send($lead, $total, $actor),
+            default => null,
+        };
 
         return array_filter([
             'status' => $confirmed ? 'tercatat' : 'draft_tercatat',
@@ -79,6 +86,7 @@ class RecordPurchase
             'instruksi_bayar' => $instruction['status'] ?? null,
             'nominal_transfer' => $instruction['nominal'] ?? null,
             'kode_unik' => $instruction['kode_unik'] ?? null,
+            'tautan_bayar' => $gateway && isset($instruction['url']) ? 'dikirim_sistem' : null,
         ], fn ($v) => $v !== null);
     }
 }

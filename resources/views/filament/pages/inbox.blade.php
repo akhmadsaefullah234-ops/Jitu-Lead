@@ -167,7 +167,7 @@
                         @if ($lead->auto_shipment_state === \App\Shipping\Shipments\AutoShipments::SCHEDULED)<span class="wa-print">{{ $this->cancelAutoShipmentAction }}</span>@endif
                         <span class="wa-chip-prod">{{ $this->productAction }}</span>
                         <span class="wa-more">
-                            <x-filament-actions::group :actions="[$this->paymentReceivedAction, $this->digitalPaymentReceivedAction, $this->createShipmentAction, $this->retryShipmentAction, $this->linkShipmentAction, $this->trackShipmentAction, $this->shipmentLabelAction, $this->cancelShipmentAction, $this->trackingAction, $this->shippingQuoteAction, $this->openLeadAction]"
+                            <x-filament-actions::group :actions="[$this->paymentReceivedAction, $this->digitalPaymentReceivedAction, $this->digitalPaymentLinkAction, $this->createShipmentAction, $this->retryShipmentAction, $this->linkShipmentAction, $this->trackShipmentAction, $this->shipmentLabelAction, $this->cancelShipmentAction, $this->trackingAction, $this->shippingQuoteAction, $this->openLeadAction]"
                                 icon="heroicon-m-ellipsis-horizontal" label="Aksi lain" tooltip="Aksi lain" color="gray" :icon-button="true" dropdown-placement="bottom-end" />
                         </span>
                     </div>

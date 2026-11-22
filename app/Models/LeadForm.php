@@ -24,6 +24,9 @@ class LeadForm extends Model
 
     public const AFTER = ['message' => 'Tampilkan pesan', 'redirect' => 'Arahkan ke halaman terima kasih', 'whatsapp' => 'Buka WhatsApp dengan pesan otomatis'];
 
+    /** Only for digital-product agencies: straight to the iPaymu payment page (App\Payments\DigitalCheckout). */
+    public const DIGITAL_AFTER = ['payment' => 'Arahkan ke halaman bayar (QRIS/VA, produk digital)'];
+
     protected static function booted(): void
     {
         // A new form starts with the WhatsApp welcome on for a shop (forms made before it existed stay off).

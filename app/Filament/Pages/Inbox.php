@@ -439,6 +439,11 @@ class Inbox extends Page
         return DigitalPaymentAction::make(fn () => $this->current()?->lead)->size('sm');
     }
 
+    public function digitalPaymentLinkAction(): Action
+    {
+        return DigitalPaymentAction::sendLink(fn () => $this->current()?->lead)->size('sm');
+    }
+
     /** Courier and tracking number: kept on the lead, sent to the buyer, lead to "Dikemas & dikirim" (rule 4). */
     public function trackingAction(): Action
     {

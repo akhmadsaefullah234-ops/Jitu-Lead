@@ -4,6 +4,7 @@ namespace App\Filament\Support;
 
 use App\Automation\DigitalStageAutomation;
 use App\Models\Lead;
+use App\Payments\DigitalCheckout;
 use App\Shipping\ShippingQuote;
 use Closure;
 use Filament\Actions\Action;
@@ -40,6 +41,23 @@ final class DigitalPaymentAction
                 $note = app(DigitalStageAutomation::class)->paymentReceived($lead(), auth()->user(), $data['access_link'] ?? null, (bool) ($data['send'] ?? false));
                 $after && $after();
                 Notification::make()->title('Pembayaran dicatat diterima')->body($note)->success()->send();
+            });
+    }
+
+    /** "Kirim tautan bayar": a fresh (or the still open) iPaymu link for the lead's total, sent on WhatsApp. */
+    public static function sendLink(Closure $lead, string $name = 'digitalPaymentLink'): Action
+    {
+        return Action::make($name)
+            ->label('Kirim tautan bayar')->icon(Heroicon::OutlinedCreditCard)->color('gray')
+            ->visible(fn () => ($l = $lead()) !== null && ! $l->trashed() && $l->paid_at === null && (int) $l->deal_value > 0 && DigitalCheckout::applies($l->tenant))
+            ->requiresConfirmation()
+            ->modalHeading('Kirim tautan bayar QRIS/VA?')
+            ->modalDescription(fn () => 'Sistem membuat tautan bayar iPaymu sebesar '.ShippingQuote::rupiah((int) $lead()?->deal_value).' (atau memakai yang masih berlaku) dan mengirimnya ke pembeli lewat WhatsApp.')
+            ->action(function () use ($lead) {
+                $result = app(DigitalCheckout::class)->start($lead(), (int) $lead()->deal_value, auth()->user());
+                $ok = in_array($result['status'], ['terkirim', 'dibuat'], true);
+                Notification::make()->title($ok ? 'Tautan bayar dikirim' : 'Tautan bayar belum terkirim')->body($ok ? null : $result['pesan'])
+                    ->{$ok ? 'success' : 'warning'}()->send();
             });
     }
 

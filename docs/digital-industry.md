@@ -65,11 +65,53 @@ was not sent. Later the payment gateway (Prompt C) will call the same `paymentRe
 - Switching to digital without leads applies the template in full, with the rules on. With leads, it only adds stages, reasons, sources and follow-ups, and every lead keeps its stage.
 - Switching away from digital turns every digital feature off: the tool, the automation, the payment button and the fields. All the data stays: `paid_at`, `access_link`, `device`, the payment instructions and `stage_automation['digital']`. Switching back to digital brings the rules back as they were saved.
 
+## Pembayaran otomatis (Tahap 3, iPaymu)
+
+The agency connects its **own** iPaymu account under **Pengaturan > Pembayaran otomatis** (`PaymentGatewayPage`, digital
+agencies and admins only). The VA and API key go into `payment_gateways`, encrypted with `APP_KEY` and hidden from
+arrays. They are never shown back: an empty box keeps the saved key. JITU's own subscription payments (`IpaymuPayments`,
+`/billing/ipaymu/notify`, `IPAYMU_*` in `.env`) are untouched. `IpaymuClient::using()` gives a copy that signs with the
+agency's account, and the default client still uses JITU's.
+
+Decisions used (chosen 23 Nov 2026):
+
+- Prices come from the catalogue. A product without a price gets no invoice, and an admin confirms the price.
+- Refunds are manual: an admin moves the lead to Refund. Nothing is refunded through iPaymu.
+- The invoice expires after 24 hours by default (1–168). One reminder goes out 3 hours before it expires, and the `no_payment` rule still moves the lead to Tidak jadi bayar afterwards.
+- The access link is signed, lasts 7 days by default (1–90) and belongs to that buyer's invoice.
+- No licence keys for now.
+
+Flow (`App\Payments\DigitalCheckout`):
+
+1. Invoices are created at three points:
+   - a confirmed purchase (`RecordPurchase`, from the AI or from a form);
+   - a form whose after-submit action is **Arahkan ke halaman bayar**;
+   - the **Kirim tautan bayar** button in the Inbox or on the lead page.
+2. Each one creates an iPaymu redirect session (QRIS or virtual account, chosen on iPaymu's page), stored in `digital_payments`. An invoice that is still open is reused. A lead can start at most 5 invoices in 24 hours.
+3. The buyer gets the payment link on WhatsApp (origin `payment_link`), and `leads.payment_amount` / `payment_due_at` are set. The AI is told that the system sends the link and never writes a link, account or VA number itself.
+4. iPaymu calls `POST /digital/ipaymu/notify/{tenant}`, which is separate from the subscription callback. The checks run in this order:
+   - the callback's signature must match the agency's VA;
+   - iPaymu is asked again for the transaction with the agency's key;
+   - the reference, the amount (SubTotal) and the session must all match.
+
+   Only status 1, 6 or 7 marks the invoice paid, and it happens once, under a row lock. A repeated callback changes nothing.
+5. `DigitalStageAutomation::paidByGateway()` runs next:
+   - sets `paid_at`, logs "Pembayaran ... diterima lewat iPaymu (channel)", and moves the lead to Lunas & akses terkirim with the paid amount as the deal value;
+   - sends the buyer `/akses/{token}?signature=…` on WhatsApp (origin `digital_access`) and by email (`DigitalAccessReady`). The link redirects to `leads.access_link` or the product's **Tautan akses produk** (`properties.access_url`, never given to the AI). It opens only for a paid invoice;
+   - when there is no access link at all, the buyer gets a "paid" message, and the staff get a push "Lunas lewat iPaymu, kirim akses".
+6. iPaymu's return page is `/bayar/{token}`. It shows the status. On a paid invoice, the Meta Pixel fires `Purchase` with the same `event_id` the pipeline sends through CAPI (`lead-{id}-Purchase-{purchase_recorded activity}`), so Meta counts it once.
+
+Logs contain only ids, references and statuses, never keys or buyer data. The manual **Pembayaran diterima** button still
+works, for a transfer outside iPaymu.
+
+The product form for digital agencies no longer shows weight, size or shipping promos (these were left over from the
+shop form). It shows **Tautan akses produk** instead.
+
 ## Deploy
 
 1. Take a database backup and check it with `gzip -t`.
 2. `git pull`, then `composer install --no-dev`.
-3. `php artisan migrate --force`, run as the `jitu` user. It only adds two nullable columns to `leads`.
+3. `php artisan migrate --force`, run as the `jitu` user, so the new tables `payment_gateways` and `digital_payments` are owned by `jitu`. The migrations only add tables and nullable columns.
 4. `php artisan optimize`, then restart the queue workers.
 
-No maintenance mode is needed. No existing tenant changes until an agency chooses "Produk digital".
+No maintenance mode is needed. No existing tenant changes until an agency chooses "Produk digital" and switches on Pembayaran otomatis. In the iPaymu dashboard, the notification URL shown on the settings page is only a fallback, because every invoice sends its own `notifyUrl`.

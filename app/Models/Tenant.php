@@ -196,4 +196,10 @@ class Tenant extends Model
     {
         return $this->hasMany(PaymentAccount::class)->orderBy('sort_order')->orderBy('id');
     }
+
+    /** A digital-product agency's iPaymu account (Pengaturan > Pembayaran otomatis). */
+    public function paymentGateway(): HasOne
+    {
+        return $this->hasOne(PaymentGateway::class);
+    }
 }
