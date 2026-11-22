@@ -130,6 +130,20 @@ class LeadForm
                             ->options(['transfer' => 'Transfer', 'cod' => 'Bayar di tempat (COD)', 'other' => 'Lainnya (QRIS, e-wallet, dll.)'])
                             ->placeholder('Belum ditanyakan')
                             ->helperText(fn (Get $get) => blank($get('payment_type')) && (filled($get('shipping_address')) || filled($get('variant'))) ? 'Cara bayar belum ditanyakan. Tanyakan ke pembeli.' : null),
+                        TextInput::make('device')
+                            ->placeholder('Android, iPhone, Windows, Mac')
+                            ->maxLength(60),
+                        // Set by "Pembayaran diterima"; shown here, never typed, so the stage and the Purchase event stay in step.
+                        DateTimePicker::make('paid_at')
+                            ->seconds(false)
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->hiddenOn('create'),
+                        TextInput::make('access_link')
+                            ->url()
+                            ->maxLength(500)
+                            ->placeholder('https://...')
+                            ->columnSpanFull(),
                         TextInput::make('tracking_number')
                             ->maxLength(60)
                             ->regex('/^[A-Za-z0-9\-\s]{4,60}$/')

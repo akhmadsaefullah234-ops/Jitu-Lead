@@ -2,6 +2,7 @@
 
 namespace App\Tracking;
 
+use App\Automation\DigitalStages;
 use App\Automation\RetailStages;
 use App\Enums\Interest;
 use App\Enums\StageRequirement;
@@ -327,6 +328,7 @@ class PipelineConversions
      * Property (App\Tracking\PropertyAdDefaults, the same flow as a shop's): Lead baru = Lead (when the lead is made),
      * Terkualifikasi = QualifiedLead, Jadwal survei = Schedule, Booking = InitiateCheckout, Closing = Purchase,
      * Hot = QualifiedLead, the client's first reply = Contact.
+     * Digital products: Menunggu pembayaran = InitiateCheckout, Lunas & akses terkirim = Purchase, Hot = Lead.
      *
      * @return array{enabled: bool, hot: ?string, stages: array<int, string>, messaging: bool, contact: bool}
      */
@@ -334,6 +336,20 @@ class PipelineConversions
     {
         if ($industry === 'properti') {
             return ['enabled' => false] + PropertyAdDefaults::pipeline();
+        }
+
+        // Digital products: "Menunggu pembayaran" = InitiateCheckout, "Lunas & akses terkirim" = Purchase, Hot = Lead.
+        if ($industry === 'digital') {
+            $digital = new DigitalStages;
+            $map = [];
+
+            foreach ([DigitalStages::PAYMENT => 'InitiateCheckout', DigitalStages::PAID => 'Purchase'] as $key => $event) {
+                if ($stage = $digital->stage($key)) {
+                    $map[$stage->getKey()] = $event;
+                }
+            }
+
+            return ['enabled' => false, 'hot' => 'Lead', 'stages' => $map, 'messaging' => false, 'contact' => false];
         }
 
         $map = [];

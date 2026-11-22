@@ -4,6 +4,7 @@ namespace App\Actions;
 
 use App\Ai\AiSettings;
 use App\Ai\ReplyTiming;
+use App\Automation\DigitalStageAutomation;
 use App\Automation\PropertyStageAutomation;
 use App\Automation\StageAutomation;
 use App\Catalog\ProductMatcher;
@@ -277,6 +278,7 @@ class HandleInboundWhatsApp
         try {
             app(StageAutomation::class)->inbound($lead, $message);
             app(PropertyStageAutomation::class)->inbound($lead, $message);
+            app(DigitalStageAutomation::class)->inbound($lead, $message);
         } catch (Throwable $e) {
             report($e);
         }

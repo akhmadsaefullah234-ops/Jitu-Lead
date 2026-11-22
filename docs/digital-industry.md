@@ -1,0 +1,75 @@
+# Industri "Produk digital" (`digital`)
+
+For agencies that sell e-books, online classes, templates, presets or apps. The buyer pays, a person checks the money,
+and the buyer gets an access link. There is no address, courier or shipping cost anywhere in the flow. Everything below
+applies only when `tenants.industry = 'digital'`. Shops (`retail`) and property agencies (`properti`) are unchanged.
+
+## Template (`config/industries.php`, key `digital`)
+
+| Part | Value |
+| --- | --- |
+| Stages | Lead baru (open, 1h, `new`), Menunggu pembayaran (open, 6h, `payment`), Lunas & akses terkirim (won, Booking requirement, 168h, `paid`), Tidak jadi bayar (lost, `unpaid`), Refund (lost, `refund`) |
+| Lost reasons | Harga mahal, Ragu fungsi atau manfaat, Tidak ada respons, Pembayaran gagal, Tidak cocok perangkat, Minta refund |
+| Lead sources | Iklan Meta, Formulir web, Instagram, TikTok, WhatsApp, Email, Referral |
+| Follow-ups (created off) | Sapaan H+1 (Lead baru), Pengingat bayar H+1 (Menunggu pembayaran), Onboarding H+1 (Lunas & akses terkirim) |
+| Lead fields | Produk diminati (`property_id`), Jumlah, Perangkat (`device`), Cara bayar, Lunas pada (`paid_at`), Tautan akses (`access_link`) |
+| Handoff words | the usual "minta admin" phrases plus refund, komplain, gagal akses, tidak bisa login/unduh, kode error, nego, reseller, penipuan |
+
+Changes from the plan's proposal:
+
+- Follow-up delays are counted in days, so the payment reminder is **H+1**, not hours.
+- `email` is not in the industry fields because it is already in the main lead section. Listing it twice would also give the CSV export two email columns.
+- `device` and `access_link` are new nullable columns on `leads` (migration `2026_12_07_000100`, additive only).
+
+## Stage automation (`App\Automation\DigitalStageAutomation`)
+
+The settings are under **Pengaturan > Otomatisasi tahap** and stored in `tenants.stage_automation['digital']`
+(`DigitalStageAutomationSettings`). The shop rules keep the top level of the same column, and the property rules keep
+`property`. None of them reads another industry's key.
+
+| Rule | What it does |
+| --- | --- |
+| `purchase_recorded` | A confirmed purchase moves to Menunggu pembayaran (forward only). |
+| `payment_proof` | A picture while waiting for payment sets `payment_proof_at`, logs "Bukti transfer masuk, perlu dicek", and sends a push and an email to the admins and the lead owner. |
+| `no_payment` (hours, default 48) | `stages:automate` moves an unpaid lead without a proof to Tidak jadi bayar with the reason "Pembayaran gagal". |
+| `reopen` | A buyer in Tidak jadi bayar who writes again goes back to Lead baru. |
+
+New digital agencies start with every rule on. An agency that switches to digital while it already has leads starts
+with every rule off, and an admin switches them on on the same page. Every move goes through `MoveLeadToStage` and is
+logged as "Pindah otomatis ...". A won lead is never moved automatically.
+
+**Pembayaran diterima** (`App\Filament\Support\DigitalPaymentAction`, in the Inbox under "Aksi lain" and on the lead
+page) is the only way a purchase becomes paid. It sets `paid_at`, clears `payment_proof_at`, and moves the lead to
+Lunas & akses terkirim. The unit is the product name with "xN", and the deal value is the recorded total, or the
+catalogue price times the quantity. The access link is optional and is kept on the lead. When the admin asks for it,
+the link is sent to the buyer on WhatsApp, but only inside the free chat window. Otherwise the lead's activity says it
+was not sent. Later the payment gateway (Prompt C) will call the same `paymentReceived()`.
+
+## AI (`App\Ai\DigitalTools`, `App\Actions\RecordPurchase`)
+
+- The tool is `catat_pembelian`, with these inputs: items (`product_id` or `produk`, plus `jumlah`), `status` (`draft` or `konfirmasi`), `nama`, `email` and `perangkat`. Prices always come from the catalogue, so the model cannot set a total. A product without a price returns no total, and the AI tells the buyer that the admin will confirm it.
+- The tool only collects the purchase while the answer is written. `GenerateAiReply::applyActions` (type `purchase`) writes it once the answer is really sent. It fills the product, quantity, `order_items`, email (only when empty and valid), device and name. On `konfirmasi` it also fills `payment_type = transfer` and `deal_value`, moves the lead to Menunggu pembayaran and, when bank accounts are active (Tahap 1), sends the transfer instructions.
+- The system prompt says "JANGAN menanyakan alamat, kota, kurir, atau ongkir" and lists the catalogue as `id | nama | harga`. A digital agency never gets the shop tools, because `Shipping::available()` is retail-only.
+- The paid-claim guard (`ShopTools::claimsPaymentReceived`) now runs for digital as well as retail. A claim triggers one rewrite with a digital note. If the claim is still there, the buyer gets `SAFE_DIGITAL_PAYMENT_REPLY` and the chat is handed to an agent.
+
+## Forms, pages and data
+
+- Lead forms: a new template, **Pembelian produk digital** (name, WhatsApp, email, product, device, note), shown only to digital agencies. The generic **Pemesanan produk** template, which has an address field, is hidden for digital. The shop's **Order produk** template was already shop-only. Shops and property agencies see the same templates as before.
+- Landing pages: digital agencies get the blank page and **Layanan – konversi tinggi**. The shop and property templates stay with their own industries.
+- Meta (Pelacakan iklan) defaults: Menunggu pembayaran = InitiateCheckout, Lunas & akses terkirim = Purchase, Hot = Lead. These are off until the agency turns them on.
+- The sample data (`DemoData`) has four digital products and leads in every digital stage.
+- Tutorial: two new chapters for digital agencies only, `pipeline-digital` and `otomatisasi-tahap-digital`.
+
+## Switching industry
+
+- Switching to digital without leads applies the template in full, with the rules on. With leads, it only adds stages, reasons, sources and follow-ups, and every lead keeps its stage.
+- Switching away from digital turns every digital feature off: the tool, the automation, the payment button and the fields. All the data stays: `paid_at`, `access_link`, `device`, the payment instructions and `stage_automation['digital']`. Switching back to digital brings the rules back as they were saved.
+
+## Deploy
+
+1. Take a database backup and check it with `gzip -t`.
+2. `git pull`, then `composer install --no-dev`.
+3. `php artisan migrate --force`, run as the `jitu` user. It only adds two nullable columns to `leads`.
+4. `php artisan optimize`, then restart the queue workers.
+
+No maintenance mode is needed. No existing tenant changes until an agency chooses "Produk digital".

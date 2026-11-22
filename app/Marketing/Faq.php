@@ -15,6 +15,7 @@ class Faq
         $host = parse_url(url('/'), PHP_URL_HOST);
 
         return [
+            ['q' => 'Cocok untuk bisnis apa saja?', 'a' => 'Agensi properti, toko online, dan penjual produk digital seperti e-book, kelas online, template, atau aplikasi. Tahap pipeline, kolom lead, dan aturan AI mengikuti jenis bisnis yang Anda pilih saat mendaftar, dan bisa diganti nanti.'],
             ['q' => 'Apakah nomor WhatsApp saya aman dipakai?', 'a' => 'Anda bisa memakai nomor yang sudah ada dengan scan QR, atau WhatsApp Business API resmi untuk volume besar. Untuk scan QR, gunakan nomor kantor dan hindari pesan massal ke orang yang tidak mengenal Anda.'],
             ['q' => 'Apakah saya perlu API key AI sendiri?', 'a' => 'Tidak. AI sudah disediakan dan kuotanya mengikuti paket.'.($ai ? ' Jika kurang, tambah '.$num($ai['unit']).' balasan seharga '.$rp($ai['price']).'.' : '')],
             ['q' => 'Apakah AI membalas pelanggan tanpa persetujuan saya?', 'a' => 'Anda yang menentukan. AI bisa hanya membuat draf yang dikirim agen, atau membalas otomatis untuk pertanyaan umum. AI berhenti saat agen mengetik dan menyerahkan chat ke agen untuk kata kunci tertentu.'],

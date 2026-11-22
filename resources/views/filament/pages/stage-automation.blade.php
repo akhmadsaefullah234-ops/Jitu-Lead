@@ -12,6 +12,12 @@
                 memakai <b>Terapkan ke lead yang ada</b>, yang menampilkan daftar perubahannya dulu.
             </div>
         @endif
+    @elseif ($this->isDigital())
+        <p style="color:var(--gray-600);max-width:46rem">
+            Pembelian produk digital pindah tahap sendiri menurut aturan di bawah. Setiap perpindahan otomatis tercatat di aktivitas lead
+            ("Pindah otomatis ...") dan memicu follow-up tahap barunya seperti biasa. Lunas hanya dikonfirmasi orang lewat tombol
+            <b>Pembayaran diterima</b> di Inbox atau di lead, tidak pernah oleh pembeli atau AI. Lead yang sudah Lunas tidak pernah dipindah otomatis.
+        </p>
     @else
         <p style="color:var(--gray-600);max-width:46rem">
             Lead pindah tahap sendiri menurut aturan di bawah. Setiap perpindahan otomatis tercatat di aktivitas lead ("Pindah otomatis ...") dan

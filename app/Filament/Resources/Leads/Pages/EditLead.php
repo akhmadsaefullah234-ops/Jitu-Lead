@@ -6,6 +6,7 @@ use App\Automation\StageAutomation;
 use App\Filament\Concerns\NotifiesShipmentFormErrors;
 use App\Filament\Pages\Inbox;
 use App\Filament\Resources\Leads\LeadResource;
+use App\Filament\Support\DigitalPaymentAction;
 use App\Filament\Support\LocationActions;
 use App\Filament\Support\ShipmentActions;
 use App\Models\Shipment;
@@ -39,6 +40,7 @@ class EditLead extends EditRecord
                     $this->refreshFormData(['next_action', 'next_action_due_at']);
                     Notification::make()->title('Pembayaran dicatat diterima')->success()->send();
                 }),
+            DigitalPaymentAction::make(fn () => $this->record, after: fn () => $this->refreshFormData(['paid_at', 'access_link', 'stage_id'])),
             Action::make('chat')->label('Chat WhatsApp')->icon(Heroicon::OutlinedChatBubbleLeftRight)
                 ->visible(fn () => filled($this->record->phone) && ! $this->record->trashed())
                 ->url(fn () => Inbox::getUrl(['lead' => $this->record->getKey()])),

@@ -4,6 +4,8 @@ namespace App\Support;
 
 use App\Ai\AiSettings;
 use App\Ai\Facts\PaymentDefaults;
+use App\Automation\DigitalStageAutomationSettings;
+use App\Automation\DigitalStages;
 use App\Automation\PropertyStageAutomationSettings;
 use App\Automation\PropertyStages;
 use App\Automation\RetailStages;
@@ -62,6 +64,13 @@ class IndustryTemplate
     {
         if (PropertyStageAutomationSettings::appliesTo($tenant) && ! PropertyStageAutomationSettings::of($tenant)->chosen()) {
             PropertyStageAutomationSettings::store($tenant, PropertyStageAutomationSettings::defaults());
+        }
+
+        // A digital-product agency starts with its own rules on (DigitalStageAutomation); nothing else below is for it.
+        if (DigitalStageAutomationSettings::appliesTo($tenant)) {
+            DigitalStageAutomationSettings::of($tenant)->chosen() ?: DigitalStageAutomationSettings::store($tenant, DigitalStageAutomationSettings::defaults());
+
+            return;
         }
 
         // Pelacakan iklan with Jitu's property flow, waiting for a pixel and token; nothing goes out before.
@@ -148,14 +157,18 @@ class IndustryTemplate
      */
     private function markTemplateStages(Tenant $tenant, Industry $industry): void
     {
-        if (! in_array($industry->key, ['retail', 'properti'], true)) {
+        if (! in_array($industry->key, ['retail', 'properti', 'digital'], true)) {
             return;
         }
 
         $stages = $tenant->stages()->orderBy('position')->orderBy('id')->get();
         $taken = $stages->pluck('template_key')->filter()->all();
         $rows = $stages->whereNull('template_key')->map(fn ($s) => ['id' => $s->id, 'name' => $s->name, 'type' => $s->type->value, 'requirement' => $s->requirement?->value])->values()->all();
-        $found = $industry->key === 'retail' ? RetailStages::match($rows) : PropertyStages::match($rows);
+        $found = match ($industry->key) {
+            'retail' => RetailStages::match($rows),
+            'digital' => DigitalStages::match($rows),
+            default => PropertyStages::match($rows),
+        };
 
         foreach ($found as $key => $id) {
             in_array($key, $taken, true) ?: $stages->firstWhere('id', $id)->forceFill(['template_key' => $key])->save();

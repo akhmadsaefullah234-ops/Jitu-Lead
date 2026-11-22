@@ -176,5 +176,78 @@ TXT,
                 'knowledge_body_hint' => 'Tulis apa adanya: harga, varian, ukuran, stok, ongkir, cara bayar, jam layanan. AI tidak akan menambah yang tidak tertulis.',
             ],
         ],
+        'digital' => [
+            'label' => 'Produk digital',
+            'icon' => 'heroicon-o-device-phone-mobile',
+            'description' => 'Aplikasi, kursus, e-book, template, atau akses digital. Pembayaran lalu akses dikirim otomatis, tanpa alamat atau ongkir.',
+
+            'stages' => [
+                // [name, type, requirement, default action, hours until the action is due, template key (App\Automation\DigitalStages)]
+                ['Lead baru', StageType::Open, null, 'Kirim penawaran dan tautan bayar', 1, 'new'],
+                ['Menunggu pembayaran', StageType::Open, null, 'Ingatkan pembayaran', 6, 'payment'],
+                ['Lunas & akses terkirim', StageType::Won, StageRequirement::Booking, 'Minta ulasan dan tawarkan produk lain', 168, 'paid'],
+                ['Tidak jadi bayar', StageType::Lost, StageRequirement::LostReason, null, null, 'unpaid'],
+                ['Refund', StageType::Lost, StageRequirement::LostReason, null, null, 'refund'],
+            ],
+            'lost_reasons' => [
+                'Harga mahal', 'Ragu fungsi atau manfaat', 'Tidak ada respons', 'Pembayaran gagal', 'Tidak cocok perangkat', 'Minta refund',
+            ],
+            'lead_sources' => [
+                ['Iklan Meta', 'ads'], ['Formulir web', 'form'], ['Instagram', 'social'], ['TikTok', 'social'],
+                ['WhatsApp', 'whatsapp'], ['Email', 'manual'], ['Referral', 'manual'],
+            ],
+            'follow_ups' => [
+                // Follow-ups count whole days (follow_up_rules.delay_days), so the payment reminder is the next day.
+                ['Sapaan H+1', 'Lead baru', 1, 'Halo {nama}, saya {agen} dari {agensi} 😊 Kemarin Anda menanyakan {produk}. Ada yang ingin ditanyakan soal isi atau cara aksesnya?'],
+                ['Pengingat bayar H+1', 'Menunggu pembayaran', 1, 'Halo {nama}, pesanan {produk} Anda masih menunggu pembayaran. Begitu pembayaran kami terima, akses langsung kami kirim ya.'],
+                ['Onboarding H+1', 'Lunas & akses terkirim', 1, 'Halo {nama}, terima kasih sudah membeli {produk} 🙏 Apakah aksesnya sudah bisa dibuka? Kalau ada kendala, balas chat ini ya.'],
+            ],
+            'ai_instructions' => <<<'TXT'
+Sapa dengan "Kak" dan gunakan nama pembeli bila diketahui.
+Jawab ramah, singkat, dan langsung ke inti. Satu pertanyaan pembeli dijawab satu hal dulu.
+Jelaskan isi, manfaat, dan cara pakai produk hanya dari pengetahuan. Setelah menjawab, ajukan satu pertanyaan ringan, misalnya produk mana yang diminati atau perangkat yang dipakai.
+Produk ini digital: jangan pernah menanyakan alamat, kurir, atau ongkir.
+Bila pembeli sudah siap membeli, minta nama dan email untuk pengiriman akses.
+Jangan menyebut harga, diskon, atau masa promo yang tidak tertulis di pengetahuan.
+Jangan pernah menyatakan pembayaran diterima atau akses sudah aktif; itu hanya dari sistem atau admin.
+Jangan meminta data pribadi sensitif seperti nomor KTP, PIN, kata sandi, atau kode OTP lewat chat.
+TXT,
+            'handoff_keywords' => [
+                'bicara dengan manusia', 'bicara dengan orang', 'bicara dengan admin', 'bicara langsung',
+                'telepon saya', 'hubungi saya', 'refund', 'pengembalian dana', 'komplain', 'keluhan', 'kecewa',
+                'gagal akses', 'tidak bisa akses', 'tidak bisa login', 'tidak bisa unduh', 'tidak bisa download', 'kode error',
+                'nego', 'reseller', 'penipuan',
+            ],
+
+            'lead_fields' => [
+                'property_id' => 'Produk diminati',
+                'quantity' => 'Jumlah',
+                'device' => 'Perangkat',
+                'payment_type' => 'Cara bayar',
+                'paid_at' => 'Lunas pada',
+                'access_link' => 'Tautan akses',
+            ],
+
+            'terms' => [
+                'catalog' => 'Produk digital',
+                'catalog_item' => 'produk',
+                'catalog_item_name' => 'Nama produk',
+                'catalog_icon' => 'heroicon-o-device-phone-mobile',
+                'lead_section' => 'Detail pembelian',
+                'item_missing' => 'Produk belum dipilih',
+                'item_fallback' => 'produk yang Anda tanyakan',
+                'visit' => 'Pembelian',
+                'visits_upcoming' => 'Menunggu pembayaran',
+                'won_stat' => 'Pembelian lunas (30 hari)',
+                'deal_item' => 'Pembelian',
+                'deal_item_hint' => 'Contoh: Kelas Excel Dasar x1',
+                'deal_requirement' => 'Produk dan nilai transaksi',
+                'business' => 'bisnis digital',
+                'source_portal' => 'Marketplace',
+                'knowledge_examples' => 'daftar produk dan harga, fitur dan isi, cara pakai dan akses, perangkat yang didukung, kebijakan refund, promo yang berlaku, dan jam layanan',
+                'knowledge_title_hint' => 'Contoh: Harga Kelas Excel, Cara akses, Kebijakan refund',
+                'knowledge_body_hint' => 'Tulis apa adanya: harga, isi atau fitur, cara akses, perangkat, masa berlaku, kebijakan refund, jam layanan. AI tidak akan menambah yang tidak tertulis.',
+            ],
+        ],
     ],
 ];
