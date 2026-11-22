@@ -25,6 +25,7 @@ use App\Models\MediaFolder;
 use App\Models\Property;
 use App\Models\WaConversation;
 use App\Models\WaTemplate;
+use App\Payments\PaymentInstructions;
 use App\Regions\RegionDirectory;
 use App\Shipping\CourierChoice;
 use App\Shipping\Regions;
@@ -424,7 +425,7 @@ class Inbox extends Page
             ->visible(fn () => app(StageAutomation::class)->canConfirmPayment($this->current()?->lead))
             ->requiresConfirmation()
             ->modalHeading('Pembayaran sudah masuk?')
-            ->modalDescription('Pastikan dana sudah ada di rekening. Lead pindah ke tahap Dikemas & dikirim.')
+            ->modalDescription(fn () => PaymentInstructions::confirmDescription($this->current()?->lead))
             ->action(function () {
                 app(StageAutomation::class)->paymentReceived($this->current()->lead, auth()->user());
                 Notification::make()->title('Pembayaran dicatat diterima')->success()->send();

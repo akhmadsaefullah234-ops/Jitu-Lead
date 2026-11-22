@@ -8,6 +8,7 @@ use App\Models\LeadActivity;
 use App\Models\Property;
 use App\Models\Tenant;
 use App\Models\WaMessage;
+use App\Payments\PaymentInstructions;
 use App\Shipping\ShippingQuote;
 use App\Shipping\ShippingSettings;
 
@@ -41,7 +42,9 @@ class OrderConfirmation
         $summary = WaMessage::query()->where('conversation_id', $inbound->conversation_id)->where('direction', 'out')
             ->where('id', '<', $inbound->getKey())->latest('id')->first();
 
-        if ($summary === null || $summary->created_at?->lt(now()->subHours(self::WITHIN_HOURS)) || ! self::summarises((string) $summary->body)) {
+        // The system's payment instruction (App\Payments\PaymentInstructions) follows a recorded order: an "ok" to it records nothing.
+        if ($summary === null || $summary->origin === PaymentInstructions::ORIGIN
+            || $summary->created_at?->lt(now()->subHours(self::WITHIN_HOURS)) || ! self::summarises((string) $summary->body)) {
             return null;
         }
 
@@ -125,8 +128,18 @@ class OrderConfirmation
     }
 
     /** What the model is told before it writes the reply. */
-    public static function recordedNote(array $result, string $payment): string
+    public static function recordedNote(array $result, string $payment, bool $systemSends = false): string
     {
+        // Rekening di Pengaturan > Pembayaran: sistem yang mengirim instruksi bayar, bukan AI.
+        if ($payment !== 'cod' && $systemSends) {
+            return implode("\n", [
+                'PESANAN SUDAH DICATAT oleh sistem karena pembeli menyetujui ringkasan pesanan. Hasil '.ShopTools::RECORD.':',
+                json_encode($result, JSON_UNESCAPED_UNICODE),
+                'Balas konfirmasi singkat, satu atau dua kalimat, dengan total dari hasil ini. '.ShopTools::SYSTEM_SENDS_NOTE
+                .' Jangan memanggil '.ShopTools::RECORD.' lagi, jangan melampirkan foto, dan jangan menyerahkan ke admin.',
+            ]);
+        }
+
         return implode("\n", [
             'PESANAN SUDAH DICATAT oleh sistem karena pembeli menyetujui ringkasan pesanan. Hasil '.ShopTools::RECORD.':',
             json_encode($result, JSON_UNESCAPED_UNICODE),
@@ -149,7 +162,8 @@ class OrderConfirmation
     {
         if ($result !== null) {
             return 'Siap kak, pesanannya sudah kami catat. '.(isset($result['total_teks']) ? 'Totalnya '.$result['total_teks'].($payment === 'cod' ? ' dibayar saat paket diterima (COD)' : '').'. ' : '')
-                .($payment === 'cod' ? 'Pesanan segera kami kemas ya kak 🙏' : 'Silakan transfer sesuai total, nanti admin kami cek dulu ya kak 🙏');
+                .($payment === 'cod' ? 'Pesanan segera kami kemas ya kak 🙏' : (PaymentInstructions::applies($tenant)
+                    ? 'Rekening dan nominal transfernya kami kirim di pesan berikut ya kak 🙏' : 'Silakan transfer sesuai total, nanti admin kami cek dulu ya kak 🙏'));
         }
 
         $couriers = ShippingSettings::of($tenant)->couriers();

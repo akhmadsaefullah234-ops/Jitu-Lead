@@ -41,6 +41,7 @@ use App\Models\Property;
 use App\Models\User;
 use App\Models\WaConversation;
 use App\Models\WaMessage;
+use App\Payments\PaymentInstructions;
 use App\Shipping\CourierChoice;
 use App\Shipping\ShippingSettings;
 use App\Support\CurrentTenant;
@@ -270,7 +271,7 @@ class GenerateAiReply
 
             if ($result !== null) {
                 $confirmed = ['name' => ShopTools::RECORD, 'input' => $pending->input, 'result' => $result];
-                $notes[] = OrderConfirmation::recordedNote($result, (string) $pending->input['pembayaran']);
+                $notes[] = OrderConfirmation::recordedNote($result, (string) $pending->input['pembayaran'], PaymentInstructions::applies($tenant));
             } else {
                 $notes[] = OrderConfirmation::missingNote($missing);
             }

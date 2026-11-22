@@ -6,6 +6,7 @@ use App\Leads\AddressCheck;
 use App\Models\Lead;
 use App\Models\Property;
 use App\Models\Tenant;
+use App\Payments\PaymentInstructions;
 use App\Shipping\CourierChoice;
 use App\Shipping\Shipping;
 use App\Shipping\ShippingQuote;
@@ -23,6 +24,18 @@ class ShopTools
     public const RECORD = 'catat_pesanan';
 
     public const PAYMENTS = ['transfer', 'cod'];
+
+    /**
+     * Told with a transfer order of a shop that filled in its bank accounts (Pengaturan > Pembayaran): the system
+     * sends the amount, the account and the deadline itself, so the AI never writes an account number.
+     */
+    public const SYSTEM_SENDS_NOTE = 'Pesanan dicatat, bayar transfer. Rekening tujuan, nominal transfer (bisa termasuk kode unik) dan batas bayar DIKIRIM OTOMATIS oleh sistem '
+        .'di pesan berikutnya. Konfirmasi singkat bahwa pesanan dicatat dan sebut total dari hasil ini, lalu katakan instruksi pembayaran dikirim di pesan berikut. '
+        .'Jangan menulis nomor rekening, nama bank, atau kode unik sendiri. Jangan menyatakan pembayaran diterima.';
+
+    /** The rule in the shop prompt for the same shops. */
+    public const SYSTEM_SENDS_RULE = 'REKENING: nomor rekening dan instruksi bayar transfer dikirim otomatis oleh sistem setelah pesanan transfer dikonfirmasi ('.self::RECORD.' status konfirmasi). '
+        .'Jangan pernah menulis nomor rekening atau nama bank sendiri, walau ada di PENGETAHUAN; bila pembeli menanyakan rekening sebelum pesanan dikonfirmasi, katakan rekening dikirim setelah pesanan dikonfirmasi.';
 
     /** How many catalogue products the model is shown. */
     public const MAX_PRODUCTS = 60;
@@ -163,7 +176,8 @@ class ShopTools
             'status' => 'tercatat',
             'pesan' => ($input['pembayaran'] ?? null) === 'cod'
                 ? 'Pesanan dicatat, bayar di tempat (COD). Sampaikan total yang dibayar saat paket diterima dan bahwa pesanan segera dikemas.'
-                : 'Pesanan dicatat. Minta pembeli transfer sebesar total. Jangan menyatakan pembayaran diterima.',
+                : (PaymentInstructions::applies($this->tenant) ? self::SYSTEM_SENDS_NOTE
+                    : 'Pesanan dicatat. Minta pembeli transfer sebesar total. Jangan menyatakan pembayaran diterima.'),
             'kurir' => $option->courier,
             'ongkir' => $option->price,
             'ongkir_teks' => ShippingQuote::rupiah($option->price),
@@ -248,6 +262,7 @@ class ShopTools
             'Begitu data pesanan lengkap (nama penerima, alamat dengan RT/RW, atau nomor rumah/patokan bila tanpa RT/RW, kota, produk, warna/ukuran, jumlah) tapi pembeli belum konfirmasi, panggil '.self::RECORD.' dengan status draft, lalu rangkum pesanannya dan minta pembeli konfirmasi dan pilih cara bayar (transfer atau COD).',
             'Setelah pembeli memastikan pesanan dan cara bayar, panggil '.self::RECORD.' dengan status konfirmasi dan pembayaran transfer atau cod, lalu sampaikan total dari hasil tool. Untuk transfer minta pembeli membayar; untuk COD sampaikan pesanan segera dikemas.',
             'Jangan pernah menyatakan pembayaran sudah diterima, sudah masuk, atau lunas. Bila pembeli mengirim atau menyebut bukti transfer, katakan admin akan mengeceknya dulu.',
+            PaymentInstructions::applies($this->tenant) ? self::SYSTEM_SENDS_RULE : null,
             'Saat memakai tool, kamu boleh menulis satu kalimat singkat dulu. Bila tidak ada tool yang cocok untuk permintaan pembeli, katakan begitu, jangan menebak. Jangan menulis tag XML atau tag sistem apa pun di jawaban.',
             $settings->origin() ? 'Barang dikirim dari '.$settings->origin().'.' : null,
             $products !== '' ? "PRODUK (id | nama | harga | berat):\n".$products : null,
