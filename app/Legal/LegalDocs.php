@@ -86,8 +86,9 @@ class LegalDocs
             '{kontak}' => $contact,
             '{alamat}' => $address ? ", alamat: $address" : '',
             '{uji_coba_hari}' => (string) config('plans.trial_days'),
-            '{backup_hari}' => (string) config('jitu.backup.keep_days'),
-            '{backup_luar_hari}' => (string) config('jitu.backup.remote_keep_days'),
+            // The longest any copy is kept: database dumps are kept longer than the other backups.
+            '{backup_hari}' => (string) max((int) config('jitu.backup.keep_days'), (int) config('jitu.backup.database.keep_days')),
+            '{backup_luar_hari}' => (string) max((int) config('jitu.backup.remote_keep_days'), (int) config('jitu.backup.database.remote_keep_days')),
             '{tanggal}' => Carbon::parse(config('legal.updated'))->translatedFormat('j F Y'),
         ];
 

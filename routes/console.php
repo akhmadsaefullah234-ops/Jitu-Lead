@@ -34,7 +34,12 @@ Schedule::command('plan:check')->dailyAt('01:00')->withoutOverlapping();
 Schedule::command('trial-emails:send')->dailyAt('09:00')->timezone('Asia/Jakarta')->withoutOverlapping();
 // Promo campaigns start at the hour the owner picks, so they are checked often; the daily cap is shared with the trial emails.
 Schedule::command('campaigns:send')->everyTenMinutes()->withoutOverlapping();
+// Backups (docs/deploy.md): the nightly full run, the database on its own every few hours, and an hourly check that a
+// valid dump is not older than BACKUP_STALE_HOURS.
 Schedule::command('backup:run')->dailyAt('02:00')->timezone('Asia/Jakarta')->withoutOverlapping();
+Schedule::command('backup:database')->cron(sprintf('0 */%d * * *', max(1, min(24, (int) config('jitu.backup.database.every_hours', 6)))))
+    ->timezone('Asia/Jakarta')->withoutOverlapping();
+Schedule::command('backup:monitor')->hourlyAt(30)->withoutOverlapping();
 // QR gateway numbers: admins are emailed when one has been down 5 minutes, and when it is back (App\WhatsApp\ChannelAlerts).
 Schedule::command('whatsapp:watch')->everyFiveMinutes()->withoutOverlapping();
 // WhatsApp Business labels waiting for the label to exist on the account (tried for 7 days).

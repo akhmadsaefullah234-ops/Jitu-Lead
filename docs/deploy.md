@@ -70,17 +70,42 @@ Halaman publik `/kebijakan-privasi` dan `/syarat-layanan` sudah ada dan ditautka
 Admin agensi punya menu **Pengaturan → Data & privasi** (tetap bisa dibuka saat masa percobaan atau langganan berakhir):
 
 - **Unduh semua data (ZIP)**: lead, aktivitas, percakapan dan pesan WhatsApp, properti, landing page, aturan follow-up, pengetahuan dan draf AI, anggota, langganan, dan chat support, sebagai CSV (UTF-8, aman dibuka di Excel). Kata sandi, kunci integrasi, dan token formulir tidak ikut. Dibatasi 3 kali per jam per agensi.
-- **Hapus agensi**: admin mengetik alamat ruang kerja dan kata sandinya; tidak perlu persetujuan super admin. Seluruh data agensi dihapus seketika, termasuk gambar landing page. Akun anggota yang hanya terdaftar di agensi itu ikut dihapus; akun admin yang menghapus dan akun super admin tetap ada. Salinan di cadangan hilang sendiri setelah masa simpannya (7 hari lokal, 30 hari di luar server). Bila ada permintaan penghapusan yang mendesak, hapus juga folder cadangan terkait secara manual.
+- **Hapus agensi**: admin mengetik alamat ruang kerja dan kata sandinya; tidak perlu persetujuan super admin. Seluruh data agensi dihapus seketika, termasuk gambar landing page. Akun anggota yang hanya terdaftar di agensi itu ikut dihapus; akun admin yang menghapus dan akun super admin tetap ada. Salinan di cadangan hilang sendiri setelah masa simpannya (dump database 14 hari lokal dan 60 hari di luar server; berkas yang dihapus dari `storage/app` masih 30 hari di `storage-deleted`). Bila ada permintaan penghapusan yang mendesak, hapus juga folder cadangan terkait secara manual.
 
-## Backup harian dan restore
+## Backup dan restore
 
-Scheduler menjalankan `php artisan backup:run` tiap hari **02:00 WIB** (cron dari `install.sh` sudah menjalankan scheduler). Satu backup = satu folder bertanggal di `storage/app/backups/` (izin 700, file 600) berisi:
+Ada tiga jadwal (zona waktu WIB, semuanya dari scheduler yang sudah dipasang `install.sh`):
 
-- `database.sql.gz`: dump PostgreSQL
-- `storage.tar.gz`: seluruh `storage/app` (unggahan: gambar landing page, dokumen pengetahuan AI)
-- `gateway.tar.gz`: sesi WhatsApp di `/opt/jitu-gateway/data`, bila ada
+| Perintah | Kapan | Isi |
+|---|---|---|
+| `backup:database` | tiap `BACKUP_DB_EVERY_HOURS` jam (bawaan 6: 00.00, 06.00, 12.00, 18.00) | dump database saja, lalu langsung dikirim ke luar server |
+| `backup:run` | 02.00 | dump database (dikirim lebih dulu), sesi WhatsApp gateway, lalu cermin `storage/app` |
+| `backup:monitor` | tiap jam menit 30 | bila tidak ada dump database valid lebih dari `BACKUP_STALE_HOURS` (26) jam: push ke HP super admin dan email ke `SUPPORT_EMAIL`, diulang tiap 6 jam selama masih begitu |
 
-Folder lokal lebih dari 7 hari dihapus (`BACKUP_KEEP_DAYS`). Hasil tiap langkah dan status terakhir tampil di **/admin** (dasbor dan menu Backup). Bila gagal, email dikirim ke `SUPPORT_EMAIL` (butuh `MAIL_*` benar). Tanpa salinan di luar server, backup berstatus "peringatan": cadangan yang hanya ada di server ikut hilang bila server hilang.
+**Isi folder lokal** `storage/app/backups/` (izin 700, berkas 600):
+
+- `db/database-TANGGAL.sql.gz`: dump PostgreSQL. Hanya disimpan bila lolos `gzip -t`. Disimpan 14 hari (`BACKUP_DB_KEEP_DAYS`).
+- `sessions/gateway-TANGGAL.tar.gz`: sesi WhatsApp di `/opt/jitu-gateway/data`, bila ada. Disimpan 7 hari (`BACKUP_KEEP_DAYS`).
+- `storage/storage-TANGGAL.tar.gz`: seluruh `storage/app`, **hanya bila belum ada salinan di luar server**. Dengan rclone, unggahan tidak lagi dibuat tarball setiap malam.
+- Folder bertanggal lama (`TANGGAL/` dari versi sebelumnya) tetap dirotasi 7 hari.
+
+Yang terbaru dari tiap jenis tidak pernah dihapus karena umur. Bila ruang kosong disk di bawah 20% (`BACKUP_DISK_MIN_FREE_PERCENT`), cadangan lokal tertua dihapus lebih dulu sampai cukup, kecuali dump database valid terbaru; langkah ini tercatat sebagai peringatan.
+
+**Di luar server** (`BACKUP_RCLONE_REMOTE`, misalnya `offsite:bucket/jitu-lead`):
+
+- `db/`: tiap dump, 60 hari (`BACKUP_DB_REMOTE_KEEP_DAYS`).
+- `sessions/`: tarball sesi, 14 hari (`BACKUP_SESSIONS_REMOTE_KEEP_DAYS`).
+- `storage/`: cermin `storage/app` lewat `rclone sync`. Hanya berkas yang berubah yang dikirim. Berkas yang dihapus atau diganti di server dipindah ke `storage-deleted/TANGGAL/` dan disimpan 30 hari (`BACKUP_REMOTE_KEEP_DAYS`).
+- `media-archive/`: media yang diarsipkan dengan `backup:prune-media` (tidak dihapus otomatis).
+- Folder bertanggal dari versi lama dihapus setelah `BACKUP_LEGACY_REMOTE_KEEP_DAYS` (bawaan sama dengan `BACKUP_REMOTE_KEEP_DAYS`). Yang terbaru dipertahankan selama `db/` belum berisi dump. Setelah dump pertama masuk ke `db/`, Anda bisa menurunkannya, misalnya ke 3, supaya kuota cepat lega.
+
+Salinan lama dihapus **sebelum** unggahan, jadi kuota yang penuh membebaskan dirinya sendiri walau unggahan malam itu gagal. Yang terbaru dari tiap jenis tidak pernah dihapus.
+
+> **Backblaze B2:** atur *Lifecycle Settings* bucket ke **Keep only the last version of the file**. Tanpa itu, berkas yang dihapus lewat S3 hanya disembunyikan dan masih dihitung ke kuota/cap.
+
+**Kepemilikan tabel.** Sebelum dump, backup memeriksa semua tabel, view, dan sequence milik pengguna database aplikasi (`DB_USERNAME`). Objek milik pengguna lain dicatat sebagai peringatan dengan namanya. Bila pengguna aplikasi tidak bisa membacanya, objek itu dilewati supaya sisa database tetap tercadangkan, dan peringatannya menyebut bahwa objek itu tidak ikut. Perbaiki sebagai postgres: `ALTER TABLE nama OWNER TO jitu;` atau hapus bila hanya salinan. Buat tabel baru selalu sebagai pengguna aplikasi, bukan `postgres`.
+
+Hasil tiap langkah tampil di **/admin**. Dasbor menampilkan backup malam terakhir, **database valid terakhir** dengan ukurannya, dan pemakaian **disk server** (kuning di atas 70%). Kegagalan dikirim lewat email (butuh `MAIL_*` benar) dan push ke HP/PC super admin yang sudah mengaktifkan notifikasi. Push dikirim langsung, tidak menunggu queue.
 
 **Salinan di luar server (rclone).** Skrip `install.sh` memasang rclone. Atur remote lewat `.env` tanpa file konfigurasi rclone, contoh Backblaze B2 / S3-compatible (nama remote `OFFSITE`; ganti sesuai penyedia):
 
@@ -93,29 +118,56 @@ RCLONE_CONFIG_OFFSITE_SECRET_ACCESS_KEY=...
 RCLONE_CONFIG_OFFSITE_ENDPOINT=https://s3.us-west-004.backblazeb2.com
 ```
 
-Google Drive memakai `RCLONE_CONFIG_OFFSITE_TYPE=drive` dan token OAuth dari `rclone config` di komputer Anda (lihat dokumentasi rclone). Lalu `php artisan config:cache`. Pakai folder/bucket khusus: salinan lebih dari 30 hari (`BACKUP_REMOTE_KEEP_DAYS`) di folder itu dihapus otomatis. Kunci jangan diberi izin hapus-semua bila penyedia mendukung izin terbatas.
+Google Drive memakai `RCLONE_CONFIG_OFFSITE_TYPE=drive` dan token OAuth dari `rclone config` di komputer Anda (lihat dokumentasi rclone). Lalu `php artisan config:cache`. Pakai folder atau bucket khusus, karena salinan lama di folder itu dihapus otomatis. Kunci butuh izin hapus (rotasi dan cermin), tetapi jangan diberi akses ke bucket lain.
 
 **Sesi WhatsApp gateway.** Folder itu milik pengguna `jitu-gw`. `sudo bash gateway/install.sh` memasukkan `www-data` ke grup `jitu-gw` dan mengatur folder `2750` serta berkas `0640` (hanya baca untuk grup, tertutup untuk lainnya), jadi backup ikut mengambilnya tanpa pengaturan tambahan. Gateway yang berjalan memakai `UMask=0027`, jadi berkas baru ikut aturan yang sama. Aman dijalankan ulang di server lama. Bila sebelumnya Anda memasang `setfacl` atau cron `setfacl` sebagai jalan pintas, hapus: skrip ini membersihkan ACL-nya, dan cron itu tidak diperlukan lagi.
 
-**Coba sekarang:** `sudo -u www-data php artisan backup:run` (cek hasilnya di /admin → Backup).
+**Coba sekarang:** `sudo -u www-data php artisan backup:database`, lalu `sudo -u www-data php artisan backup:run` (cek hasilnya di /admin → Backup).
+
+### Memeriksa dump bisa dipulihkan
+
+`sudo -u www-data php artisan backup:restore-check` memeriksa dump terbaru tanpa menyentuh database produksi:
+
+1. `gzip -t` (arsip utuh);
+2. jumlah tabel di dump minimal `BACKUP_DB_MIN_TABLES` (40);
+3. dump dimuat ke database sementara `jitu_restore_check_TANGGAL`, jumlah tabelnya dihitung, lalu database itu dihapus lagi.
+
+Langkah 3 butuh izin membuat database untuk pengguna aplikasi, sekali saja: `sudo -u postgres psql -c 'ALTER ROLE jitu CREATEDB;'`. Tanpa izin itu langkah 3 dilewati dan disebutkan. `--no-load` hanya menjalankan langkah 1 dan 2; `--file=...` memeriksa dump lain. Jalankan sebulan sekali, atau setelah mengubah skema.
+
+### Media WhatsApp lama
+
+`php artisan backup:prune-media` menampilkan media WhatsApp (`storage/app/private/wa-media`) yang lebih tua dari 90 hari (`BACKUP_MEDIA_KEEP_DAYS`, atau `--days=`), per agensi. Ini **uji kering**: tidak ada yang diubah. Daftar berkasnya ditulis ke `storage/logs/media-prune-*.log`.
+
+- `--apply` menjalankannya. Di produksi perintah ini bertanya sekali lagi; `--force` melewati pertanyaan.
+- `--mode=archive` (bawaan, `BACKUP_MEDIA_PRUNE_MODE`): berkas dipindah ke `<remote>/media-archive` lebih dulu. Bila pemindahan gagal, tidak ada yang dihapus.
+- `--mode=delete`: berkas dihapus. Cermin malam berikutnya menyimpannya 30 hari lagi di `storage-deleted`.
+- `--tenant=slug-atau-id` (bisa diulang) membatasi ke agensi tertentu.
+
+Di inbox, pesannya lalu menampilkan "[Gambar sudah diarsipkan dari server karena sudah lama]" atau "[… sudah dihapus …]", bukan gambar rusak. Jalur lamanya disimpan di pesan (`media.pruned_path`) untuk pemulihan manual.
 
 ### Memulihkan (restore)
 
 Uji prosedur ini sekali di staging sebelum Anda membutuhkannya. Data yang masuk setelah backup akan hilang.
 
-1. Ambil backup: dari `storage/app/backups/TANGGAL/`, atau dari penyimpanan luar: `rclone copy offsite:nama-bucket/jitu-lead/TANGGAL /tmp/restore` (butuh variabel `RCLONE_CONFIG_*` di shell).
+1. Ambil backup:
+   - database: `storage/app/backups/db/database-TANGGAL.sql.gz`, atau `rclone copy offsite:nama-bucket/jitu-lead/db/database-TANGGAL.sql.gz /tmp/restore`;
+   - unggahan: `rclone copy offsite:nama-bucket/jitu-lead/storage /tmp/restore/storage` (cermin terbaru), atau `storage/storage-TANGGAL.tar.gz` bila tanpa remote;
+   - sesi: `sessions/gateway-TANGGAL.tar.gz`, lokal atau dari `offsite:…/sessions`.
+
+   Perintah rclone butuh variabel `RCLONE_CONFIG_*` di shell. Cadangan dari versi lama masih berupa folder `TANGGAL/` berisi `database.sql.gz`, `storage.tar.gz`, dan `gateway.tar.gz`.
 2. Hentikan aplikasi: `cd /var/www/jitu-lead && sudo -u www-data php artisan down`, lalu `sudo systemctl stop jitu-queue`.
 3. Database (menggantikan isi sekarang):
    ```
    sudo -u postgres psql jitu_lead -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO jitu;'
-   gunzip -c /tmp/restore/database.sql.gz | sudo -u postgres psql -v ON_ERROR_STOP=1 jitu_lead
+   gunzip -c /tmp/restore/database-TANGGAL.sql.gz | psql -h 127.0.0.1 -U jitu -v ON_ERROR_STOP=1 jitu_lead
    ```
-4. Unggahan: `sudo -u www-data tar -xzf /tmp/restore/storage.tar.gz -C /var/www/jitu-lead/storage/app` lalu `sudo -u www-data php artisan storage:link` bila perlu.
-5. WhatsApp (jika ada): `sudo systemctl stop jitu-gateway && sudo tar -xzf /tmp/restore/gateway.tar.gz -C /opt/jitu-gateway/data && sudo chown -R jitu-gw:jitu-gw /opt/jitu-gateway/data && sudo systemctl start jitu-gateway`.
+   Muat sebagai `jitu` (kata sandinya `DB_PASSWORD`), bukan `postgres`, supaya semua tabel kembali dimiliki pengguna aplikasi dan backup berikutnya bisa membacanya.
+4. Unggahan: dari cermin, `sudo rsync -a /tmp/restore/storage/ /var/www/jitu-lead/storage/app/ && sudo chown -R www-data:www-data /var/www/jitu-lead/storage/app`. Dari tarball: `sudo -u www-data tar -xzf /tmp/restore/storage-TANGGAL.tar.gz -C /var/www/jitu-lead/storage/app`. Lalu `sudo -u www-data php artisan storage:link` bila perlu.
+5. WhatsApp (jika ada): `sudo systemctl stop jitu-gateway && sudo tar -xzf /tmp/restore/gateway-TANGGAL.tar.gz -C /opt/jitu-gateway/data && sudo chown -R jitu-gw:jitu-gw /opt/jitu-gateway/data && sudo systemctl start jitu-gateway`.
 6. Nyalakan lagi: `sudo -u www-data php artisan migrate --force` (bila kode lebih baru dari backup), `sudo systemctl start jitu-queue`, `sudo -u www-data php artisan up`.
 7. Hapus `/tmp/restore` (berisi data pelanggan).
 
-Langkah database sudah dicoba di mesin pengembangan (dump lalu pulihkan ke database kosong); prosedur lengkap di VPS belum.
+Langkah database sudah dicoba di mesin pengembangan (dump lalu pulihkan ke database kosong, juga otomatis lewat `backup:restore-check` di tes); prosedur lengkap di VPS belum.
 
 ## Notifikasi di HP dan PC (push)
 

@@ -44,17 +44,44 @@ return [
         'subject' => env('VAPID_SUBJECT') ?: env('APP_URL', 'https://localhost'),
     ],
 
-    // Daily backup (php artisan backup:run, scheduled 02:00 WIB). See docs/deploy.md.
+    // Backups (docs/deploy.md "Backup"). backup:database dumps the database every few hours; backup:run (02:00 WIB) dumps it
+    // too, then backs up the WhatsApp gateway sessions and mirrors storage/app off the server.
     'backup' => [
-        // Local copies; each run is a dated folder. Kept this many days.
+        // Local copies: db/ (dumps), sessions/ (gateway tarballs), storage/ (uploads tarball, only without a remote) and the
+        // dated folders older versions wrote. Sessions, uploads tarballs and old dated folders are kept this many days.
         'path' => env('BACKUP_PATH', storage_path('app/backups')),
         'keep_days' => (int) env('BACKUP_KEEP_DAYS', 7),
+        'database' => [
+            // backup:database runs at minute 0 every this many hours (WIB): 6 = 00:00, 06:00, 12:00, 18:00.
+            'every_hours' => (int) env('BACKUP_DB_EVERY_HOURS', 6),
+            'keep_days' => (int) env('BACKUP_DB_KEEP_DAYS', 14),
+            'remote_keep_days' => (int) env('BACKUP_DB_REMOTE_KEEP_DAYS', 60),
+            // backup:restore-check fails a dump that creates fewer tables than this.
+            'min_tables' => (int) env('BACKUP_DB_MIN_TABLES', 40),
+        ],
+        // No valid database dump for this long: the owner gets a push notification and an email (backup:monitor, hourly).
+        'stale_hours' => (int) env('BACKUP_STALE_HOURS', 26),
+        // Less free space than this on the backup disk: the oldest local copies go first (never the newest valid dump).
+        'disk_min_free_percent' => (int) env('BACKUP_DISK_MIN_FREE_PERCENT', 20),
+        // The admin dashboard warns when the disk is fuller than this.
+        'disk_warn_used_percent' => 70,
+        // WhatsApp media older than this can be removed by hand with backup:prune-media (a dry run unless --apply).
+        // archive = moved to <remote>/media-archive first; delete = removed (the mirror keeps it remote_keep_days more).
+        'media' => [
+            'keep_days' => (int) env('BACKUP_MEDIA_KEEP_DAYS', 90),
+            'mode' => env('BACKUP_MEDIA_PRUNE_MODE', 'archive'),
+        ],
         // WhatsApp gateway sessions, backed up when this folder exists and is readable.
         'gateway_path' => env('BACKUP_GATEWAY_PATH', '/opt/jitu-gateway/data'),
         // Off-server copy through rclone (S3-compatible, Backblaze B2, Google Drive, ...): "remote:folder".
         // Empty = skipped with a warning. The remote itself is defined by RCLONE_CONFIG_<REMOTE>_* values in .env.
         'rclone_remote' => env('BACKUP_RCLONE_REMOTE'),
+        // Files deleted or replaced in storage/app stay in <remote>/storage-deleted this many days.
         'remote_keep_days' => (int) env('BACKUP_REMOTE_KEEP_DAYS', 30),
+        'sessions_remote_keep_days' => (int) env('BACKUP_SESSIONS_REMOTE_KEEP_DAYS', 14),
+        // Dated folders older versions uploaded (a full copy each night). Lower this once the new layout is uploaded to
+        // free the space sooner; the newest is kept while the remote has no dump in db/.
+        'legacy_remote_keep_days' => (int) env('BACKUP_LEGACY_REMOTE_KEEP_DAYS', (int) env('BACKUP_REMOTE_KEEP_DAYS', 30)),
         // Copied here so they still work after `config:cache` (which stops .env being read).
         'rclone_env' => collect(array_merge($_ENV, $_SERVER))
             ->filter(fn ($v, $k) => is_string($k) && str_starts_with($k, 'RCLONE_CONFIG_') && is_string($v))->all(),

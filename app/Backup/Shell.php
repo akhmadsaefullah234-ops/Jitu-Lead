@@ -4,7 +4,7 @@ namespace App\Backup;
 
 use Symfony\Component\Process\Process;
 
-/** Runs the external tools the backup needs (pg_dump, tar, rclone) without a shell. Swapped for a fake in tests. */
+/** Runs the external tools the backup needs (pg_dump, gzip, tar, rclone, psql) without a shell. Swapped for a fake in tests. */
 class Shell
 {
     /**
@@ -27,6 +27,15 @@ class Shell
         });
 
         return [$process->getExitCode() ?? 1, trim($stderr)];
+    }
+
+    /** Free space on the disk that holds $path, as a percentage, or null when it cannot be read. */
+    public function freePercent(string $path): ?float
+    {
+        $free = @disk_free_space($path);
+        $total = @disk_total_space($path);
+
+        return $free === false || $total === false || $total <= 0 ? null : round($free / $total * 100, 1);
     }
 
     public function exists(string $binary): bool

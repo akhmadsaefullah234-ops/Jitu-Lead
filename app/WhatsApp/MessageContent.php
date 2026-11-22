@@ -166,6 +166,9 @@ final class MessageContent
             'too_large' => "[{$what} tidak bisa {$verb}: ukurannya terlalu besar]",
             'download_failed' => "[{$what} tidak bisa {$verb}: gagal diunduh dari WhatsApp]",
             'unsupported' => "[{$what} tidak bisa {$verb}: formatnya tidak didukung]",
+            // backup:prune-media removed an old file from the server.
+            'archived' => "[{$what} sudah diarsipkan dari server karena sudah lama]",
+            'expired' => "[{$what} sudah dihapus dari server karena sudah lama]",
             default => "[{$what} sedang dimuat…]",
         };
     }
