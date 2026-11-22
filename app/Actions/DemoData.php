@@ -38,6 +38,9 @@ class DemoData
             ['Lead baru', 6], ['Dihubungi', 5], ['Terkualifikasi', 4], ['Jadwal survei', 3], ['Sudah survei', 3],
             ['Negosiasi', 2], ['Booking', 2], ['Closing', 3], ['Gugur', 3],
         ],
+        'digital' => [
+            ['Lead baru', 8], ['Menunggu pembayaran', 5], ['Lunas & akses terkirim', 6], ['Tidak jadi bayar', 3], ['Refund', 1],
+        ],
         'retail' => [
             ['Tanya produk', 8], ['Order masuk', 5], ['Menunggu pembayaran', 4], ['Dikemas & dikirim', 4], ['Selesai', 6], ['Batal', 3],
         ],
@@ -67,8 +70,9 @@ class DemoData
             $lost = LostReason::query()->pluck('id')->all();
             $created = 0;
             $shop = $this->isShop();
+            $digital = $this->isDigital();
 
-            foreach (self::STAGES[$shop ? 'retail' : 'properti'] as [$stageName, $count]) {
+            foreach (self::STAGES[$shop ? 'retail' : ($digital ? 'digital' : 'properti')] as [$stageName, $count]) {
                 $stage = Stage::query()->where('name', $stageName)->first();
 
                 if ($stage === null) {
@@ -92,7 +96,12 @@ class DemoData
                         'next_action' => $stage->default_action,
                         'custom_fields' => ['demo' => true],
                     ]);
-                    $lead->fill($shop ? [
+                    $lead->fill($digital ? [
+                        'quantity' => 1,
+                        'email' => 'contoh'.(1 + $created).'@example.com',
+                        'device' => ['Android', 'iPhone', 'Windows', 'Mac'][$created % 4],
+                        'payment_type' => 'transfer',
+                    ] : ($shop ? [
                         'variant' => ['S', 'M', 'L', 'XL'][$created % 4],
                         'quantity' => 1 + $created % 3,
                         'courier' => self::COURIERS[$created % count(self::COURIERS)],
@@ -104,7 +113,7 @@ class DemoData
                         'budget_min' => (int) ($property->price_from * 0.9),
                         'budget_max' => (int) ($property->price_from * 1.15),
                         'payment_method' => $created % 4 === 0 ? PaymentMethod::Cash : PaymentMethod::Kpr,
-                    ]);
+                    ]));
 
                     $this->fillStage($lead, $stage, $property, $lost, $created);
                     $lead->forceFill(['created_at' => $createdAt, 'updated_at' => $createdAt->copy()->addHours(2 + $created % 20)]);
@@ -144,7 +153,7 @@ class DemoData
                 'survey_location' => 'Unit contoh '.$property->name,
             ]),
             StageRequirement::Booking => $lead->forceFill($lead->quantity ? [
-                'unit' => $property->name.' '.$lead->variant.' x'.$lead->quantity,
+                'unit' => trim($property->name.' '.$lead->variant).' x'.$lead->quantity,
                 'deal_value' => $property->price_from * $lead->quantity,
             ] : [
                 'unit' => 'Unit '.chr(65 + $i % 5).'-'.(10 + $i),
@@ -153,6 +162,10 @@ class DemoData
             StageRequirement::LostReason => $lead->forceFill(['lost_reason_id' => $lost === [] ? null : $lost[$i % count($lost)]]),
             default => null,
         };
+
+        if ($this->isDigital() && $stage->type === StageType::Won) {
+            $lead->forceFill(['paid_at' => now()->subDays($i % 5), 'access_link' => 'https://example.com/akses-contoh']);
+        }
 
         if ($stage->type !== StageType::Open) {
             $lead->next_action = null;
@@ -174,9 +187,22 @@ class DemoData
         return $this->current->get()->industry()->key === 'retail';
     }
 
+    private function isDigital(): bool
+    {
+        return $this->current->get()->industry()->key === 'digital';
+    }
+
     /** @return list<Property> */
     private function properties(): array
     {
+        if ($this->isDigital()) {
+            $products = [['E-book Resep Harian', 'E-book', 49_000], ['Kelas Online Desain Canva', 'Kelas online', 199_000], ['Template Undangan Digital', 'Template', 79_000], ['Preset Foto Lightroom', 'Preset', 39_000]];
+
+            return array_map(fn (array $r) => Property::create([
+                'name' => $r[0].' (contoh)', 'property_type' => $r[1], 'price_from' => $r[2], 'details' => ['demo' => true],
+            ]), $products);
+        }
+
         if ($this->isShop()) {
             $products = [['Kaos Polos Premium', 'Pakaian', 89_000], ['Hijab Voal Motif', 'Pakaian', 65_000], ['Sneakers Kanvas', 'Sepatu', 249_000], ['Tas Selempang Kulit', 'Aksesoris', 179_000]];
 

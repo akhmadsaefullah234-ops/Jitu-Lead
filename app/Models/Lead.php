@@ -32,6 +32,7 @@ use Throwable;
     'next_action', 'next_action_due_at', 'need', 'property_type', 'location',
     'budget_min', 'budget_max', 'payment_method', 'property_id', 'survey_at', 'purpose', 'domicile', 'survey_scheduled_at',
     'survey_location', 'unit', 'deal_value', 'lost_reason_id', 'custom_fields', 'stage_entered_at',
+    'device', 'access_link',
     'variant', 'quantity', 'shipping_address', 'courier', 'shipping_cost', 'shipping_cost_source', 'order_items',
     'payment_type', 'payment_type_source', 'payment_proof_at', 'paid_at', 'shipping_province', 'tracking_number', 'shipped_at', 'shipping_address_parts',
     'ad_id', 'ad_title', 'ad_url', 'product_source', 'auto_shipment_at', 'auto_shipment_state', 'auto_shipment_note',

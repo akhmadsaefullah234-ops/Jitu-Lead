@@ -15,13 +15,15 @@ class FormTemplates
     public const ORDER = 'order';
 
     /**
-     * The templates an agency of this industry can start from (null: all). Templates without an industry are for everyone.
+     * The templates an agency of this industry can start from (null: all). Templates without an industry are for everyone,
+     * except the industries a template names under "except" (a digital-product agency never asks for a shipping address).
      *
      * @return array<string, array{name: string, description: string}>
      */
     public static function options(?string $industry = null): array
     {
-        $templates = array_filter(self::all(), fn ($t) => $industry === null || ($t['industry'] ?? $industry) === $industry);
+        $templates = array_filter(self::all(), fn ($t) => $industry === null
+            || (($t['industry'] ?? $industry) === $industry && ! in_array($industry, $t['except'] ?? [], true)));
 
         return array_map(fn ($t) => ['name' => $t['name'], 'description' => $t['description']], $templates);
     }
@@ -110,6 +112,7 @@ class FormTemplates
                 'after' => $thanks,
             ],
             'pesanan' => [
+                'except' => ['digital'],
                 'name' => 'Pemesanan produk', 'description' => 'Produk, warna/ukuran, jumlah, dan alamat kirim lengkap, lalu langsung lanjut chat WhatsApp admin.',
                 'design' => ['title' => 'Form pemesanan', 'description' => 'Isi pesanan Anda. Setelah dikirim, Anda langsung tersambung ke WhatsApp admin untuk konfirmasi ongkir dan pembayaran.'],
                 'fields' => [
@@ -146,6 +149,22 @@ class FormTemplates
                 'submit' => ['label' => 'Pesan Sekarang', 'icon' => 'whatsapp', 'color' => 'wa'],
                 'after' => ['type' => 'whatsapp', 'wa_target' => 'rotate',
                     'wa_message' => "Halo admin, saya {nama} mau order {produk}:\nVarian: {varian}\nJumlah: {jumlah}\nPembayaran: {pembayaran}\nAlamat: {alamat}\nCatatan: {catatan}\nMohon info total dan ongkirnya."],
+            ],
+            'pembelian_digital' => [
+                'industry' => 'digital',
+                'name' => 'Pembelian produk digital', 'description' => 'Produk, email untuk pengiriman akses, dan perangkat. Tanpa alamat atau ongkir, lalu langsung lanjut chat WhatsApp admin.',
+                'design' => ['title' => 'Beli sekarang', 'description' => 'Isi data singkat ini. Setelah dikirim, Anda langsung tersambung ke WhatsApp admin untuk total dan cara bayar.'],
+                'fields' => [
+                    $name, $phone,
+                    self::f('email', 'email', 'Email untuk akses', ['maps_to' => 'email', 'placeholder' => 'nama@email.com']),
+                    self::f('produk', 'select', 'Produk', ['required' => true, 'options' => ['Produk A', 'Produk B'], 'maps_to' => 'product']),
+                    self::f('perangkat', 'radio', 'Perangkat', ['options' => ['Android', 'iPhone', 'Windows', 'Mac'], 'maps_to' => 'custom']),
+                    self::f('catatan', 'textarea', 'Catatan (opsional)', ['maps_to' => 'note']),
+                    ...$utm,
+                ],
+                'submit' => ['label' => 'Beli sekarang', 'icon' => 'whatsapp', 'color' => 'wa'],
+                'after' => ['type' => 'whatsapp', 'wa_target' => 'rotate',
+                    'wa_message' => "Halo admin, saya {nama} mau beli {produk}.\nEmail: {email}\nPerangkat: {perangkat}\nCatatan: {catatan}\nMohon info total dan cara bayarnya."],
             ],
             'janji' => [
                 'name' => 'Janji temu / survei', 'description' => 'Pengunjung memilih tanggal dan waktu kunjungan.',

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Automation\DigitalStageAutomationSettings;
 use App\Automation\PropertyStageAutomation;
 use App\Automation\PropertyStageAutomationSettings;
 use App\Automation\StageAutomationSettings;
@@ -49,7 +50,13 @@ class StageAutomationPage extends Page
         $current = app(CurrentTenant::class);
 
         return $current->roleOf(auth()->user()) === Role::Admin
-            && (StageAutomationSettings::appliesTo($current->get()) || PropertyStageAutomationSettings::appliesTo($current->get()));
+            && (StageAutomationSettings::appliesTo($current->get()) || PropertyStageAutomationSettings::appliesTo($current->get())
+                || DigitalStageAutomationSettings::appliesTo($current->get()));
+    }
+
+    public function isDigital(): bool
+    {
+        return DigitalStageAutomationSettings::appliesTo(app(CurrentTenant::class)->get());
     }
 
     public function isProperty(): bool
@@ -66,12 +73,20 @@ class StageAutomationPage extends Page
     public function mount(): void
     {
         $tenant = app(CurrentTenant::class)->get();
-        $this->form->fill($this->isProperty() ? PropertyStageAutomationSettings::of($tenant)->toArray() : StageAutomationSettings::of($tenant)->toArray());
+        $this->form->fill(match (true) {
+            $this->isProperty() => PropertyStageAutomationSettings::of($tenant)->toArray(),
+            $this->isDigital() => DigitalStageAutomationSettings::of($tenant)->toArray(),
+            default => StageAutomationSettings::of($tenant)->toArray(),
+        });
     }
 
     public function form(Schema $schema): Schema
     {
-        $rules = $this->isProperty() ? PropertyStageAutomationSettings::RULES : StageAutomationSettings::RULES;
+        $rules = match (true) {
+            $this->isProperty() => PropertyStageAutomationSettings::RULES,
+            $this->isDigital() => DigitalStageAutomationSettings::RULES,
+            default => StageAutomationSettings::RULES,
+        };
         $sections = [];
         $number = 0;
 
@@ -80,7 +95,7 @@ class StageAutomationPage extends Page
             $fields = [Toggle::make("{$rule}.enabled")->label('Aktif')->live()];
 
             foreach ($numbers as $key => $setting) {
-                $fields[] = TextInput::make("{$rule}.{$key}")->label($setting[0])->numeric()->integer()->minValue(1)->maxValue(365)->suffix($setting[2] ?? 'hari')
+                $fields[] = TextInput::make("{$rule}.{$key}")->label($setting[0])->numeric()->integer()->minValue(1)->maxValue(($setting[2] ?? 'hari') === 'jam' ? 8760 : 365)->suffix($setting[2] ?? 'hari')
                     ->required()->visible(fn (Get $get) => (bool) $get("{$rule}.enabled"));
             }
 
@@ -140,9 +155,12 @@ class StageAutomationPage extends Page
         $state = $this->form->getState();
         $tenant = app(CurrentTenant::class)->get();
 
-        $this->isProperty()
-            ? PropertyStageAutomationSettings::store($tenant, PropertyStageAutomationSettings::clean($state))
-            : $tenant->forceFill(['stage_automation' => StageAutomationSettings::clean($state)])->save();
+        match (true) {
+            $this->isProperty() => PropertyStageAutomationSettings::store($tenant, PropertyStageAutomationSettings::clean($state)),
+            // Kept under its own key, so a shop's or a property agency's earlier rules stay in the column untouched.
+            $this->isDigital() => DigitalStageAutomationSettings::store($tenant, DigitalStageAutomationSettings::clean($state)),
+            default => $tenant->forceFill(['stage_automation' => StageAutomationSettings::clean($state)])->save(),
+        };
 
         Notification::make()->title('Otomatisasi tahap disimpan')->success()->send();
     }
