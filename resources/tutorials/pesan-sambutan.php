@@ -40,6 +40,6 @@ return [
     ],
     'perhatian' => [
         'Sambutan dikirim sekali per pembeli per formulir. Pembeli lama yang mengisi lagi hanya disapa bila tidak ada pesan keluar ke nomornya dalam 24 jam terakhir.',
-        'Pukul 21.00 sampai 05.00 sambutan menunggu sampai 05.00. Nomor yang bukan nomor WhatsApp valid tidak dikirimi.',
+        'Bawaannya, pukul 21.00 sampai 05.00 sambutan menunggu sampai 05.00. Admin bisa mengubah jam hening atau menyalakan <b>Kirim 24 jam (tanpa jam hening)</b> di <b>Lead > Pengaturan agensi</b>, mis. untuk iklan yang berjalan 24 jam. Nomor yang bukan nomor WhatsApp valid tidak dikirimi.',
     ],
 ];

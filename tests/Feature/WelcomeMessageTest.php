@@ -10,6 +10,7 @@ use App\Enums\WaChannelType;
 use App\Filament\Pages\Inbox;
 use App\Filament\Resources\LandingPages\Pages\EditLandingPage;
 use App\Filament\Resources\LeadForms\Pages\EditLeadForm;
+use App\Filament\Resources\Leads\Pages\ListLeads;
 use App\LeadForms\FormFields;
 use App\Models\FollowUpLog;
 use App\Models\FollowUpRule;
@@ -25,6 +26,7 @@ use App\Models\WaConversation;
 use App\Models\WaMessage;
 use App\Models\WelcomeMessage;
 use App\Support\CurrentTenant;
+use App\Welcome\WelcomeHours;
 use App\Welcome\WelcomeSender;
 use App\Welcome\WelcomeSettings;
 use App\WhatsApp\GatewayUrlGuard;
@@ -442,5 +444,84 @@ class WelcomeMessageTest extends TestCase
             ->assertSee('Alamat: Jl. Mawar No. 5', false)
             ->fillForm(['welcome.text' => 'Halo {nama}, kode {kupon} dan {jawaban:tidak_ada}'])
             ->assertSee('Variabel tidak dikenal: {kupon}, {jawaban:tidak_ada}');
+    }
+
+    public function test_an_agency_sending_24_hours_welcomes_a_buyer_at_midnight_without_waiting(): void
+    {
+        $this->shop->forceFill(['capture_settings' => ['welcome_hours' => ['all_day' => true, 'from' => 21, 'until' => 5]]])->save();
+        Carbon::setTestNow(Carbon::parse('2026-10-12 23:56:00', 'Asia/Jakarta'));
+        $this->form();
+        $lead = $this->submit();
+
+        $this->assertNull(app(WelcomeSender::class)->serviceStart($this->shop->fresh()));
+        $this->at('2026-10-12 23:58:00');
+
+        $this->assertSame(WelcomeMessage::SENT, $this->welcome($lead)->status);
+        $this->assertSame('welcome', collect($this->messages($lead))->last()->origin);
+        $this->assertNotContains('Pesan sambutan WhatsApp ditunda sampai 05:00 (di luar jam layanan)', $this->activities($lead));
+    }
+
+    public function test_an_agency_without_the_setting_still_waits_until_five_and_a_property_agency_is_unchanged(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-12 23:56:00', 'Asia/Jakarta'));
+        $this->form();
+        $lead = $this->submit();
+        $this->at('2026-10-12 23:58:00');
+
+        $this->assertSame(WelcomeMessage::PENDING, $this->welcome($lead)->status);
+        $this->assertTrue($this->welcome($lead)->due_at->equalTo(Carbon::parse('2026-10-13 05:00:00', 'Asia/Jakarta')));
+        $this->assertSame([], $this->messages($lead));
+
+        $griya = app(ProvisionTenant::class)('Griya Contoh', 'griya-contoh', User::factory()->create());
+        $griya->forceFill(['timezone' => 'Asia/Jakarta'])->save();
+        $this->assertSame('properti', $griya->industry);
+        $this->assertEquals(['all_day' => false, 'from' => 21, 'until' => 5], WelcomeHours::for($griya)->toArray());
+
+        $sender = app(WelcomeSender::class);
+        foreach (['2026-10-12 23:58:00' => '2026-10-13 05:00:00', '2026-10-13 03:10:00' => '2026-10-13 05:00:00', '2026-10-13 21:00:00' => '2026-10-14 05:00:00'] as $now => $resume) {
+            Carbon::setTestNow(Carbon::parse($now, 'Asia/Jakarta'));
+            $this->assertTrue($sender->serviceStart($griya)->equalTo(Carbon::parse($resume, 'Asia/Jakarta')), $now);
+        }
+        foreach (['2026-10-13 05:00:00', '2026-10-13 12:00:00', '2026-10-13 20:59:00'] as $now) {
+            Carbon::setTestNow(Carbon::parse($now, 'Asia/Jakarta'));
+            $this->assertNull($sender->serviceStart($griya), $now);
+        }
+    }
+
+    public function test_an_admin_sets_the_welcome_hours_in_the_agency_settings(): void
+    {
+        $this->shop->forceFill(['capture_settings' => ['title' => 'Pesan sekarang']])->save();
+        $this->actingInTenant($this->adminOf($this->shop), $this->shop);
+
+        Livewire::test(ListLeads::class)
+            ->mountAction('agencySettings')
+            ->assertActionDataSet(['welcome_hours' => ['all_day' => false, 'from' => 21, 'until' => 5]])
+            ->fillForm(['welcome_hours.all_day' => true])
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        $settings = $this->shop->fresh()->capture_settings;
+        $this->assertSame('Pesan sekarang', $settings['title']);
+        $this->assertTrue($settings['welcome_hours']['all_day']);
+        $this->assertSame('24 jam', WelcomeHours::for($this->shop->fresh())->label());
+
+        Livewire::test(ListLeads::class)
+            ->callAction('agencySettings', data: ['industry' => 'retail', 'show_property_fields' => true, 'welcome_hours' => ['all_day' => false, 'from' => 22, 'until' => 6]])
+            ->assertHasNoActionErrors();
+        $this->assertSame('22:00–06:00', WelcomeHours::for($this->shop->fresh())->label());
+
+        Carbon::setTestNow(Carbon::parse('2026-10-12 21:30:00', 'Asia/Jakarta'));
+        $this->assertNull(app(WelcomeSender::class)->serviceStart($this->shop->fresh()));
+        Carbon::setTestNow(Carbon::parse('2026-10-12 22:30:00', 'Asia/Jakarta'));
+        $this->assertTrue(app(WelcomeSender::class)->serviceStart($this->shop->fresh())->equalTo(Carbon::parse('2026-10-13 06:00:00', 'Asia/Jakarta')));
+    }
+
+    public function test_only_an_admin_sees_the_agency_settings(): void
+    {
+        $agent = User::factory()->create();
+        $this->shop->users()->attach($agent, ['role' => 'agent', 'status' => 'active']);
+        $this->actingInTenant($agent, $this->shop);
+
+        Livewire::test(ListLeads::class)->assertActionHidden('agencySettings');
     }
 }
