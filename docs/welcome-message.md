@@ -54,8 +54,13 @@ Saat waktunya, berurutan:
    terakhir.
 4. **Nomor tidak valid** (bukan nomor HP Indonesia 628..., atau nomor luar negeri di luar 8 sampai 15 digit): gagal,
    tidak dicoba ulang.
-5. **Jam tenang** 21.00 sampai 05.00 menurut zona waktu agensi (bawaan WIB; belum ada pengaturan jam layanan per
-   agensi): ditunda sampai 05.00, dan diperiksa ulang dari langkah 2 saat itu.
+5. **Jam hening** menurut zona waktu agensi (bawaan WIB), per agensi (`App\Welcome\WelcomeHours`, disimpan di
+   `tenants.capture_settings.welcome_hours` = `{all_day, from, until}`). Bawaan 21.00 sampai 05.00, sama seperti
+   sebelumnya untuk agensi yang tidak mengubahnya. Di jam hening sambutan ditunda sampai jam hening selesai, dan
+   diperiksa ulang dari langkah 2 saat itu. Dengan **Kirim 24 jam (tanpa jam hening)** menyala
+   (`all_day`), `WelcomeSender::serviceStart()` selalu `null` dan sambutan langsung dikirim kapan pun. Diatur Admin di
+   **Lead > Pengaturan agensi > Jam kirim pesan sambutan WhatsApp**. Pengaturan ini hanya untuk pesan sambutan;
+   balasan AI atas chat masuk dan pesan status kiriman punya aturan sendiri.
 6. **Rute** sama dengan pesan lain ke lead (`RouteSelector`): jendela gratis atau balasan 24 jam lewat nomor resmi,
    selain itu nomor gateway. Gateway yang dipilih: yang terakhir menulis ke pembeli, lalu nomor gateway milik pemilik
    lead (nomor `users.whatsapp` agen sama dengan nomor gateway, sejalan dengan rotasi WhatsApp), lalu urutan pertama.
@@ -73,7 +78,7 @@ terputus, dicoba lagi tiap 5 menit, paling banyak 3 kali.
 - "Pesan sambutan WhatsApp terkirim lewat gateway" (atau "nomor resmi").
 - "Pesan sambutan WhatsApp dilewati: pembeli sudah chat" (dan alasan lewat lainnya).
 - "Pesan sambutan WhatsApp gagal terkirim: <alasan>" / "Pesan sambutan WhatsApp gagal: <alasan>".
-- "Pesan sambutan WhatsApp ditunda sampai 05:00 (di luar jam layanan)".
+- "Pesan sambutan WhatsApp ditunda sampai 05:00 (di luar jam layanan)" (jamnya = akhir jam hening agensi).
 
 Aktivitas sambutan tidak memakai pemilik lead sebagai pelaku, sehingga tidak dihitung sebagai agen sudah menangani
 lead (pengalihan lead yang tidak ditangani tetap berjalan).

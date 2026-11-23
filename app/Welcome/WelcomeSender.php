@@ -30,8 +30,9 @@ use Illuminate\Support\Carbon;
  *
  * A form submission books one welcome per lead and form, due after the form's delay. When it comes due it is
  * skipped if the buyer has written to the shop since (the chat or the AI already has them), or, for a lead
- * that was already known, if the shop wrote to the number in the last 24 hours. Outside service hours
- * (21:00 to 05:00 in the agency's time zone) it waits for 05:00. It goes out on the route and number any
+ * that was already known, if the shop wrote to the number in the last 24 hours. In the agency's quiet hours
+ * (WelcomeHours: 21:00 to 05:00 in the agency's time zone unless the agency set other hours) it waits for the
+ * end of them; an agency with "Kirim 24 jam" on has no quiet hours and is never held. It goes out on the route and number any
  * other message to this lead would use (App\WhatsApp\RouteSelector: the lead owner's gateway number), at most
  * RATE_PER_MINUTE per number. The welcome is itself the introduction, so no number introduction goes before it.
  * A bad number or a refused message is marked failed once and never retried; a gateway that is down is
@@ -39,9 +40,10 @@ use Illuminate\Support\Carbon;
  */
 class WelcomeSender
 {
-    public const QUIET_FROM = 21;
+    /** The default quiet hours; an agency's own are in WelcomeHours. */
+    public const QUIET_FROM = WelcomeHours::DEFAULT_FROM;
 
-    public const QUIET_UNTIL = 5;
+    public const QUIET_UNTIL = WelcomeHours::DEFAULT_UNTIL;
 
     public const RATE_PER_MINUTE = 20;
 
@@ -272,20 +274,27 @@ class WelcomeSender
         return WelcomeMessage::PENDING;
     }
 
-    /** When service hours start again, or null while they are on (05:00 to 21:00 local time). */
+    /**
+     * When service hours start again, or null while they are on: always null for an agency sending 24 hours,
+     * otherwise null outside its quiet hours (bawaan 21:00 to 05:00 local time).
+     */
     public function serviceStart(Tenant $tenant): ?Carbon
     {
+        $hours = WelcomeHours::for($tenant);
         $now = now();
         $local = $now->copy()->setTimezone(self::timezone($tenant));
 
-        $start = match (true) {
-            $local->hour >= self::QUIET_FROM => $local->copy()->addDay()->setTime(self::QUIET_UNTIL, 0),
-            $local->hour < self::QUIET_UNTIL => $local->copy()->setTime(self::QUIET_UNTIL, 0),
-            default => null,
-        };
+        if (! $hours->quietAt($local->hour)) {
+            return null;
+        }
+
+        $start = $local->copy()->setTime($hours->until, 0);
+        if ($start->lessThanOrEqualTo($local)) {
+            $start->addDay();
+        }
 
         // Back in the clock's own zone: dates are stored as its wall time.
-        return $start?->setTimezone($now->getTimezone());
+        return $start->setTimezone($now->getTimezone());
     }
 
     private static function timezone(Tenant $tenant): string
