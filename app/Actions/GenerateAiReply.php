@@ -16,6 +16,7 @@ use App\Ai\Facts\PaymentModel;
 use App\Ai\HandoffRules;
 use App\Ai\KnowledgeBase;
 use App\Ai\LeadQuote;
+use App\Ai\MediaRequest;
 use App\Ai\OrderConfirmation;
 use App\Ai\OtherBot;
 use App\Ai\PackageStatus;
@@ -127,6 +128,9 @@ class GenerateAiReply
     /** How many library items the model is shown, and how many it may send with one answer. */
     public const MAX_LIBRARY_ITEMS = 30;
 
+    /** How many library items a shop's chat looks through to find the product's own. */
+    public const MAX_LIBRARY_SCAN = 300;
+
     public const MAX_ATTACHMENTS = 2;
 
     public function __construct(
@@ -219,12 +223,15 @@ class GenerateAiReply
             }
         }
 
-        $library = MediaAsset::query()->where('active', true)->with('folder')->orderBy('id')->limit(self::MAX_LIBRARY_ITEMS)->get();
         $retail = $tenant->industry()->key === 'retail';
         $lead = $conversation->lead;
         $shop = ShopTools::for($tenant, $lead);
         // A property type the client names ("harga tipe 36/72?") is read even before the lead has a product.
         $products = (new ProductContext($lead))->asked($text);
+        // A shop's library lists the chat's product first, so a large library still shows that product's photos.
+        $library = $retail
+            ? MediaRequest::rank(MediaAsset::query()->where('active', true)->with('folder')->orderBy('id')->limit(self::MAX_LIBRARY_SCAN)->get(), $products->product(), self::MAX_LIBRARY_ITEMS)
+            : MediaAsset::query()->where('active', true)->with('folder')->orderBy('id')->limit(self::MAX_LIBRARY_ITEMS)->get();
         $buyer = new BuyerFacts($lead);
         // "ok", "siap", "terima kasih", 🙏: answered briefly or not at all, never handed to a person.
         $ack = ReplySignals::acknowledgement($text);
@@ -344,6 +351,19 @@ class GenerateAiReply
         $base = $this->system($settings, $tenant->name, $tenant->industry()->term('business'), $tenant->ai_instructions, $text, $library, $shop,
             $retail ? $lead : null, $products, $package, $facts, ConversationMemory::block($conversation), $property, $digital);
         $given = $base."\n".collect($history)->pluck('content')->implode("\n");
+
+        // "Ada fotonya kak?": a shop answers from its media library or a video link in its knowledge, not a person.
+        $media = null;
+
+        if ($retail && ! $ack && MediaRequest::asks($text)) {
+            $ids = MediaRequest::pick($library, $products->product(), $text, $lead?->variant);
+            $links = MediaRequest::wantsVideo($text) ? MediaRequest::videoLinks($base) : [];
+
+            if ($ids !== [] || $links !== []) {
+                $media = ['ids' => $ids, 'links' => $links, 'video' => MediaRequest::wantsVideo($text)];
+                $notes[] = MediaRequest::NOTE;
+            }
+        }
         $tools = [...($shop?->definitions() ?? []), ...($property?->definitions() ?? []), ...($digital?->definitions() ?? []), ...ReplySignals::definitions()];
         $retry = null;
 
@@ -410,6 +430,17 @@ class GenerateAiReply
             // A form order the model wants a person for (a question in "Catatan"): the buyer still gets the summary.
             if (($why = ReplySignals::handoff($calls)) !== null && $formOrder !== null) {
                 return $this->safeReplyAndHandoff($inbound, $mode, $shop, $formOrder, self::OUT_OF_KNOWLEDGE.': '.$why, $fallback);
+            }
+
+            // A photo or video the library has is never a reason for a person: asked once more, then sent as it is.
+            if ($media !== null && $formOrder === null && ReplySignals::handoff($calls) !== null) {
+                if (! $last) {
+                    $retry = MediaRequest::NOTE;
+
+                    continue;
+                }
+
+                return $this->mediaReply($inbound, $mode, $media);
             }
 
             if (($why = ReplySignals::handoff($calls)) !== null || ReplySignals::silent($calls)) {
@@ -521,6 +552,11 @@ class GenerateAiReply
             [$answer, $assetIds] = $this->splitAttachments($answer, $library);
             $assetIds = $this->photosFor($assetIds, $library, $text, $answer, $lead, $confirmed !== null || collect($calls)->contains('name', ShopTools::RECORD), $shop?->orders() ?? []);
 
+            // Asked for a photo and the answer attached none and gave no link: the product's own photo goes with it.
+            if ($media !== null && $assetIds === [] && $media['ids'] !== [] && ! preg_match('~https?://~i', $answer)) {
+                $assetIds = $media['ids'];
+            }
+
             if ($answer === '') {
                 return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed ?? $formOrder, self::OUT_OF_KNOWLEDGE.', atau jawabannya tidak bisa dipercaya (terpotong atau ditolak)');
             }
@@ -618,6 +654,24 @@ class GenerateAiReply
         }
 
         return MediaAsset::query()->where('active', true)->whereIn('id', $ids)->get()->sortBy(fn (MediaAsset $a) => array_search($a->getKey(), $ids, true))->values();
+    }
+
+    /**
+     * The buyer asked to see the product and the model still wanted a person: the library's photo (or the video link
+     * from the knowledge) goes out with a short line instead.
+     *
+     * @param  array{ids: list<int>, links: list<string>, video: bool}  $media
+     */
+    private function mediaReply(WaMessage $inbound, AiMode $mode, array $media): AiDraft
+    {
+        $reply = $media['video'] && $media['links'] !== []
+            ? MediaRequest::VIDEO_REPLY."\n".$media['links'][0]
+            : sprintf(MediaRequest::REPLY, $media['video'] ? 'video/foto' : 'foto');
+        $ids = $media['video'] && $media['links'] !== [] ? [] : $media['ids'];
+
+        return $mode === AiMode::Draft
+            ? $this->draft($inbound, $reply, AiDraft::PENDING, null, true, $ids)
+            : $this->sendAutomatically($inbound, $reply, $ids);
     }
 
     /**
@@ -1105,6 +1159,7 @@ class GenerateAiReply
             self::KNOWLEDGE_HEADER."\n".(($all = trim(($products?->summary() ?? '')."\n\n".$context)) !== '' ? $all : '(kosong)'),
             $property?->instructions(),
             $files !== '' ? "LAMPIRAN yang boleh dikirim (id | judul | folder | kapan dipakai):\n{$files}\nJika klien jelas membutuhkan salah satunya (misalnya menanyakan harga lalu price list ada), tambahkan di baris terakhir jawabanmu, setelah teks balasan: LAMPIRAN: <id>. Maksimal dua id dipisah koma. Jangan menulis id selain yang ada di daftar. Jika tidak perlu, jangan tulis baris itu. Lampirkan foto hanya untuk varian yang dipesan atau ditanyakan pembeli, dan jangan melampirkan foto saat merangkum atau mengonfirmasi pesanan kecuali pembeli memintanya." : null,
+            $shop !== null && $files !== '' ? MediaRequest::RULE : null,
         ]));
     }
 }

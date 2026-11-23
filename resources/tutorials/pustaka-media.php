@@ -24,4 +24,7 @@ return [
             'shot' => ['page' => 'media-assets', 'highlight' => ['main .fi-ta-ctn, main .fi-page-content > div >> nth=0']],
         ],
     ],
+    'tips' => [
+        'Toko: beri judul berisi nama produk dan warnanya (mis. "Kaos Lari Hitam"). Saat pembeli minta foto atau video, AI mengirim berkas produk itu dari pustaka, atau tautan video yang ditulis di Pengetahuan AI, tanpa menyerahkan chat ke admin.',
+    ],
 ];
