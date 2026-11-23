@@ -27,5 +27,5 @@ return [
         ],
     ],
     'tips' => ['Berat dihitung dari berat produk, atau berat volume (P x L x T / pembagi, umumnya 6000) bila lebih besar. Produk tanpa berat memakai <b>Berat bawaan per produk</b>.'],
-    'perhatian' => ['Bila tujuan tidak ada di tabel, atau zonanya bertanda Konfirmasi admin, AI tidak menyebut angka dan menyerahkan chat ke agen. Promo ongkir per produk dipotong setelah tarif dihitung.'],
+    'perhatian' => ['Bila tujuan tidak ada di tabel, atau zonanya bertanda Konfirmasi admin, AI tidak menyebut angka dan menyerahkan chat ke agen. Toko yang punya akun Everpro aktif: zona Konfirmasi admin dihitung dari tarif Everpro untuk alamat lead yang lokasinya sudah pasti, tanpa agen. Bila Everpro gagal, lokasinya belum pasti, atau tidak ada layanan, pembeli diberi tahu ongkir sedang dicek dan chat diserahkan ke agen beserta alasannya. Promo ongkir per produk dipotong setelah tarif dihitung.'],
 ];

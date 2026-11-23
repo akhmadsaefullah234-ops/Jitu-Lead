@@ -42,7 +42,7 @@ class RecordOrder
         $courier = filled($order['kurir'] ?? null) ? trim((string) $order['kurir']) : null;
         $place = LeadQuote::exactPlace($lead, $order['kota'] ?? null);
         $quote = Shipping::quote($lead->tenant, $order['kota'] ?? null, $order['provinsi'] ?? null, $order['items'] ?? [], $order['kecamatan'] ?? null,
-            $courier, $order['kode_pos'] ?? $place['kode_pos'] ?? null, $order['kelurahan'] ?? $place['kelurahan'] ?? null);
+            $courier, $order['kode_pos'] ?? $place['kode_pos'] ?? null, $order['kelurahan'] ?? $place['kelurahan'] ?? null, $lead);
 
         if (! $quote->ok()) {
             return ['status' => $quote->status, 'pesan' => $quote->message];
@@ -103,7 +103,7 @@ class RecordOrder
                         'cod' => '. Bayar di tempat (COD)', 'other' => '. Bayar lainnya (QRIS/e-wallet)', default => '. Bayar transfer'
                     }
                     // A shop that prices with Everpro sees where this price came from (the zone table when Everpro could not answer).
-                    .(ShippingSettings::of($lead->tenant)->provider() === ShippingSettings::EVERPRO ? '. Ongkir dari '.$quote->sourceLabel() : ''),
+                    .(ShippingSettings::of($lead->tenant)->provider() === ShippingSettings::EVERPRO || $quote->source === ShippingSettings::EVERPRO ? '. Ongkir dari '.$quote->sourceLabel() : ''),
                 'meta' => ['ongkir' => $option->price, 'ongkir_normal' => $option->discount() > 0 ? $option->normalPrice : null, 'promo_ongkir' => $option->promo, 'total' => $total,
                     'berat_kg' => $quote->billableKg, 'zona' => $quote->zone, 'pembayaran' => $payment, 'sumber_ongkir' => $quote->source, 'catatan_sumber_ongkir' => $quote->sourceNote],
             ]);

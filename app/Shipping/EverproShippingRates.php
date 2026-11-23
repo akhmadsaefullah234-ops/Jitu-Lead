@@ -2,7 +2,9 @@
 
 namespace App\Shipping;
 
+use App\Ai\LeadQuote;
 use App\Models\CarrierAccount;
+use App\Models\Lead;
 use App\Models\Tenant;
 use App\Regions\RegionDirectory;
 use App\Shipping\Carriers\CarrierLocation;
@@ -10,6 +12,7 @@ use App\Shipping\Carriers\CarrierProvider;
 use App\Shipping\Carriers\CarrierRate;
 use App\Shipping\Carriers\Carriers;
 use App\Shipping\Carriers\RateRequest;
+use App\Shipping\Shipments\ProviderLocations;
 use App\Shipping\Shipments\Shipments;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -25,6 +28,11 @@ use Throwable;
  * or Everpro fails or is slow (config shipping.everpro.timeout seconds), the zone table prices it as before and
  * the quote says why (ShippingQuote::sourceNote). A zone the shop marked "konfirmasi admin" still goes to an admin.
  * Everpro's answers are cached per sender, destination postal code and weight for a few hours.
+ *
+ * A "konfirmasi admin" zone (NTB, NTT, Maluku, Papua at Quicker Sport) is priced from Everpro too, for any shop with an
+ * active Everpro account, whatever its price source (forAdminZone(), called by Shipping::quote): only for the lead's
+ * own address once it is matched to Everpro's place for certain, with the order's weight. When Everpro fails, the
+ * place is not certain, or Everpro has no service there, the zone's flag still sends it to an admin, with the reason.
  */
 class EverproShippingRates implements ShippingProvider
 {
@@ -57,6 +65,119 @@ class EverproShippingRates implements ShippingProvider
             'status' => ShippingQuote::OK, 'message' => 'Ongkir dihitung dari tarif Everpro.', 'options' => $options,
             'zone' => null, 'source' => ShippingSettings::EVERPRO, 'sourceNote' => null,
         ]);
+    }
+
+    public const ADMIN_EVERPRO_FAILED = 'Everpro gagal atau tidak merespons saat cek ongkir';
+
+    public const ADMIN_PLACE_UNCERTAIN = 'lokasi tujuan belum dikenali persis di Everpro';
+
+    public const ADMIN_NO_SERVICE = 'Everpro tidak punya layanan kurir toko ke tujuan ini';
+
+    /**
+     * A zone the shop marked "konfirmasi admin", priced from Everpro for the lead's address: an OK quote (source
+     * everpro) or the same "konfirmasi admin" quote with adminReason. Null when the shop has no active Everpro
+     * account: nothing changes for it.
+     */
+    public function forAdminZone(ShippingRequest $request, ShippingQuote $zone, ?Lead $lead): ?ShippingQuote
+    {
+        $account = Carriers::configured($this->tenant) ? Carriers::account($this->tenant) : null;
+
+        if ($account === null || $account->provider !== 'everpro') {
+            return null;
+        }
+
+        $admin = fn (string $why) => $zone->copy(['adminReason' => $why, 'message' => 'Ongkir ke zona '.$zone->zone.' perlu dikonfirmasi admin ('.$why.').']);
+        $place = $this->leadPlace($lead, $zone);
+        $origin = Shipments::originPostal($account);
+        $postal = $place?->postalCode ?: ($lead !== null ? LeadQuote::destination($lead)['kode_pos'] ?? null : null);
+
+        if ($place === null || $postal === null || $zone->items === []) {
+            return $admin(self::ADMIN_PLACE_UNCERTAIN);
+        }
+
+        if ($origin === null) {
+            return $admin('lokasi asal Everpro belum diatur');
+        }
+
+        try {
+            $provider = Carriers::make($account);
+
+            if (method_exists($provider, 'withTimeout')) {
+                $provider->withTimeout((int) config('shipping.everpro.timeout', 3));
+            }
+
+            $rates = $this->rates($provider, $account, $origin, $postal, $place->subDistrict ?: null, $zone);
+        } catch (Throwable $e) {
+            Log::warning('Everpro quote for a confirm-admin zone failed', ['tenant' => $this->tenant?->getKey(), 'lead' => $lead?->getKey(), 'error' => mb_substr($e->getMessage(), 0, 200)]);
+
+            return $admin(self::ADMIN_EVERPRO_FAILED);
+        }
+
+        // The couriers asked (the primary one by default) that Everpro serves there; else the shop's other couriers.
+        $options = $this->served($rates, $request->couriers ?? $this->settings->couriers());
+
+        if ($options === [] && $request->couriers !== null) {
+            $options = array_slice($this->served($rates, $this->settings->couriers()), 0, 1);
+        }
+
+        if ($options === []) {
+            return $admin(self::ADMIN_NO_SERVICE);
+        }
+
+        return $zone->copy([
+            'status' => ShippingQuote::OK, 'message' => 'Ongkir dihitung dari tarif Everpro (zona '.$zone->zone.').', 'options' => $options,
+            'zone' => null, 'source' => ShippingSettings::EVERPRO, 'sourceNote' => null, 'adminReason' => null,
+        ]);
+    }
+
+    /**
+     * The lead's Everpro place when it is certain (state exact, for the current address) and the quote is for the
+     * lead's own city. A lead not matched yet is matched now.
+     */
+    private function leadPlace(?Lead $lead, ShippingQuote $zone): ?CarrierLocation
+    {
+        $own = $lead !== null ? LeadQuote::destination($lead) : null;
+        if ($own === null || blank($zone->city)) {
+            return null;
+        }
+
+        [$a, $b] = [RegionDirectory::matchCity($own['kota'])['name'] ?? null, RegionDirectory::matchCity((string) $zone->city)['name'] ?? null];
+
+        if ($a !== null && $b !== null ? $a !== $b : Regions::city($own['kota']) !== Regions::city((string) $zone->city)) {
+            return null;
+        }
+
+        if ($lead->provider_location_state === null && ProviderLocations::key($lead) !== null) {
+            try {
+                app(ProviderLocations::class)->match($lead);
+                $lead->refresh();
+            } catch (Throwable $e) {
+                Log::warning('Provider location match during a quote failed', ['tenant' => $this->tenant?->getKey(), 'lead' => $lead->getKey(), 'error' => mb_substr($e->getMessage(), 0, 200)]);
+            }
+        }
+
+        return ProviderLocations::place($lead);
+    }
+
+    /**
+     * @param  list<CarrierRate>  $rates
+     * @param  list<string>  $couriers
+     * @return list<ShippingOption>
+     */
+    private function served(array $rates, array $couriers): array
+    {
+        $options = [];
+
+        foreach ($couriers as $courier) {
+            $rate = collect($rates)->first(fn (CarrierRate $r) => $r->category() === 'regular' && $r->matches($courier))
+                ?? collect($rates)->first(fn (CarrierRate $r) => $r->matches($courier));
+
+            if ($rate !== null) {
+                $options[] = new ShippingOption($courier, $rate->price, $rate->etaMin, $rate->etaMax);
+            }
+        }
+
+        return $options;
     }
 
     /** @return list<ShippingOption>|null null (with $why) when Everpro cannot price every courier asked */

@@ -213,7 +213,7 @@ class LeadQuote
 
         try {
             $quote = Shipping::quote($tenant, $destination['kota'], $destination['provinsi'], $items, $destination['kecamatan'],
-                $courier, $destination['kode_pos'] ?? null, $destination['kelurahan'] ?? null);
+                $courier, $destination['kode_pos'] ?? null, $destination['kelurahan'] ?? null, $lead);
         } catch (Throwable $e) {
             report($e);
 

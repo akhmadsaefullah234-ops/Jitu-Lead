@@ -134,7 +134,7 @@ class ShopTools
 
         $place = LeadQuote::exactPlace($this->lead, $input['kota'] ?? null);
         $quote = Shipping::quote($this->tenant, $input['kota'] ?? null, $input['provinsi'] ?? null, (array) ($input['items'] ?? []), $input['kecamatan'] ?? null,
-            $courier, $input['kode_pos'] ?? $place['kode_pos'] ?? null, $input['kelurahan'] ?? $place['kelurahan'] ?? null);
+            $courier, $input['kode_pos'] ?? $place['kode_pos'] ?? null, $input['kelurahan'] ?? $place['kelurahan'] ?? null, $this->lead);
 
         if ($name === self::CHECK) {
             return $quote->toArray();
@@ -311,6 +311,21 @@ class ShopTools
     public static function needsAdmin(array $calls): bool
     {
         return collect($calls)->contains(fn (array $c) => in_array($c['result']['status'] ?? null, [ShippingQuote::NEEDS_ADMIN, ShippingQuote::NOT_AVAILABLE], true));
+    }
+
+    /**
+     * Why Everpro could not price a "konfirmasi admin" zone in this answer ("Everpro gagal atau tidak merespons saat
+     * cek ongkir"), or null when Everpro was not tried (a shop without Everpro, or any other reason for an admin).
+     */
+    public static function adminReason(array $calls): ?string
+    {
+        foreach ($calls as $c) {
+            if (($c['result']['status'] ?? null) === ShippingQuote::NEEDS_ADMIN && filled($c['result']['alasan_admin'] ?? null)) {
+                return (string) $c['result']['alasan_admin'];
+            }
+        }
+
+        return null;
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Shipping;
 
+use App\Models\Lead;
 use App\Models\Property;
 use App\Models\Tenant;
 use InvalidArgumentException;
@@ -30,11 +31,15 @@ class Shipping
      * "sicepat", CourierChoice::ALL, or a list). A courier the shop does not use is never priced: the quote asks
      * for an admin. The postal code and kelurahan, when known, let Everpro price the exact place.
      *
+     * A zone the shop marked "konfirmasi admin" is priced from Everpro when the shop has an Everpro account and
+     * $lead (the chat's lead) has its address matched to Everpro's place for certain
+     * (EverproShippingRates::forAdminZone). Otherwise it still asks for an admin, as before.
+     *
      * @param  list<array{product_id?: int|string|null, produk?: string|null, varian?: string|null, jumlah?: int|string|null}>  $items
      * @param  list<string>|string|null  $courier
      */
     public static function quote(Tenant $tenant, ?string $city, ?string $province, array $items, ?string $district = null,
-        array|string|null $courier = null, ?string $postalCode = null, ?string $subDistrict = null): ShippingQuote
+        array|string|null $courier = null, ?string $postalCode = null, ?string $subDistrict = null, ?Lead $lead = null): ShippingQuote
     {
         if (! self::available($tenant)) {
             return new ShippingQuote(ShippingQuote::NOT_AVAILABLE, 'Pengiriman belum diatur untuk agensi ini. Ongkir perlu dikonfirmasi admin.');
@@ -49,7 +54,12 @@ class Shipping
 
         $postalCode = preg_match('/^\d{5}$/', $code = preg_replace('/\D/', '', (string) $postalCode)) ? $code : null;
         $subDistrict = filled($subDistrict) ? trim($subDistrict) : null;
-        $quote = self::provider($tenant)->quote(new ShippingRequest($city, $province, self::items($items), $district, $couriers, $postalCode, $subDistrict));
+        $request = new ShippingRequest($city, $province, self::items($items), $district, $couriers, $postalCode, $subDistrict);
+        $quote = self::provider($tenant)->quote($request);
+
+        if ($quote->status === ShippingQuote::NEEDS_ADMIN && (new ZoneShippingRates($settings))->confirmsAdmin($quote->zone)) {
+            $quote = (new EverproShippingRates($settings, $tenant))->forAdminZone($request, $quote, $lead) ?? $quote;
+        }
 
         if ($quote->ok() && (is_array($courier) ? $courier === [] : blank($courier))) {
             $quote = $quote->copy(['primaryCourier' => $settings->primaryCourier()]);

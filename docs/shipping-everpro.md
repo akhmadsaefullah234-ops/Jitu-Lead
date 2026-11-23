@@ -277,6 +277,37 @@ Pertanyaan posisi paket ("sampai mana", "kapan sampai", "resinya") dijawab dari 
 lebih dari 2 jam). AI tidak boleh menyebut perkiraan tiba; jawaban yang menyebut estimasi yang tidak ada di data kurir
 diserahkan ke agen. Tanpa resi atau data pengiriman, chat langsung diserahkan ke agen.
 
+### Zona "Konfirmasi admin" lewat Everpro
+
+A zone marked **Konfirmasi admin** (for example "NTB, NTT, Maluku, Papua") is priced from Everpro by any shop with an
+active Everpro account, whether its price source is the zone table or Everpro. The code path is `Shipping::quote` →
+`EverproShippingRates::forAdminZone`.
+
+It prices from Everpro only when all of these hold:
+
+- the quote is for the chat lead's own city;
+- that lead's Everpro place is certain (`provider_location_state = exact` for the current address). A lead that
+  was not matched yet is matched first.
+
+The rate uses the place's postal code and kelurahan and the order's weight, the same as Buat resi. The shop's primary
+courier is used. When Everpro has no rate for it, another courier of the shop is used, for example SiCepat REG or SPX.
+The product's shipping promo is then taken off as for any zone, for example "Potongan ongkir Rp 30.000 (luar Jawa &
+Bali)". The order records `shipping_cost_source = everpro`, and the activity says "Ongkir dari Everpro".
+
+The zone's `confirm_admin` flag is never removed. It is still the fallback, and the agent sees the reason in the
+`ai_handoff` activity ("Ongkir ke tujuan ini perlu dikonfirmasi admin: …"):
+
+| Case | Reason (`ShippingQuote::adminReason`) |
+| --- | --- |
+| Everpro fails, times out, or answers with an error | `Everpro gagal atau tidak merespons saat cek ongkir` |
+| The place is not certain, the quote is for another city, or there is no lead | `lokasi tujuan belum dikenali persis di Everpro` |
+| Everpro has no service of the shop's couriers there | `Everpro tidak punya layanan kurir toko ke tujuan ini` |
+
+In each case the buyer gets `GenerateAiReply::SHIPPING_CHECK_REPLY` ("ongkir ke alamat kakak sedang kami cek dulu").
+
+A shop without an Everpro account is unchanged: it gets the same "konfirmasi admin" quote with no reason and a silent
+handoff. A zone without the flag (Jawa, for example) keeps its zone price.
+
 ## Keamanan
 
 Kredensial dan token tidak pernah ditulis di kode, tes, atau log. Token Everpro disimpan terenkripsi di cache per agensi
