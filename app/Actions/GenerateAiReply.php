@@ -270,7 +270,7 @@ class GenerateAiReply
                 $shop->forget();
 
                 if (ShopTools::needsAdmin([['result' => $result]])) {
-                    return $this->handoffTo($inbound, 'Ongkir ke tujuan ini perlu dikonfirmasi admin');
+                    return $this->shippingToAdmin($inbound, $mode, [['result' => $result]]);
                 }
 
                 if (($result['status'] ?? null) !== 'tercatat') {
@@ -311,7 +311,7 @@ class GenerateAiReply
                 $notes[] = 'Nama tempat di pesan terakhir pembeli ada di beberapa provinsi: '.implode(', ', $found).'. Tanyakan provinsinya dulu sebelum menyebut ongkir.';
             } elseif ($found !== null) {
                 if (ShopTools::needsAdmin([$found->call()])) {
-                    return $this->handoffTo($inbound, 'Ongkir ke tujuan ini perlu dikonfirmasi admin');
+                    return $this->shippingToAdmin($inbound, $mode, [$found->call()]);
                 }
 
                 $quote = $found;
@@ -432,6 +432,11 @@ class GenerateAiReply
                 return $this->safeReplyAndHandoff($inbound, $mode, $shop, $formOrder, self::OUT_OF_KNOWLEDGE.': '.$why, $fallback);
             }
 
+            // Handed over after a check Everpro could not price either: the buyer still hears the cost is being checked.
+            if (ReplySignals::handoff($calls) !== null && $fallback === null && ShopTools::adminReason($calls) !== null) {
+                return $this->shippingToAdmin($inbound, $mode, $calls, $shop);
+            }
+
             // A photo or video the library has is never a reason for a person: asked once more, then sent as it is.
             if ($media !== null && $formOrder === null && ReplySignals::handoff($calls) !== null) {
                 if (! $last) {
@@ -456,7 +461,12 @@ class GenerateAiReply
             }
 
             if (ShopTools::needsAdmin($calls)) {
-                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed ?? $formOrder, 'Ongkir ke tujuan ini perlu dikonfirmasi admin');
+                // Everpro was tried for a "konfirmasi admin" zone and could not price it: the buyer hears the cost is being checked.
+                if (ShopTools::adminReason($calls) !== null && $fallback === null) {
+                    return $this->shippingToAdmin($inbound, $mode, $calls, $shop, $confirmed ?? $formOrder);
+                }
+
+                return $this->giveUp($inbound, $mode, $ack, $fallback, $confirmed ?? $formOrder, self::SHIPPING_ADMIN.(($why = ShopTools::adminReason($calls)) ? ': '.$why : ''));
             }
 
             if ($answer === '') {
@@ -484,7 +494,9 @@ class GenerateAiReply
                     $quote ??= LeadQuote::forLead($tenant, $lead, $products);
 
                     if ($quote !== null && ShopTools::needsAdmin([$quote->call()])) {
-                        return $this->handoffTo($inbound, 'Ongkir ke tujuan ini perlu dikonfirmasi admin', true);
+                        return ShopTools::adminReason([$quote->call()]) !== null
+                            ? $this->shippingToAdmin($inbound, $mode, [$quote->call()])
+                            : $this->handoffTo($inbound, self::SHIPPING_ADMIN, true);
                     }
 
                     if ($quote?->quote->ok()) {
@@ -654,6 +666,30 @@ class GenerateAiReply
         }
 
         return MediaAsset::query()->where('active', true)->whereIn('id', $ids)->get()->sortBy(fn (MediaAsset $a) => array_search($a->getKey(), $ids, true))->values();
+    }
+
+    public const SHIPPING_ADMIN = 'Ongkir ke tujuan ini perlu dikonfirmasi admin';
+
+    /** What the buyer hears when Everpro could not price their "konfirmasi admin" area and an agent checks it. */
+    public const SHIPPING_CHECK_REPLY = 'Baik kak, ongkir ke alamat kakak sedang kami cek dulu ya 🙏 Kami kabari lagi secepatnya.';
+
+    /**
+     * A shipping cost only a person can confirm. When Everpro was tried for the area (ShopTools::adminReason), the
+     * buyer is told the cost is being checked and the agent sees why; otherwise the chat goes to a person as before.
+     *
+     * @param  list<array{result: array}>  $calls
+     */
+    private function shippingToAdmin(WaMessage $inbound, AiMode $mode, array $calls, ?ShopTools $shop = null, ?array $confirmed = null): ?AiDraft
+    {
+        $why = ShopTools::adminReason($calls);
+
+        if ($why === null) {
+            return $this->handoffTo($inbound, self::SHIPPING_ADMIN);
+        }
+
+        $shop?->forget();
+
+        return $this->safeReplyAndHandoff($inbound, $mode, $shop, $confirmed, self::SHIPPING_ADMIN.': '.$why, self::SHIPPING_CHECK_REPLY);
     }
 
     /**

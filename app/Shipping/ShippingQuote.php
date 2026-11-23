@@ -40,6 +40,11 @@ final class ShippingQuote
         public readonly ?string $sourceNote = null,
         /** Set when only the shop's primary courier was priced because the buyer asked for no other. */
         public readonly ?string $primaryCourier = null,
+        /**
+         * Why a "konfirmasi admin" zone could not be priced from Everpro either ("Everpro gagal atau tidak merespons"):
+         * set only when Everpro was tried, so the AI tells the buyer the cost is being checked and the agent sees why.
+         */
+        public readonly ?string $adminReason = null,
     ) {}
 
     /** The same quote with some values changed (named as in the constructor). */
@@ -131,6 +136,7 @@ final class ShippingQuote
             'actualGrams' => $this->actualGrams, 'volumeGrams' => $this->volumeGrams, 'billableKg' => $this->billableKg,
             'items' => array_map(fn (ShippingItem $i) => $i->toData(), $this->items),
             'source' => $this->source, 'sourceNote' => $this->sourceNote, 'primaryCourier' => $this->primaryCourier,
+            'adminReason' => $this->adminReason,
         ];
     }
 
@@ -159,6 +165,7 @@ final class ShippingQuote
             source: PlainData::string($data, 'source'),
             sourceNote: PlainData::nullableString($data, 'sourceNote'),
             primaryCourier: PlainData::nullableString($data, 'primaryCourier'),
+            adminReason: array_key_exists('adminReason', $data) ? PlainData::nullableString($data, 'adminReason') : null,
         );
     }
 
@@ -172,6 +179,7 @@ final class ShippingQuote
             'pesan' => $this->message,
             'tujuan' => $this->destination() ?: null,
             'zona' => $this->zone,
+            'alasan_admin' => $this->adminReason,
             'berat_tertagih_kg' => $this->ok() ? $this->billableKg : null,
             'subtotal_produk' => $this->ok() ? $subtotal : null,
             'kurir_utama' => $this->ok() && $this->primaryCourier !== null ? $this->primaryCourier : null,
