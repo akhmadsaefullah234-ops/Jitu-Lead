@@ -5,6 +5,7 @@ namespace App\Models;
 use App\LeadForms\FormFields;
 use App\LeadForms\FormTemplates;
 use App\Models\Concerns\BelongsToTenant;
+use App\Payments\DigitalCheckout;
 use App\Support\CurrentTenant;
 use App\Welcome\WelcomeSettings;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -60,10 +61,30 @@ class LeadForm extends Model
         return $this->status !== 'inactive';
     }
 
-    /** @return list<array<string, mixed>> */
+    /**
+     * The fields as the buyer sees and sends them. For a digital-product agency without an active payment gateway the
+     * gateway-only payment choices (QRIS, e-wallet, virtual account) are left out, both from the form and from what
+     * it accepts; they come back by themselves once iPaymu is switched on. Other agencies get the fields as saved.
+     *
+     * @return list<array<string, mixed>>
+     */
     public function fieldList(): array
     {
-        return FormFields::normalize($this->fields);
+        $fields = FormFields::normalize($this->fields);
+
+        return $this->gatewayChoicesOff() ? FormFields::withoutGatewayPayments($fields) : $fields;
+    }
+
+    private ?bool $gatewayOff = null;
+
+    private function gatewayChoicesOff(): bool
+    {
+        if ($this->gatewayOff === null) {
+            $tenant = $this->tenant_id ? Tenant::query()->find($this->tenant_id) : null;
+            $this->gatewayOff = $tenant?->industry()->key === 'digital' && ! DigitalCheckout::applies($tenant);
+        }
+
+        return $this->gatewayOff;
     }
 
     /**

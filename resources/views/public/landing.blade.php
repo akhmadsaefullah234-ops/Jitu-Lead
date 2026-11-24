@@ -202,13 +202,40 @@
         .preview-tag { background: #111827; color: #fff; text-align: center; font-size: .8125rem; padding: .35rem; }
         @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
     </style>
-    @if (collect($sections)->pluck('type')->intersect(['comparison', 'steps', 'bonus', 'tiers', 'buy_bar'])->isNotEmpty())
+    @if ($digitalCss)
     <style>
         .cmp ul { list-style: none; padding: 0; margin: .5rem 0 0; display: grid; gap: .45rem; }
         .cmp li { display: flex; gap: .5rem; overflow-wrap: anywhere; } .cmp li span { flex: none; font-weight: 800; }
         .cmp-a li span { color: #b91c1c; } .cmp-b { border: 2px solid var(--c); } .cmp-b li span { color: #047857; }
         ol.steps { list-style: none; padding: 0; margin: 0; }
-        .bonus .badge { display: inline-block; background: #047857; color: #fff; font-weight: 700; font-size: .8rem; padding: .2rem .6rem; border-radius: 999px; margin-bottom: .5rem; }
+        .ribbon { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: .25rem 1rem; margin: 0 0 1.25rem; padding: .8rem 1.25rem; border-radius: .9rem; background: #047857; color: #fff; font-weight: 800; font-size: clamp(1rem, 3.6vw, 1.2rem); text-align: center; box-shadow: 0 8px 22px rgba(0,0,0,.15); }
+        .ribbon span + span { font-weight: 600; font-size: .9em; opacity: .9; }
+        .bonus .dot { font-size: 1.3rem; }
+        ol.tiers { list-style: none; padding: 0; margin: 0; display: grid; gap: 1rem; }
+        .tier { display: flex; gap: 1rem; align-items: flex-start; min-width: 0; }
+        .tier-t { min-width: 0; overflow-wrap: anywhere; }
+        .tier-n { flex: none; width: 3rem; height: 3rem; border-radius: 50%; display: grid; place-items: center; font: 800 1.35rem/1 var(--fh); background: var(--c); color: #fff; }
+        .tier small { display: block; font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; font-weight: 700; color: var(--mute); }
+        .tier-bar { display: flex; gap: .25rem; margin-top: .7rem; } .tier-bar i { width: 1.5rem; height: .35rem; border-radius: 1rem; background: var(--line); } .tier-bar i.on { background: var(--c); }
+        @media (max-width: 767px) { .tier { margin-left: calc(min(var(--step), 3) * .6rem); } }
+        @media (min-width: 768px) { ol.tiers { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; } .tier { flex-direction: column; min-height: calc(12rem + min(var(--step), 2) * 2.5rem); } ol.tiers.n4 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+        .kc-g { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); }
+        @media (min-width: 640px) { .kc-g { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        @media (min-width: 1000px) { .kc-g.n3, .kc-g.n5, .kc-g.n6 { grid-template-columns: repeat(3, minmax(0, 1fr)); } .kc-g.n4 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+        .kc { background: #fff; color: var(--ink); border: 1px solid var(--line); border-top: 4px solid var(--kc); border-radius: 1rem; padding: 1.1rem 1.2rem; min-width: 0; overflow-wrap: anywhere; }
+        .kc .ic-i { --ics: 22px; background: var(--kc); color: #fff; margin-bottom: .7rem; }
+        .kc h3 { margin: 0 0 .3rem; font-size: 1.1rem; } .kc p { margin: 0; color: var(--mute); }
+        .kc blockquote { margin: .8rem 0 0; padding: .5rem .75rem; border-left: 3px solid var(--kc); border-radius: 0 .5rem .5rem 0; font-style: italic; background: color-mix(in srgb, var(--kc) 10%, transparent); }
+        .kc-ungu { --kc: #7c3aed; } .kc-biru { --kc: #2563eb; } .kc-jingga { --kc: #ea580c; } .kc-merah_muda { --kc: #db2777; }
+        .phones { display: flex; gap: 1rem; overflow-x: auto; scroll-snap-type: x mandatory; padding: .25rem .25rem 1rem; -webkit-overflow-scrolling: touch; }
+        .phone { flex: 0 0 min(14rem, 68%); margin: 0; min-width: 0; scroll-snap-align: center; }
+        .phone-f { position: relative; aspect-ratio: 9 / 19; border: 9px solid #0b0812; border-radius: 2rem; background: #0b0812; overflow: hidden; box-shadow: 0 14px 32px rgba(0,0,0,.3); }
+        .phone-f::before { content: ""; position: absolute; top: .3rem; left: 50%; transform: translateX(-50%); width: 30%; height: .8rem; border-radius: 1rem; background: #0b0812; z-index: 1; }
+        .phone-f img { width: 100%; height: 100%; object-fit: cover; }
+        .phone figcaption { margin-top: .6rem; text-align: center; font-size: .9rem; color: var(--mute); }
+        @media (min-width: 768px) { .phones { overflow: visible; justify-content: center; } .phone { flex: 0 1 14rem; } }
+        .hero-p .mx-m { display: flex; justify-content: center; }
+        .hero-shot { width: 100%; max-width: 24rem; border-radius: 1.25rem; box-shadow: 0 18px 40px rgba(0,0,0,.35); }
         .buybar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 32; background: #fff; border-top: 1px solid var(--line); padding: .55rem .8rem calc(.55rem + env(safe-area-inset-bottom)); }
         .buybar-in { max-width: 72rem; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
         .buybar-t { min-width: 0; line-height: 1.25; } .buybar-t b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -217,7 +244,7 @@
         body:has(.buybar) { padding-bottom: 4.75rem; } body:has(.buybar) .dock { display: none; } body:has(.buybar) .waf { bottom: calc(5.25rem + env(safe-area-inset-bottom)); }
     </style>
     @endif
-    @if ($blockCss !== '')<style>{!! $blockCss !!}</style>@endif
+    @if ($themeCss !== '')<style>{!! $themeCss !!}</style>@endif@if ($blockCss !== '')<style>{!! $blockCss !!}</style>@endif
     @if ($animated)<script>document.documentElement.classList.add('js');</script>@endif
     @include('public.partials.button-styles')
     @include('public.partials.tracking')
@@ -225,7 +252,7 @@
 <body @if ($nav['dock']) class="has-dock" @endif>
     @if ($preview)<div class="preview-tag">Pratinjau - halaman ini belum tentu sudah terbit</div>@endif
     <header class="top"><div class="wrap">
-        <span class="brand">@if ($logo)<img src="{{ $logo }}" alt="{{ $tenant->name }}">@else{{ $tenant->name }}@endif</span>
+        <span class="brand">@if ($logo)<img src="{{ $logo }}" alt="{{ $profile->name() }}">@else{{ $profile->name() }}@endif</span>
         @if ($nav['header'])@include('public.partials.button', ['b' => $nav['header'], 'ctx' => $btnCtx, 'tracking' => $tracking])@endif
     </div></header>
 
@@ -254,7 +281,7 @@
 
     <footer class="foot"><div class="wrap">@if ($profile->about())<p style="margin:0 0 .5rem">{{ $profile->about() }}</p>@endif
         @if ($profile->address() || $profile->email() || $profile->website())<p style="margin:0 0 .5rem">{{ implode(' · ', array_filter([$profile->address(), $profile->email()])) }}@if ($profile->website()){{ $profile->address() || $profile->email() ? ' · ' : '' }}<a href="{{ $profile->website() }}" rel="noopener" target="_blank" style="color:inherit">{{ preg_replace('#^https?://(www\.)?#i', '', rtrim($profile->website(), '/')) }}</a>@endif</p>@endif
-        &copy; {{ now()->year }} {{ $tenant->name }} · <a href="{{ url('/kebijakan-privasi') }}" rel="noopener" target="_blank" style="color:inherit">Kebijakan Privasi</a> · <a href="{{ url('/syarat-layanan') }}" rel="noopener" target="_blank" style="color:inherit">Syarat Layanan</a></div></footer>
+        &copy; {{ now()->year }} {{ $profile->name() }} · <a href="{{ url('/kebijakan-privasi') }}" rel="noopener" target="_blank" style="color:inherit">Kebijakan Privasi</a> · <a href="{{ url('/syarat-layanan') }}" rel="noopener" target="_blank" style="color:inherit">Syarat Layanan</a></div></footer>
 
     @if ($nav['dock'])
         <nav class="dock" aria-label="Aksi cepat">@foreach ($nav['dock'] as $b)@include('public.partials.button', ['b' => $b, 'ctx' => $btnCtx, 'tracking' => $tracking])@endforeach</nav>
