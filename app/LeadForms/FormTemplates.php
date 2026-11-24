@@ -14,6 +14,9 @@ class FormTemplates
 
     public const ORDER = 'order';
 
+    /** The order form of the "Produk digital" landing template (App\LandingPages\Templates). */
+    public const ORDER_DIGITAL = 'order_digital';
+
     /**
      * The templates an agency of this industry can start from (null: all). Templates without an industry are for everyone,
      * except the industries a template names under "except" (a digital-product agency never asks for a shipping address).
@@ -34,9 +37,10 @@ class FormTemplates
      *
      * @param  list<string>  $variants
      */
-    public static function createOrderForm(string $productName, array $variants = []): LeadForm
+    public static function createOrderForm(string $productName, array $variants = [], string $template = self::ORDER): LeadForm
     {
-        $name = 'Order '.(trim($productName) !== '' ? Str::limit(trim($productName), 60, '') : 'produk');
+        $template = in_array($template, [self::ORDER, self::ORDER_DIGITAL], true) ? $template : self::ORDER;
+        $name = ($template === self::ORDER_DIGITAL ? 'Beli ' : 'Order ').(trim($productName) !== '' ? Str::limit(trim($productName), 60, '') : 'produk');
         $base = Str::slug($name) ?: 'order-produk';
         $slug = $base;
 
@@ -44,7 +48,7 @@ class FormTemplates
             $slug = $base.'-'.$i;
         }
 
-        $attributes = self::attributes(self::ORDER);
+        $attributes = self::attributes($template);
         $variants = array_values(array_filter(array_map(fn ($v) => trim((string) $v), $variants), 'strlen'));
 
         if ($variants !== []) {
@@ -165,6 +169,23 @@ class FormTemplates
                 'submit' => ['label' => 'Beli sekarang', 'icon' => 'whatsapp', 'color' => 'wa'],
                 'after' => ['type' => 'whatsapp', 'wa_target' => 'rotate',
                     'wa_message' => "Halo admin, saya {nama} mau beli {produk}.\nEmail: {email}\nPerangkat: {perangkat}\nCatatan: {catatan}\nMohon info total dan cara bayarnya."],
+            ],
+            self::ORDER_DIGITAL => [
+                'industry' => 'digital',
+                'name' => 'Order produk digital', 'description' => 'Untuk satu produk digital: nama, WhatsApp, email (opsional), perangkat, dan cara bayar. Tanpa alamat, lalu langsung ke WhatsApp admin.',
+                'design' => ['title' => 'Pesan sekarang', 'description' => 'Isi data singkat ini. Setelah dikirim, Anda tersambung ke WhatsApp admin untuk total dan cara bayar. Tautan akses dikirim setelah pembayaran diterima.'],
+                'fields' => [
+                    $name, $phone,
+                    self::f('email', 'email', 'Email (opsional)', ['maps_to' => 'email', 'placeholder' => 'nama@email.com']),
+                    self::f('perangkat', 'radio', 'Perangkat yang dipakai', ['required' => true, 'options' => ['Android', 'iPhone', 'Komputer'], 'maps_to' => 'custom']),
+                    self::f('pembayaran', 'radio', 'Cara bayar', ['required' => true, 'maps_to' => 'payment_type', 'payment_choices' => [
+                        ['label' => 'Transfer bank', 'kind' => 'transfer'], ['label' => 'QRIS / e-wallet', 'kind' => 'other'],
+                    ]]),
+                    ...$utm,
+                ],
+                'submit' => ['label' => 'Pesan sekarang', 'icon' => 'whatsapp', 'color' => 'wa'],
+                'after' => ['type' => 'whatsapp', 'wa_target' => 'rotate',
+                    'wa_message' => "Halo admin, saya {nama} mau beli {produk}.\nPerangkat: {perangkat}\nCara bayar: {pembayaran}\nEmail: {email}\nMohon info total dan cara bayarnya."],
             ],
             'janji' => [
                 'name' => 'Janji temu / survei', 'description' => 'Pengunjung memilih tanggal dan waktu kunjungan.',

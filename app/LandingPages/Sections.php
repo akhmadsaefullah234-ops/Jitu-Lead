@@ -68,12 +68,18 @@ class Sections
         'highlights' => 'Keunggulan',
         'details' => 'Rincian & harga',
         'text' => 'Teks bebas',
+        'comparison' => 'Perbandingan (biasa vs kami)',
+        'steps' => 'Langkah cara pakai',
+        'bonus' => 'Bonus (sudah termasuk di harga)',
+        'tiers' => 'Tingkatan / level',
+        'buy_bar' => 'Bar beli melekat (harga + tombol)',
     ];
 
     /** Sections that only make sense for one kind of business; the rest are for everyone. */
     public const ONLY = [
         'price' => 'properti', 'kpr' => 'properti',
         'product' => 'retail', 'specs' => 'retail', 'shop_perks' => 'retail', 'reviews' => 'retail',
+        'comparison' => 'digital', 'steps' => 'digital', 'bonus' => 'digital', 'tiers' => 'digital', 'buy_bar' => 'digital',
     ];
 
     public const STOCK = ['ready' => 'Ready stok', 'low' => 'Sisa sedikit', 'preorder' => 'Pre-order'];
@@ -153,7 +159,9 @@ class Sections
             'problem_solution' => Heroicon::OutlinedLightBulb, 'benefits' => Heroicon::OutlinedHandThumbUp, 'social_proof' => Heroicon::OutlinedUserGroup,
             'closing' => Heroicon::OutlinedFlag, 'slider' => Heroicon::OutlinedRectangleStack, 'icon_list' => Heroicon::OutlinedListBullet,
             'details', 'specs' => Heroicon::OutlinedTableCells, 'product' => Heroicon::OutlinedShoppingBag, 'shop_perks' => Heroicon::OutlinedTruck,
-            'reviews' => Heroicon::OutlinedChatBubbleLeftEllipsis, 'buttons' => Heroicon::OutlinedCursorArrowRays, default => Heroicon::OutlinedBars3BottomLeft,
+            'reviews' => Heroicon::OutlinedChatBubbleLeftEllipsis, 'buttons' => Heroicon::OutlinedCursorArrowRays,
+            'comparison' => Heroicon::OutlinedScale, 'steps' => Heroicon::OutlinedNumberedList, 'bonus' => Heroicon::OutlinedGift,
+            'tiers' => Heroicon::OutlinedChartBar, 'buy_bar' => Heroicon::OutlinedShoppingCart, default => Heroicon::OutlinedBars3BottomLeft,
         };
     }
 
@@ -480,6 +488,52 @@ class Sections
                     TextInput::make('value')->label('Isi')->required()->maxLength(160),
                 ]),
             ],
+            'comparison' => [
+                self::heading('Bedanya apa?'),
+                Grid::make(['default' => 1, 'sm' => 2])->schema([
+                    Group::make([
+                        TextInput::make('left_title')->label('Kolom kiri (yang biasa)')->default('Biasa')->maxLength(60),
+                        Repeater::make('left_items')->label('Poin kiri')->simple(TextInput::make('text')->required()->maxLength(120))->maxItems(8)->defaultItems(0),
+                    ]),
+                    Group::make([
+                        TextInput::make('right_title')->label('Kolom kanan (punya kami)')->default('Punya kami')->maxLength(60),
+                        Repeater::make('right_items')->label('Poin kanan')->simple(TextInput::make('text')->required()->maxLength(120))->maxItems(8)->defaultItems(0),
+                    ]),
+                ]),
+            ],
+            'steps' => [
+                self::heading('Cara pakainya'),
+                TextInput::make('intro')->label('Kalimat pengantar')->maxLength(200),
+                Repeater::make('items')->label('Langkah')->maxItems(6)->defaultItems(0)->columns(2)->schema([
+                    TextInput::make('title')->label('Langkah')->required()->maxLength(80),
+                    TextInput::make('text')->label('Penjelasan')->maxLength(200),
+                ]),
+            ],
+            'bonus' => [
+                self::heading('Bonus untuk Anda'),
+                TextInput::make('badge')->label('Label bonus')->default('Sudah termasuk di harga')->maxLength(60),
+                Repeater::make('items')->label('Bonus')->maxItems(4)->defaultItems(0)->columns(2)->schema([
+                    TextInput::make('title')->label('Nama bonus')->required()->maxLength(80),
+                    TextInput::make('text')->label('Isi bonus')->maxLength(200),
+                ]),
+            ],
+            'tiers' => [
+                self::heading('Tingkatan'),
+                TextInput::make('intro')->label('Kalimat pengantar')->maxLength(200),
+                Repeater::make('items')->label('Tingkat')->maxItems(6)->defaultItems(0)->columns(2)->schema([
+                    TextInput::make('name')->label('Nama tingkat')->required()->maxLength(60),
+                    TextInput::make('text')->label('Penjelasan')->maxLength(200),
+                ]),
+            ],
+            'buy_bar' => [
+                TextInput::make('name')->label('Nama produk')->required()->maxLength(80),
+                Grid::make(['default' => 1, 'sm' => 2])->schema([
+                    TextInput::make('price')->label('Harga (Rp)')->numeric()->minValue(0)->prefix('Rp'),
+                    TextInput::make('compare_price')->label('Harga coret (Rp, opsional)')->numeric()->minValue(0)->prefix('Rp'),
+                ]),
+                TextInput::make('button')->label('Teks tombol')->default('Beli sekarang')->maxLength(30)
+                    ->helperText('Bar menempel di bawah layar; tombolnya menggulir ke formulir di halaman ini.'),
+            ],
             default => [
                 self::heading(),
                 RichEditor::make('html')->label('Isi')->toolbarButtons([['bold', 'italic', 'link'], ['bulletList', 'orderedList']])
@@ -516,6 +570,7 @@ class Sections
         return [
             'name' => $product->name,
             'price' => $product->price_from !== null ? (int) $product->price_from : null,
+            'compare_price' => $product->compare_price !== null && $product->price_from !== null && (int) $product->compare_price > (int) $product->price_from ? (int) $product->compare_price : null,
             'variants' => array_values(array_unique($variants)),
             'sizes' => array_values(array_unique($sizes)),
             'specs' => $specs,

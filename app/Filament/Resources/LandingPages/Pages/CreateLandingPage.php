@@ -59,6 +59,11 @@ class CreateLandingPage extends CreateRecord
                         $catalog['sizes'] !== [] ? ['sizes' => $catalog['sizes']] : []);
                 }
 
+                if ($catalog && $block['type'] === 'buy_bar') {
+                    $blocks[$i]['props'] = array_merge($block['props'], ['name' => $catalog['name']],
+                        $catalog['price'] !== null ? ['price' => $catalog['price'], 'compare_price' => $catalog['compare_price']] : []);
+                }
+
                 if ($catalog && $catalog['specs'] !== [] && $block['type'] === 'specs') {
                     $blocks[$i]['props']['rows'] = $catalog['specs'];
                 }
@@ -67,7 +72,8 @@ class CreateLandingPage extends CreateRecord
             $product = (array) (collect($blocks)->firstWhere('type', 'product')['props'] ?? []);
             $choice = $data['order_form'] ?? 'new';
             $formId = is_numeric($choice) ? LeadForm::query()->whereKey((int) $choice)->value('id') : null;
-            $formId ??= FormTemplates::createOrderForm($catalog['name'] ?? '', array_column((array) ($product['variants'] ?? []), 'name') ?: ($catalog['variants'] ?? []))->getKey();
+            $formId ??= FormTemplates::createOrderForm($catalog['name'] ?? '', array_column((array) ($product['variants'] ?? []), 'name') ?: ($catalog['variants'] ?? []),
+                $template['order_form'] ?? FormTemplates::ORDER)->getKey();
 
             if ($catalog) {
                 // The product's name where the template says [Nama produk].

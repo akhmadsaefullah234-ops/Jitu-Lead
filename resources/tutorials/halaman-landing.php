@@ -42,6 +42,7 @@ return [
                 'highlight' => ['a:has-text("Pratinjau di tab baru")', 'button:text-is("HP")']],
         ],
     ],
-    'tips' => ['Unggah foto asli {item}. Foto dikecilkan otomatis; batas unggah 8 MB, GIF 9 MB.'],
+    'tips' => ['Unggah foto asli {item}. Foto dikecilkan otomatis; batas unggah 8 MB, GIF 9 MB.',
+        'Agensi Produk digital punya templat <b>Produk digital</b>: perbandingan, cara pakai, bonus "Sudah termasuk di harga", tingkatan, bar beli yang menempel di bawah, dan formulir pesan (nama, WhatsApp, email opsional, perangkat, cara bayar). Pakai bahasa netral; sebagian penyedia pembayaran dan iklan menolak konten dewasa.'],
     'perhatian' => ['Hanya halaman berstatus Terbit yang bisa dibuka umum. Tulis spesifikasi yang benar (bahan, ukuran, warna, retur), dan isi Tanya jawab agar pertanyaan umum terjawab sebelum pembeli chat.'],
 ];

@@ -13,6 +13,7 @@ use App\LandingPages\Navigation;
 use App\LandingPages\PageLayout;
 use App\LandingPages\Sections;
 use App\LandingPages\Templates;
+use App\LeadForms\FormTemplates;
 use App\Models\LandingPage;
 use App\Models\LeadForm;
 use App\Models\Property;
@@ -94,7 +95,8 @@ class LandingPageResource extends Resource
                         ->visible(fn (Get $get) => Templates::sellsProduct($get('template')))
                         ->helperText('Nama, harga, varian, ukuran, dan rincian produk diisi otomatis, jadi tidak perlu diketik ulang. Foto diunggah di editor.'),
                     Select::make('order_form')->label('Formulir order')->native(false)->default('new')->selectablePlaceholder(false)
-                        ->options(fn () => ['new' => 'Buat formulir baru dari template "Order produk"'] + LeadForm::query()->orderBy('name')->pluck('name', 'id')->all())
+                        ->options(fn (Get $get) => ['new' => 'Buat formulir baru dari template "'.((Templates::get($get('template'))['order_form'] ?? null) === FormTemplates::ORDER_DIGITAL ? 'Order produk digital' : 'Order produk').'"']
+                            + LeadForm::query()->orderBy('name')->pluck('name', 'id')->all())
                         ->visible(fn (Get $get) => Templates::sellsProduct($get('template')))
                         ->helperText('Satu formulir order per produk memudahkan pilihan varian dan ringkasan WhatsApp-nya.'),
                     self::titleField(),
