@@ -237,7 +237,9 @@
         </div></div></section>
     @endif
 
-    <footer class="foot"><div class="wrap">&copy; {{ now()->year }} {{ $tenant->name }} · <a href="{{ url('/kebijakan-privasi') }}" rel="noopener" target="_blank" style="color:inherit">Kebijakan Privasi</a> · <a href="{{ url('/syarat-layanan') }}" rel="noopener" target="_blank" style="color:inherit">Syarat Layanan</a></div></footer>
+    <footer class="foot"><div class="wrap">@if ($profile->about())<p style="margin:0 0 .5rem">{{ $profile->about() }}</p>@endif
+        @if ($profile->address() || $profile->email() || $profile->website())<p style="margin:0 0 .5rem">{{ implode(' · ', array_filter([$profile->address(), $profile->email()])) }}@if ($profile->website()){{ $profile->address() || $profile->email() ? ' · ' : '' }}<a href="{{ $profile->website() }}" rel="noopener" target="_blank" style="color:inherit">{{ preg_replace('#^https?://(www\.)?#i', '', rtrim($profile->website(), '/')) }}</a>@endif</p>@endif
+        &copy; {{ now()->year }} {{ $tenant->name }} · <a href="{{ url('/kebijakan-privasi') }}" rel="noopener" target="_blank" style="color:inherit">Kebijakan Privasi</a> · <a href="{{ url('/syarat-layanan') }}" rel="noopener" target="_blank" style="color:inherit">Syarat Layanan</a></div></footer>
 
     @if ($nav['dock'])
         <nav class="dock" aria-label="Aksi cepat">@foreach ($nav['dock'] as $b)@include('public.partials.button', ['b' => $b, 'ctx' => $btnCtx, 'tracking' => $tracking])@endforeach</nav>

@@ -121,7 +121,7 @@ class WelcomeFields
         $price = (int) ($product?->price_from ?: 349000);
 
         return WelcomeText::fill($text, [
-            'nama' => 'Rina', 'agen' => auth()->user()?->name ?? 'Andi', 'agensi' => $tenant?->name ?? 'Toko Anda',
+            'nama' => 'Rina', 'agen' => auth()->user()?->name ?? 'Andi', 'agensi' => $tenant?->name ?? 'Toko Anda', 'wa_agensi' => '08990000001',
             'produk' => $name, 'properti' => $name, 'daftar_produk' => '1. '.$name,
             'ringkasan' => $name.' (Hitam) x2, dikirim ke Coblong, Kota Bandung',
             'total' => WelcomeText::rupiah($price * 2).' + ongkir Rp18.000 (JNE REG) = '.WelcomeText::rupiah($price * 2 + 18000),

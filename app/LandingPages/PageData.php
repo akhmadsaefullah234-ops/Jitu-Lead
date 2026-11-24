@@ -2,6 +2,7 @@
 
 namespace App\LandingPages;
 
+use App\Agency\AgencyProfile;
 use App\Models\LandingPage;
 use App\Models\LeadForm;
 use App\Models\Tenant;
@@ -28,7 +29,9 @@ class PageData
         $font = LandingPage::FONTS[$page->font] ?? LandingPage::FONTS['modern'];
         $tenantId = $tenant->getKey();
 
-        $number = self::digits($page->whatsapp_number) ?: self::agencyNumber();
+        // Profil agensi fills in what the page leaves empty: the WhatsApp number, the logo, the footer.
+        $profile = AgencyProfile::for($tenant);
+        $number = self::digits($page->whatsapp_number) ?: ($profile->whatsapp() ?? '') ?: self::agencyNumber();
         $hero = collect($sections)->firstWhere('type', 'hero');
 
         $description = $page->description
@@ -37,7 +40,7 @@ class PageData
 
         $product = collect($sections)->firstWhere('type', 'product');
         $og = Embeds::image($page->og_image, $tenantId) ?? Embeds::image($hero['props']['image'] ?? null, $tenantId)
-            ?? (Embeds::images($product['props']['images'] ?? [], $tenantId)[0] ?? null) ?? Embeds::image($page->logo, $tenantId);
+            ?? (Embeds::images($product['props']['images'] ?? [], $tenantId)[0] ?? null) ?? Embeds::image($page->logo, $tenantId) ?? $profile->logoUrl();
 
         $tracking = $preview ? null : TrackingSetting::active();
         $formIds = collect($sections)->where('type', 'form')->map(fn ($s) => (int) ($s['props']['form_id'] ?? 0))->filter()->all();
@@ -77,7 +80,8 @@ class PageData
             'color' => $color,
             'bodyFont' => $font[1],
             'headingFont' => $font[2],
-            'logo' => Embeds::image($page->logo, $tenantId),
+            'logo' => Embeds::image($page->logo, $tenantId) ?? $profile->logoUrl(),
+            'profile' => $profile,
             'og' => $og,
             'metaTitle' => $page->meta_title ?: $page->title.' - '.$tenant->name,
             'metaDescription' => Str::limit(trim(strip_tags((string) $description)), 200),

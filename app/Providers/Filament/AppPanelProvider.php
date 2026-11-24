@@ -3,6 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Billing\TrialLock;
+use App\Filament\Pages\Auth\MyProfile;
 use App\Filament\Pages\Auth\Register;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\Tenancy\RegisterAgency;
@@ -43,6 +44,9 @@ class AppPanelProvider extends PanelProvider
             ->registration(config('jitu.registration') === 'closed' ? null : Register::class)
             ->passwordReset()
             ->emailVerification()
+            // Profil saya: a new e-mail address is used only after the link sent to it is opened.
+            ->profile(MyProfile::class, isSimple: false)
+            ->emailChangeVerification()
             ->tenant(Tenant::class, slugAttribute: 'slug')
             ->tenantRegistration(RegisterAgency::class)
             ->tenantMiddleware([SetCurrentTenant::class], isPersistent: true)

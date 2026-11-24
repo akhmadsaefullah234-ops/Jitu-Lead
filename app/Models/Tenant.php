@@ -29,6 +29,7 @@ class Tenant extends Model
             'pipeline_settings' => 'array',
             'ai_settings' => 'array',
             'payment_settings' => 'array',
+            'profile' => 'array',
         ];
     }
 

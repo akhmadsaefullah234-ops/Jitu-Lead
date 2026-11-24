@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\LandingPages\Pages;
 
+use App\Agency\AgencyProfile;
 use App\Billing\Deny;
 use App\Billing\PlanLimits;
 use App\Filament\Resources\LandingPages\LandingPageResource;
@@ -10,6 +11,7 @@ use App\LandingPages\Sections;
 use App\LandingPages\Templates;
 use App\LeadForms\FormTemplates;
 use App\Models\LeadForm;
+use App\Support\CurrentTenant;
 use App\Support\Industry;
 use Filament\Resources\Pages\CreateRecord;
 
@@ -82,7 +84,8 @@ class CreateLandingPage extends CreateRecord
 
         return [
             'title' => $data['title'], 'slug' => $data['slug'], 'template' => $key, 'status' => 'draft',
-            'color' => $template['color'], 'font' => $template['font'], 'description' => $template['meta'] ?: null,
+            // A new page takes the agency's brand colour (Profil agensi) when it has one.
+            'color' => AgencyProfile::for(app(CurrentTenant::class)->get())->color() ?? $template['color'], 'font' => $template['font'], 'description' => $template['meta'] ?: null,
             'blocks' => $blocks, 'property_id' => $propertyId,
             'page_events' => $template['page_events'] ?? null,
             'navigation' => Navigation::of($template['navigation'] ?? []),

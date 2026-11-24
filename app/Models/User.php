@@ -6,6 +6,7 @@ use App\Enums\Role;
 use App\Support\PhoneNumber;
 use Database\Factories\UserFactory;
 use Filament\Models\Contracts\FilamentUser;
+use Filament\Models\Contracts\HasAvatar;
 use Filament\Models\Contracts\HasTenants;
 use Filament\Panel;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
@@ -18,10 +19,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Storage;
 
 #[Fillable(['name', 'email', 'password'])]
 #[Hidden(['password', 'remember_token'])]
-class User extends Authenticatable implements FilamentUser, HasTenants, MustVerifyEmail
+class User extends Authenticatable implements FilamentUser, HasAvatar, HasTenants, MustVerifyEmail
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
@@ -51,6 +53,20 @@ class User extends Authenticatable implements FilamentUser, HasTenants, MustVeri
     public function hasVerifiedWhatsapp(): bool
     {
         return filled($this->whatsapp) && $this->whatsapp_verified_at !== null && $this->whatsapp_verified_number === $this->whatsapp;
+    }
+
+    /** The photo set on Profil saya (public disk, avatars/{user id}/...), or null for the initials. */
+    public function getFilamentAvatarUrl(): ?string
+    {
+        $path = (string) $this->avatar_path;
+
+        if (! preg_match('#^avatars/'.$this->getKey().'/[A-Za-z0-9._-]+$#', $path)) {
+            return null;
+        }
+
+        $url = Storage::disk('public')->url($path);
+
+        return str_starts_with($url, '/') ? url($url) : $url;
     }
 
     public function pushSubscriptions(): HasMany
