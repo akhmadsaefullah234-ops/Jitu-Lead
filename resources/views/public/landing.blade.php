@@ -202,6 +202,21 @@
         .preview-tag { background: #111827; color: #fff; text-align: center; font-size: .8125rem; padding: .35rem; }
         @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
     </style>
+    @if (collect($sections)->pluck('type')->intersect(['comparison', 'steps', 'bonus', 'tiers', 'buy_bar'])->isNotEmpty())
+    <style>
+        .cmp ul { list-style: none; padding: 0; margin: .5rem 0 0; display: grid; gap: .45rem; }
+        .cmp li { display: flex; gap: .5rem; overflow-wrap: anywhere; } .cmp li span { flex: none; font-weight: 800; }
+        .cmp-a li span { color: #b91c1c; } .cmp-b { border: 2px solid var(--c); } .cmp-b li span { color: #047857; }
+        ol.steps { list-style: none; padding: 0; margin: 0; }
+        .bonus .badge { display: inline-block; background: #047857; color: #fff; font-weight: 700; font-size: .8rem; padding: .2rem .6rem; border-radius: 999px; margin-bottom: .5rem; }
+        .buybar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 32; background: #fff; border-top: 1px solid var(--line); padding: .55rem .8rem calc(.55rem + env(safe-area-inset-bottom)); }
+        .buybar-in { max-width: 72rem; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+        .buybar-t { min-width: 0; line-height: 1.25; } .buybar-t b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .buybar-t s { color: var(--mute); font-size: .85rem; } .buybar-t strong { color: var(--c); }
+        .buybar .btn { flex: none; padding: .7rem 1.1rem; }
+        body:has(.buybar) { padding-bottom: 4.75rem; } body:has(.buybar) .dock { display: none; } body:has(.buybar) .waf { bottom: calc(5.25rem + env(safe-area-inset-bottom)); }
+    </style>
+    @endif
     @if ($blockCss !== '')<style>{!! $blockCss !!}</style>@endif
     @if ($animated)<script>document.documentElement.classList.add('js');</script>@endif
     @include('public.partials.button-styles')

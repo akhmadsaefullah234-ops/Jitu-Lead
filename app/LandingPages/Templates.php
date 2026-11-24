@@ -2,6 +2,8 @@
 
 namespace App\LandingPages;
 
+use App\LeadForms\FormTemplates;
+
 /**
  * Starter pages: a section order plus Indonesian sample copy to be replaced.
  * Nothing here promises returns, discounts, or approval; the texts are
@@ -10,6 +12,8 @@ namespace App\LandingPages;
 class Templates
 {
     public const BLANK = 'kosong';
+
+    public const DIGITAL = 'produk_digital';
 
     /**
      * The templates an agency of this industry can start from (null: all); templates without an industry are for everyone.
@@ -266,12 +270,56 @@ class Templates
                 ],
             ],
 
+            self::DIGITAL => [
+                'industry' => 'digital', 'product' => true, 'order_form' => FormTemplates::ORDER_DIGITAL,
+                'name' => 'Produk digital', 'description' => 'Untuk satu produk digital: judul, perbandingan, cara pakai, manfaat, bonus, tingkatan, tanya jawab, bar beli yang menempel, dan formulir pesan.',
+                'color' => '#047857', 'font' => 'modern', 'meta' => '[Satu kalimat ringkas tentang [Nama produk] untuk pratinjau link]',
+                'blocks' => self::digitalBlocks(),
+            ],
+
             'konversi_produk' => self::conversion('retail', 'Produk – konversi tinggi', 'Satu tujuan: pembeli mengisi formulir Order produk. Hero, masalah & solusi, manfaat, bukti sosial, tanya jawab, penutup.', true, 'shop', true),
             'konversi_produk_wa' => self::conversion('retail', 'Produk – langsung WhatsApp', 'Struktur konversi yang sama, semua tombol langsung membuka WhatsApp admin dengan pesan otomatis.', false, 'shop'),
             'konversi_properti' => self::conversion('properti', 'Properti – konversi tinggi (formulir)', 'Satu tujuan: calon pembeli mengisi formulir. Hero, masalah & solusi, manfaat, fasilitas, bukti sosial, tanya jawab, penutup.', true, 'property'),
             'konversi_properti_wa' => self::conversion('properti', 'Properti – konversi tinggi (WhatsApp)', 'Struktur konversi yang sama, semua tombol langsung membuka WhatsApp marketing bergiliran.', false, 'property'),
             'konversi_layanan' => self::conversion(null, 'Layanan – konversi tinggi', 'Untuk jasa: hero, masalah & solusi, manfaat, bukti sosial, tanya jawab, penutup, dan formulir.', true, 'service'),
         ];
+    }
+
+    /**
+     * The "Produk digital" page: Hero, Perbandingan, Cara pakai (4 langkah), Manfaat, Bonus, Tingkatan, Tanya jawab, Bar
+     * beli and the order form. Without copy the texts are bracketed placeholders; a seeded page passes its own copy
+     * (App\Console\Commands\SeedLudoPasutriCommand). Neutral wording only, never claims or numbers that are not given.
+     *
+     * @param  array<string, mixed>  $c  per block type, props that replace the placeholders
+     * @return list<array{type: string, version: int, props: array<string, mixed>}>
+     */
+    public static function digitalBlocks(array $c = []): array
+    {
+        $cta = ['label' => 'Beli sekarang', 'action' => 'scroll', 'color' => 'light', 'size' => 'lg', 'icon' => 'cart'];
+        $defaults = [
+            'hero' => ['headline' => '[Nama produk]: [nilai utama dalam satu kalimat]', 'subheadline' => '[Untuk siapa] yang ingin [hasil], langsung dibuka di HP.',
+                'visual' => 'image', 'image' => null, 'buttons' => [$cta], 'assurance' => '[Akses instan setelah bayar] • [Tanpa langganan]'],
+            'comparison' => ['heading' => 'Bedanya apa?', 'left_title' => '[Cara biasa]', 'left_items' => [['text' => '[Kekurangan cara biasa]'], ['text' => '[Kekurangan lain]']],
+                'right_title' => '[Nama produk]', 'right_items' => [['text' => '[Kelebihan produk Anda]'], ['text' => '[Kelebihan lain]']]],
+            'steps' => ['heading' => 'Cara pakainya', 'intro' => '', 'items' => [
+                ['title' => 'Bayar', 'text' => '[Cara bayar yang tersedia]'], ['title' => 'Terima tautan', 'text' => 'Tautan akses khusus Anda dikirim lewat WhatsApp.'],
+                ['title' => 'Unduh', 'text' => '[Apa yang diunduh]'], ['title' => 'Buka dan pakai', 'text' => '[Cara membukanya]'],
+            ]],
+            'benefits' => ['heading' => 'Yang Anda dapatkan', 'intro' => '', 'items' => [
+                ['title' => '[Manfaat 1]', 'text' => '[Penjelasan singkat]'], ['title' => '[Manfaat 2]', 'text' => '[Penjelasan singkat]'], ['title' => '[Manfaat 3]', 'text' => '[Penjelasan singkat]'],
+            ]],
+            'bonus' => ['heading' => 'Bonus untuk Anda', 'badge' => 'Sudah termasuk di harga', 'items' => [['title' => '[Bonus 1]', 'text' => '[Isi bonus]']]],
+            'tiers' => ['heading' => 'Tingkatan', 'intro' => '', 'items' => [['name' => '[Tingkat 1]', 'text' => '[Penjelasan]'], ['name' => '[Tingkat 2]', 'text' => '[Penjelasan]'], ['name' => '[Tingkat 3]', 'text' => '[Penjelasan]']]],
+            'faq' => ['heading' => 'Tanya jawab', 'items' => [
+                ['q' => 'Bisa dibuka di perangkat apa?', 'a' => '[Perangkat yang didukung]'],
+                ['q' => 'Ada biaya langganan?', 'a' => '[Jawaban]'],
+                ['q' => 'Bagaimana bila tidak bisa dibuka?', 'a' => 'Balas chat WhatsApp kami, admin akan membantu.'],
+            ]],
+            'buy_bar' => ['name' => '[Nama produk]', 'price' => null, 'compare_price' => null, 'button' => 'Beli sekarang'],
+            'form' => ['heading' => 'Pesan sekarang', 'intro' => 'Isi data singkat ini, admin kami lanjutkan lewat WhatsApp.'],
+        ];
+
+        return array_map(fn (string $type) => self::b($type, array_replace($defaults[$type], (array) ($c[$type] ?? []))), array_keys($defaults));
     }
 
     /**
