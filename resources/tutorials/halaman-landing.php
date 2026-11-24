@@ -43,6 +43,9 @@ return [
         ],
     ],
     'tips' => ['Unggah foto asli {item}. Foto dikecilkan otomatis; batas unggah 8 MB, GIF 9 MB.',
-        'Agensi Produk digital punya templat <b>Produk digital</b>: perbandingan, cara pakai, bonus "Sudah termasuk di harga", tingkatan, bar beli yang menempel di bawah, dan formulir pesan (nama, WhatsApp, email opsional, perangkat, cara bayar). Pakai bahasa netral; sebagian penyedia pembayaran dan iklan menolak konten dewasa.'],
+        'Agensi Produk digital punya templat <b>Produk digital</b>: gambar produk di samping judul, perbandingan, kartu jenis berwarna, tangkapan layar HP, cara pakai, pita bonus "Sudah termasuk di harga", tingkatan bertingkat 1-2-3, bar beli yang menempel di bawah, dan formulir pesan (nama, WhatsApp, email opsional, perangkat, cara bayar). Pakai bahasa netral; sebagian penyedia pembayaran dan iklan menolak konten dewasa.',
+        'Agensi Produk digital bisa memilih <b>Gaya halaman: Gelap</b> di tab Tampilan, dengan <b>Warna aksen</b> untuk tombol utama, garis judul, centang, harga, dan label. Templat Produk digital langsung memakai gaya gelap.',
+        'Bagian <b>Tangkapan layar HP</b> tidak tampil selama belum ada gambar. Unggah 1 sampai 4 gambar tegak dari layar HP; gambar dikecilkan otomatis dan dimuat saat digulir.',
+        'Di formulir Produk digital, pilihan <b>QRIS / e-wallet</b> baru tampil setelah pembayaran otomatis (iPaymu) aktif. Sebelum itu pembeli hanya melihat Transfer bank.'],
     'perhatian' => ['Hanya halaman berstatus Terbit yang bisa dibuka umum. Tulis spesifikasi yang benar (bahan, ukuran, warna, retur), dan isi Tanya jawab agar pertanyaan umum terjawab sebelum pembeli chat.'],
 ];

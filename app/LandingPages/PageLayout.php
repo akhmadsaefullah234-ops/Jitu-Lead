@@ -14,6 +14,8 @@ use Filament\Schemas\Components\Utilities\Get;
  * spacing pages always had (48px), so existing pages do not change.
  *
  *     {spacing: ''|tight|normal|loose|custom, spacing_px, spacing_mobile: ''|tight|normal|loose|custom, spacing_mobile_px}
+ *
+ * The same JSON keeps the page's theme and accent colour (PageTheme).
  */
 class PageLayout
 {
@@ -63,7 +65,7 @@ class PageLayout
             }
         }
 
-        return $out;
+        return $out + PageTheme::clean($l);
     }
 
     /** Pixels for one device, or null when it keeps the default. */

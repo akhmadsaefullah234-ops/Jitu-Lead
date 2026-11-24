@@ -15,6 +15,9 @@ class Templates
 
     public const DIGITAL = 'produk_digital';
 
+    /** The "Produk digital" page is dark with a soft gold accent (App\LandingPages\PageTheme). */
+    public const DIGITAL_LAYOUT = ['theme' => 'gelap', 'accent' => '#e9c27b'];
+
     /**
      * The templates an agency of this industry can start from (null: all); templates without an industry are for everyone.
      *
@@ -273,7 +276,8 @@ class Templates
             self::DIGITAL => [
                 'industry' => 'digital', 'product' => true, 'order_form' => FormTemplates::ORDER_DIGITAL,
                 'name' => 'Produk digital', 'description' => 'Untuk satu produk digital: judul, perbandingan, cara pakai, manfaat, bonus, tingkatan, tanya jawab, bar beli yang menempel, dan formulir pesan.',
-                'color' => '#047857', 'font' => 'modern', 'meta' => '[Satu kalimat ringkas tentang [Nama produk] untuk pratinjau link]',
+                'color' => '#5b2a86', 'font' => 'elegan', 'meta' => '[Satu kalimat ringkas tentang [Nama produk] untuk pratinjau link]',
+                'layout' => self::DIGITAL_LAYOUT,
                 'blocks' => self::digitalBlocks(),
             ],
 
@@ -286,7 +290,8 @@ class Templates
     }
 
     /**
-     * The "Produk digital" page: Hero, Perbandingan, Cara pakai (4 langkah), Manfaat, Bonus, Tingkatan, Tanya jawab, Bar
+     * The "Produk digital" page: Hero (product picture beside the text), Perbandingan, Kartu jenis, Tangkapan layar HP
+     * (empty, so hidden until pictures are added), Cara pakai (4 langkah), Manfaat, Bonus, Tingkatan, Tanya jawab, Bar
      * beli and the order form. Without copy the texts are bracketed placeholders; a seeded page passes its own copy
      * (App\Console\Commands\SeedLudoPasutriCommand). Neutral wording only, never claims or numbers that are not given.
      *
@@ -298,9 +303,14 @@ class Templates
         $cta = ['label' => 'Beli sekarang', 'action' => 'scroll', 'color' => 'light', 'size' => 'lg', 'icon' => 'cart'];
         $defaults = [
             'hero' => ['headline' => '[Nama produk]: [nilai utama dalam satu kalimat]', 'subheadline' => '[Untuk siapa] yang ingin [hasil], langsung dibuka di HP.',
-                'visual' => 'image', 'image' => null, 'buttons' => [$cta], 'assurance' => '[Akses instan setelah bayar] • [Tanpa langganan]'],
+                'visual' => 'product', 'image' => null, 'image_alt' => '', 'buttons' => [$cta], 'assurance' => '[Akses instan setelah bayar] • [Tanpa langganan]'],
             'comparison' => ['heading' => 'Bedanya apa?', 'left_title' => '[Cara biasa]', 'left_items' => [['text' => '[Kekurangan cara biasa]'], ['text' => '[Kekurangan lain]']],
                 'right_title' => '[Nama produk]', 'right_items' => [['text' => '[Kelebihan produk Anda]'], ['text' => '[Kelebihan lain]']]],
+            'kind_cards' => ['heading' => '[Isi produk]', 'intro' => '', 'items' => [
+                ['icon_type' => 'emoji', 'emoji' => '✨', 'title' => '[Jenis 1]', 'text' => '[Penjelasan singkat]', 'example' => '[Contoh isi]', 'color' => 'ungu'],
+                ['icon_type' => 'emoji', 'emoji' => '💬', 'title' => '[Jenis 2]', 'text' => '[Penjelasan singkat]', 'example' => '[Contoh isi]', 'color' => 'biru'],
+            ]],
+            'phone_shots' => ['heading' => 'Tampilan di HP', 'items' => []],
             'steps' => ['heading' => 'Cara pakainya', 'intro' => '', 'items' => [
                 ['title' => 'Bayar', 'text' => '[Cara bayar yang tersedia]'], ['title' => 'Terima tautan', 'text' => 'Tautan akses khusus Anda dikirim lewat WhatsApp.'],
                 ['title' => 'Unduh', 'text' => '[Apa yang diunduh]'], ['title' => 'Buka dan pakai', 'text' => '[Cara membukanya]'],
@@ -308,7 +318,7 @@ class Templates
             'benefits' => ['heading' => 'Yang Anda dapatkan', 'intro' => '', 'items' => [
                 ['title' => '[Manfaat 1]', 'text' => '[Penjelasan singkat]'], ['title' => '[Manfaat 2]', 'text' => '[Penjelasan singkat]'], ['title' => '[Manfaat 3]', 'text' => '[Penjelasan singkat]'],
             ]],
-            'bonus' => ['heading' => 'Bonus untuk Anda', 'badge' => 'Sudah termasuk di harga', 'items' => [['title' => '[Bonus 1]', 'text' => '[Isi bonus]']]],
+            'bonus' => ['heading' => 'Bonus untuk Anda', 'badge' => 'Sudah termasuk di harga {harga}', 'show_compare' => false, 'items' => [['title' => '[Bonus 1]', 'text' => '[Isi bonus]']]],
             'tiers' => ['heading' => 'Tingkatan', 'intro' => '', 'items' => [['name' => '[Tingkat 1]', 'text' => '[Penjelasan]'], ['name' => '[Tingkat 2]', 'text' => '[Penjelasan]'], ['name' => '[Tingkat 3]', 'text' => '[Penjelasan]']]],
             'faq' => ['heading' => 'Tanya jawab', 'items' => [
                 ['q' => 'Bisa dibuka di perangkat apa?', 'a' => '[Perangkat yang didukung]'],

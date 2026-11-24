@@ -11,6 +11,7 @@ use App\LandingPages\AbTest;
 use App\LandingPages\BlockStyle;
 use App\LandingPages\Navigation;
 use App\LandingPages\PageLayout;
+use App\LandingPages\PageTheme;
 use App\LandingPages\Sections;
 use App\LandingPages\Templates;
 use App\LeadForms\FormTemplates;
@@ -152,6 +153,7 @@ class LandingPageResource extends Resource
                             ColorPicker::make('color')->label('Warna utama')->default('#dc2626')->required()->regex(LandingPage::COLOR_PATTERN),
                             Sections::upload('logo', 600)->label('Logo (opsional)'),
                         ]),
+                        PageTheme::section(),
                         PageLayout::section(),
                     ]),
                     Tab::make('Pixel & SEO')->icon(Heroicon::OutlinedChartBar)->schema([

@@ -44,6 +44,25 @@ class Embeds
         return preg_match('#^https?://[^\s<>"\']+$#i', $url) ? $url : null;
     }
 
+    /**
+     * Width and height of an uploaded image of this agency, for the width/height attributes that keep the page from
+     * jumping while it loads. Null when it is not one of the agency's images or cannot be read.
+     *
+     * @return array{0: int, 1: int}|null
+     */
+    public static function imageSize(mixed $value, int|string|null $tenantId): ?array
+    {
+        if (self::image($value, $tenantId) === null) {
+            return null;
+        }
+
+        $disk = Storage::disk('public');
+        $path = self::path($value);
+        $size = $disk->exists($path) ? @getimagesize($disk->path($path)) : false;
+
+        return $size && $size[0] > 0 && $size[1] > 0 ? [(int) $size[0], (int) $size[1]] : null;
+    }
+
     /** Public URL of an uploaded image, only if it sits in the given agency's folder. */
     public static function image(mixed $value, int|string|null $tenantId): ?string
     {

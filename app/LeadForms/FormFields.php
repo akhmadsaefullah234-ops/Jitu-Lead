@@ -548,6 +548,36 @@ class FormFields
         return $out;
     }
 
+    /** Payment choices that only work through the online payment gateway (iPaymu). */
+    public const GATEWAY_PAYMENT = '/\\b(qris|e-?wallet|virtual\\s*account|va)\\b/i';
+
+    /**
+     * The fields without the gateway-only choices of the payment field, for an agency whose gateway is off. A field
+     * that would be left with no choice at all keeps its choices.
+     *
+     * @param  list<array<string, mixed>>  $fields
+     * @return list<array<string, mixed>>
+     */
+    public static function withoutGatewayPayments(array $fields): array
+    {
+        foreach ($fields as $i => $f) {
+            if (($f['maps_to'] ?? null) !== 'payment_type' || empty($f['options'])) {
+                continue;
+            }
+
+            $keep = array_values(array_filter($f['options'], fn ($o) => ! preg_match(self::GATEWAY_PAYMENT, (string) $o)));
+
+            if ($keep !== [] && count($keep) < count($f['options'])) {
+                $fields[$i]['options'] = $keep;
+                if (isset($f['payment_map'])) {
+                    $fields[$i]['payment_map'] = array_intersect_key($f['payment_map'], array_flip($keep));
+                }
+            }
+        }
+
+        return $fields;
+    }
+
     /** @return list<string> the choices of a choice field (from the payment list when it has one) */
     private static function optionsOf(array $f): array
     {

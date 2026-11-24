@@ -18,6 +18,9 @@ use Illuminate\Support\Str;
  */
 class PageData
 {
+    /** Sections whose CSS is printed only on pages that use them, so other pages keep their exact stylesheet. */
+    public const DIGITAL_TYPES = ['comparison', 'steps', 'bonus', 'tiers', 'buy_bar', 'kind_cards', 'phone_shots'];
+
     /**
      * @return array<string, mixed>
      */
@@ -73,6 +76,10 @@ class PageData
         return [
             'tenant' => $tenant,
             'blockCss' => $blockCss,
+            'themeCss' => PageTheme::css($page->layout),
+            'productPrice' => self::productPrice($page, $sections),
+            'digitalCss' => (bool) array_intersect($types, self::DIGITAL_TYPES)
+                || collect($sections)->contains(fn ($s) => $s['type'] === 'hero' && ($s['props']['visual'] ?? '') === 'product'),
             'styled' => $styled,
             'animated' => $animated,
             'page' => $page,
@@ -99,6 +106,28 @@ class PageData
             'primaryForm' => $needsPrimary && ($hasForm || $autoForm) ? LeadForm::primary() : null,
             'btnCtx' => $btnCtx,
         ];
+    }
+
+    /**
+     * The page's price for "{harga}" in the bonus ribbon: its product's price and struck-through price, else the buy bar's.
+     *
+     * @return array{price: ?int, compare: ?int}
+     */
+    private static function productPrice(LandingPage $page, array $sections): array
+    {
+        if (! in_array('bonus', array_column($sections, 'type'), true)) {
+            return ['price' => null, 'compare' => null];
+        }
+
+        $product = $page->property;
+
+        if ($product !== null && is_numeric($product->price_from)) {
+            return ['price' => (int) $product->price_from, 'compare' => is_numeric($product->compare_price) ? (int) $product->compare_price : null];
+        }
+
+        $bar = (array) (collect($sections)->firstWhere('type', 'buy_bar')['props'] ?? []);
+
+        return ['price' => is_numeric($bar['price'] ?? null) ? (int) $bar['price'] : null, 'compare' => is_numeric($bar['compare_price'] ?? null) ? (int) $bar['compare_price'] : null];
     }
 
     public static function waLink(string $digits, string $message): string

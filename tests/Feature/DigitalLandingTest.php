@@ -42,17 +42,19 @@ class DigitalLandingTest extends TestCase
     {
         $blocks = Templates::blocks(Templates::DIGITAL);
 
-        $this->assertSame(['hero', 'comparison', 'steps', 'benefits', 'bonus', 'tiers', 'faq', 'buy_bar', 'form'], array_column($blocks, 'type'));
+        $this->assertSame(['hero', 'comparison', 'kind_cards', 'phone_shots', 'steps', 'benefits', 'bonus', 'tiers', 'faq', 'buy_bar', 'form'], array_column($blocks, 'type'));
         $this->assertSame($blocks, BlockFormat::normalize($blocks), 'every block survives the stored format');
-        $this->assertCount(4, $blocks[2]['props']['items']);
-        $this->assertSame('Sudah termasuk di harga', $blocks[4]['props']['badge']);
+        $this->assertCount(4, $blocks[4]['props']['items']);
+        $this->assertSame('Sudah termasuk di harga {harga}', $blocks[6]['props']['badge']);
+        $this->assertSame('product', $blocks[0]['props']['visual']);
+        $this->assertSame([], $blocks[3]['props']['items'], 'the phone screenshots start empty');
         $this->assertTrue(Templates::sellsProduct(Templates::DIGITAL));
 
         $this->assertArrayHasKey(Templates::DIGITAL, Templates::options('digital'));
         $this->assertArrayNotHasKey(Templates::DIGITAL, Templates::options('retail'));
         $this->assertArrayNotHasKey(Templates::DIGITAL, Templates::options('properti'));
 
-        foreach (['comparison', 'steps', 'bonus', 'tiers', 'buy_bar'] as $type) {
+        foreach (['comparison', 'steps', 'bonus', 'tiers', 'buy_bar', 'kind_cards', 'phone_shots'] as $type) {
             $this->assertArrayHasKey($type, Sections::types('digital'));
             $this->assertArrayNotHasKey($type, Sections::types('retail'), 'shops and property agencies get no new sections');
             $this->assertArrayNotHasKey($type, Sections::types('properti'));

@@ -86,6 +86,18 @@ class BlockFormat
     /** Sections the visitor sees: hidden ones are left out. */
     public static function visible(mixed $blocks): array
     {
-        return array_values(array_filter(self::normalize($blocks), fn ($b) => empty($b['props']['hidden'])));
+        return array_values(array_filter(self::normalize($blocks), fn ($b) => empty($b['props']['hidden']) && ! self::isEmpty($b)));
+    }
+
+    /** A "Kartu jenis" without cards or a "Tangkapan layar HP" without pictures is not drawn (the template starts it empty). */
+    private static function isEmpty(array $block): bool
+    {
+        $items = array_filter((array) ($block['props']['items'] ?? []), 'is_array');
+
+        return match ($block['type']) {
+            'kind_cards' => ! collect($items)->contains(fn ($it) => filled($it['title'] ?? null)),
+            'phone_shots' => ! collect($items)->contains(fn ($it) => filled($it['image'] ?? null)),
+            default => false,
+        };
     }
 }

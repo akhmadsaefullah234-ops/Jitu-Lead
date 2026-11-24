@@ -7,6 +7,7 @@ use App\Billing\Deny;
 use App\Billing\PlanLimits;
 use App\Filament\Resources\LandingPages\LandingPageResource;
 use App\LandingPages\Navigation;
+use App\LandingPages\PageLayout;
 use App\LandingPages\Sections;
 use App\LandingPages\Templates;
 use App\LeadForms\FormTemplates;
@@ -95,7 +96,7 @@ class CreateLandingPage extends CreateRecord
             'blocks' => $blocks, 'property_id' => $propertyId,
             'page_events' => $template['page_events'] ?? null,
             'navigation' => Navigation::of($template['navigation'] ?? []),
-        ];
+        ] + (isset($template['layout']) ? ['layout' => PageLayout::clean($template['layout'])] : []);
     }
 
     protected function afterCreate(): void

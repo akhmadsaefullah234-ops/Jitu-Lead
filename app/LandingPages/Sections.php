@@ -73,13 +73,19 @@ class Sections
         'bonus' => 'Bonus (sudah termasuk di harga)',
         'tiers' => 'Tingkatan / level',
         'buy_bar' => 'Bar beli melekat (harga + tombol)',
+        'kind_cards' => 'Kartu jenis (ikon, warna, contoh)',
+        'phone_shots' => 'Tangkapan layar HP',
     ];
+
+    /** The colours a "Kartu jenis" card can take. */
+    public const KIND_COLORS = ['ungu' => ['Ungu', '#7c3aed'], 'biru' => ['Biru', '#2563eb'], 'jingga' => ['Jingga', '#ea580c'], 'merah_muda' => ['Merah muda', '#db2777']];
 
     /** Sections that only make sense for one kind of business; the rest are for everyone. */
     public const ONLY = [
         'price' => 'properti', 'kpr' => 'properti',
         'product' => 'retail', 'specs' => 'retail', 'shop_perks' => 'retail', 'reviews' => 'retail',
         'comparison' => 'digital', 'steps' => 'digital', 'bonus' => 'digital', 'tiers' => 'digital', 'buy_bar' => 'digital',
+        'kind_cards' => 'digital', 'phone_shots' => 'digital',
     ];
 
     public const STOCK = ['ready' => 'Ready stok', 'low' => 'Sisa sedikit', 'preorder' => 'Pre-order'];
@@ -161,7 +167,8 @@ class Sections
             'details', 'specs' => Heroicon::OutlinedTableCells, 'product' => Heroicon::OutlinedShoppingBag, 'shop_perks' => Heroicon::OutlinedTruck,
             'reviews' => Heroicon::OutlinedChatBubbleLeftEllipsis, 'buttons' => Heroicon::OutlinedCursorArrowRays,
             'comparison' => Heroicon::OutlinedScale, 'steps' => Heroicon::OutlinedNumberedList, 'bonus' => Heroicon::OutlinedGift,
-            'tiers' => Heroicon::OutlinedChartBar, 'buy_bar' => Heroicon::OutlinedShoppingCart, default => Heroicon::OutlinedBars3BottomLeft,
+            'tiers' => Heroicon::OutlinedChartBar, 'buy_bar' => Heroicon::OutlinedShoppingCart,
+            'kind_cards' => Heroicon::OutlinedSquares2x2, 'phone_shots' => Heroicon::OutlinedDevicePhoneMobile, default => Heroicon::OutlinedBars3BottomLeft,
         };
     }
 
@@ -214,9 +221,13 @@ class Sections
             'hero' => [
                 TextInput::make('headline')->label('Judul besar (nilai utama)')->required()->maxLength(120),
                 TextInput::make('subheadline')->label('Kalimat pendukung (untuk siapa + manfaatnya)')->maxLength(200),
-                Select::make('visual')->label('Visual utama')->options(['image' => 'Gambar (latar)', 'video' => 'Video', 'slider' => 'Slider / galeri gambar'])
-                    ->default('image')->native(false)->selectablePlaceholder(false)->live(),
-                self::upload('image')->label('Foto latar')->visible(fn (Get $get) => ($get('visual') ?? 'image') === 'image'),
+                Select::make('visual')->label('Visual utama')->default('image')->native(false)->selectablePlaceholder(false)->live()
+                    ->options(fn (Get $get) => ['image' => 'Gambar (latar)', 'video' => 'Video', 'slider' => 'Slider / galeri gambar']
+                        + (Industry::current()->key === 'digital' || $get('visual') === 'product' ? ['product' => 'Gambar produk (di samping teks)'] : [])),
+                self::upload('image')->label(fn (Get $get) => $get('visual') === 'product' ? 'Gambar produk' : 'Foto latar')
+                    ->visible(fn (Get $get) => in_array($get('visual') ?? 'image', ['image', 'product'], true)),
+                TextInput::make('image_alt')->label('Teks alternatif gambar (untuk pembaca layar)')->maxLength(150)
+                    ->placeholder('Contoh: Tampilan permainan di layar HP')->visible(fn (Get $get) => $get('visual') === 'product'),
                 Grid::make(['default' => 1, 'sm' => 2])->visible(fn (Get $get) => $get('visual') === 'video')->schema([
                     TextInput::make('video_url')->label('Tautan video YouTube atau file MP4')->url()->maxLength(500)->placeholder('https://www.youtube.com/watch?v=...')
                         ->rule(fn () => fn (string $attribute, mixed $value, Closure $fail) => ($value === null || $value === '' || Embeds::youtubeId($value) || Embeds::videoUrl($value)) ?: $fail('Pakai tautan YouTube atau alamat file .mp4 (https).')),
@@ -493,11 +504,11 @@ class Sections
                 Grid::make(['default' => 1, 'sm' => 2])->schema([
                     Group::make([
                         TextInput::make('left_title')->label('Kolom kiri (yang biasa)')->default('Biasa')->maxLength(60),
-                        Repeater::make('left_items')->label('Poin kiri')->simple(TextInput::make('text')->required()->maxLength(120))->maxItems(8)->defaultItems(0),
+                        Repeater::make('left_items')->label('Poin kiri')->schema([TextInput::make('text')->hiddenLabel()->required()->maxLength(120)])->maxItems(8)->defaultItems(0),
                     ]),
                     Group::make([
                         TextInput::make('right_title')->label('Kolom kanan (punya kami)')->default('Punya kami')->maxLength(60),
-                        Repeater::make('right_items')->label('Poin kanan')->simple(TextInput::make('text')->required()->maxLength(120))->maxItems(8)->defaultItems(0),
+                        Repeater::make('right_items')->label('Poin kanan')->schema([TextInput::make('text')->hiddenLabel()->required()->maxLength(120)])->maxItems(8)->defaultItems(0),
                     ]),
                 ]),
             ],
@@ -511,7 +522,10 @@ class Sections
             ],
             'bonus' => [
                 self::heading('Bonus untuk Anda'),
-                TextInput::make('badge')->label('Label bonus')->default('Sudah termasuk di harga')->maxLength(60),
+                TextInput::make('badge')->label('Pita bonus')->default('Sudah termasuk di harga {harga}')->maxLength(80)
+                    ->helperText('Tampil sebagai pita besar di atas bonus. {harga} diganti harga produk halaman ini.'),
+                Toggle::make('show_compare')->label('Tampilkan harga coret produk di pita')->default(false)
+                    ->helperText('Hanya bila produknya punya harga coret yang lebih tinggi.'),
                 Repeater::make('items')->label('Bonus')->maxItems(4)->defaultItems(0)->columns(2)->schema([
                     TextInput::make('title')->label('Nama bonus')->required()->maxLength(80),
                     TextInput::make('text')->label('Isi bonus')->maxLength(200),
@@ -524,6 +538,30 @@ class Sections
                     TextInput::make('name')->label('Nama tingkat')->required()->maxLength(60),
                     TextInput::make('text')->label('Penjelasan')->maxLength(200),
                 ]),
+            ],
+            'kind_cards' => [
+                self::heading('Jenis petak'),
+                TextInput::make('intro')->label('Kalimat pengantar')->maxLength(200),
+                Repeater::make('items')->label('Kartu')->minItems(2)->maxItems(6)->defaultItems(0)->collapsible()
+                    ->itemLabel(fn (array $state) => $state['title'] ?? null)->schema([
+                        ...self::iconItem(),
+                        Grid::make(['default' => 1, 'sm' => 3])->schema([
+                            TextInput::make('example')->label('Contoh (tampil miring)')->maxLength(160)->columnSpan(['sm' => 2]),
+                            Select::make('color')->label('Warna kartu')->options(array_map(fn ($c) => $c[0], self::KIND_COLORS))->default('ungu')->native(false)->selectablePlaceholder(false),
+                        ]),
+                    ]),
+            ],
+            'phone_shots' => [
+                self::heading('Tampilan di HP'),
+                Repeater::make('items')->label('Tangkapan layar')->maxItems(4)->defaultItems(0)->collapsible()
+                    ->helperText('1 sampai 4 gambar tegak dari layar HP. Bagian ini tidak tampil selama belum ada gambar.')
+                    ->itemLabel(fn (array $state) => $state['caption'] ?? null)->schema([
+                        self::upload('image', 1080)->label('Gambar')->required(),
+                        Grid::make(['default' => 1, 'sm' => 2])->schema([
+                            TextInput::make('caption')->label('Keterangan di bawah gambar')->maxLength(100),
+                            TextInput::make('alt')->label('Teks alternatif (untuk pembaca layar)')->maxLength(150),
+                        ]),
+                    ]),
             ],
             'buy_bar' => [
                 TextInput::make('name')->label('Nama produk')->required()->maxLength(80),
