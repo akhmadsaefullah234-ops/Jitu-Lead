@@ -4,15 +4,19 @@ namespace App\Filament\Pages;
 
 use App\Actions\MoveLeadToStage;
 use App\Enums\Interest;
+use App\Enums\Role;
 use App\Enums\StageRequirement;
 use App\Filament\Resources\Leads\LeadResource;
 use App\Filament\Resources\Leads\Schemas\LeadForm;
+use App\Filament\Resources\Shipments\ShipmentResource;
+use App\Models\CarrierAccount;
 use App\Models\Lead;
 use App\Models\LostReason;
 use App\Models\Property;
+use App\Models\Shipment;
 use App\Models\Stage;
-use App\Filament\Resources\Shipments\ShipmentResource;
 use App\Reports\DashboardData;
+use App\Shipping\Carriers\ShipmentStatus;
 use App\Shipping\Shipments\PackingState;
 use App\Support\CurrentTenant;
 use App\Support\Industry;
@@ -24,8 +28,6 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\ToggleButtons;
-use App\Enums\Role;
-use App\Models\Shipment;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Utilities\Get;
@@ -186,7 +188,7 @@ class Pipeline extends Page
     /** A shop that books parcels through a provider: the shipping filters are offered. */
     private function shipsParcels(): bool
     {
-        return Industry::current()->key === 'retail' && \App\Models\CarrierAccount::query()->exists();
+        return Industry::current()->key === 'retail' && CarrierAccount::query()->exists();
     }
 
     protected function getHeaderActions(): array
@@ -362,7 +364,7 @@ class Pipeline extends Page
             ->when($this->filter === 'today', fn (Builder $q) => $q->open()->whereBetween('next_action_due_at', [now(), now()->endOfDay()]))
             ->when($this->filter === 'late', fn (Builder $q) => $q->overdue())
             ->when(in_array($this->filter, ['resi', 'print'], true), fn (Builder $q) => $q->whereIn('leads.id', $this->packingIds($this->filter === 'resi' ? PackingState::NEEDS_RESI : PackingState::READY)))
-            ->when($this->filter === 'failed', fn (Builder $q) => $q->whereIn('leads.id', Shipment::query()->tab('action')->whereIn('status', [\App\Shipping\Carriers\ShipmentStatus::DELIVERY_FAILED])->select('lead_id')));
+            ->when($this->filter === 'failed', fn (Builder $q) => $q->whereIn('leads.id', Shipment::query()->tab('action')->whereIn('status', [ShipmentStatus::DELIVERY_FAILED])->select('lead_id')));
     }
 
     /** Leads of the shipping stage in one packing phase (filters "Perlu resi" and "Siap cetak"). */

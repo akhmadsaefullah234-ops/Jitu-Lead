@@ -3,6 +3,7 @@
 namespace App\Actions;
 
 use App\Billing\PlanLimits;
+use App\Digital\DigitalAccesses;
 use App\Enums\StageRequirement;
 use App\Leads\ChatShippingDetails;
 use App\Models\Lead;
@@ -71,6 +72,13 @@ class MoveLeadToStage
         // A shop order going out to be packed: its address is read from the chat when the lead lacks it.
         try {
             app(ChatShippingDetails::class)->enteringShipping($moved);
+        } catch (Throwable $e) {
+            report($e);
+        }
+
+        // A digital purchase moved to Refund: the buyer's access links stop working.
+        try {
+            app(DigitalAccesses::class)->stageEntered($moved);
         } catch (Throwable $e) {
             report($e);
         }

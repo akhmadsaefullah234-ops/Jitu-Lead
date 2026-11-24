@@ -7,6 +7,7 @@ use App\Catalog\ProductMatcher;
 use App\Enums\Interest;
 use App\Enums\Need;
 use App\Enums\PaymentMethod;
+use App\Filament\Support\DigitalAccessActions;
 use App\Filament\Support\ShipmentActions;
 use App\Filament\Support\ShipmentTimeline;
 use App\LeadForms\FormFields;
@@ -165,6 +166,11 @@ class LeadForm
                     ->columnSpanFull()->collapsible()
                     ->visible(fn (?Lead $record) => $record !== null && ShipmentActions::available() && Shipment::query()->where('lead_id', $record->getKey())->exists())
                     ->schema([Placeholder::make('shipment_timeline')->hiddenLabel()->content(fn (?Lead $record) => ShipmentTimeline::html($record ? Shipment::latestFor($record) ?? Shipment::query()->where('lead_id', $record->getKey())->latest('id')->first() : null))]),
+                Section::make('Akses produk digital')
+                    ->description('Tautan akses khusus pembeli: masa berlaku, unduhan, dan jejak terakhir.')
+                    ->columnSpanFull()->collapsible()
+                    ->visible(fn (?Lead $record) => $record?->paid_at !== null && Industry::current()->key === 'digital')
+                    ->schema([Placeholder::make('digital_access_view')->hiddenLabel()->content(fn (?Lead $record) => DigitalAccessActions::summary($record))]),
                 Section::make('Iklan asal')
                     ->description('Iklan Click-to-WhatsApp yang membawa lead ini ke chat.')
                     ->columnSpanFull()->collapsible()->columns(2)

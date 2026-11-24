@@ -15,6 +15,7 @@ use App\Enums\MessageStatus;
 use App\Filament\Concerns\NotifiesShipmentFormErrors;
 use App\Filament\Resources\Leads\LeadResource;
 use App\Filament\Resources\MediaAssets\MediaAssetResource;
+use App\Filament\Support\DigitalAccessActions;
 use App\Filament\Support\DigitalPaymentAction;
 use App\Filament\Support\ShipmentActions;
 use App\FollowUps\PropertyFollowUps;
@@ -442,6 +443,12 @@ class Inbox extends Page
     public function digitalPaymentLinkAction(): Action
     {
         return DigitalPaymentAction::sendLink(fn () => $this->current()?->lead)->size('sm');
+    }
+
+    /** The buyer's access link sent again (App\Digital\DigitalAccesses: three times without an admin). */
+    public function digitalAccessResendAction(): Action
+    {
+        return DigitalAccessActions::resend(fn () => $this->current()?->lead)->size('sm');
     }
 
     /** Courier and tracking number: kept on the lead, sent to the buyer, lead to "Dikemas & dikirim" (rule 4). */

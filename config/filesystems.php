@@ -38,6 +38,16 @@ return [
             'report' => false,
         ],
 
+        // Digital products' files (Katalog > Berkas produk): never served directly, only through a buyer's signed
+        // access link (App\Http\Controllers\Public\DigitalAccessController).
+        'digital' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private/digital'),
+            'serve' => false,
+            'throw' => false,
+            'report' => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),

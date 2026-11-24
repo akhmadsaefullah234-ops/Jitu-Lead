@@ -21,6 +21,7 @@ use App\Filament\Resources\Leads\Pages\EditLead;
 use App\LeadForms\FormTemplates;
 use App\Mail\PaymentProofReceived;
 use App\Models\AiDraft;
+use App\Models\DigitalAccess;
 use App\Models\FollowUpRule;
 use App\Models\Lead;
 use App\Models\LostReason;
@@ -375,7 +376,10 @@ class DigitalIndustryTest extends TestCase
         $this->assertSame('https://example.com/unduh/abc', $lead->access_link);
         $this->assertSame('E-book Resep Harian x2', $lead->unit);
         $this->assertSame(98000, (int) $lead->deal_value);
-        $this->assertStringContainsString('https://example.com/unduh/abc', (string) collect($this->sent())->last());
+        // The buyer gets their own signed access page, never the product's real link (App\Digital\DigitalAccesses).
+        $access = $this->in(fn () => DigitalAccess::query()->where('lead_id', $lead->id)->firstOrFail());
+        $this->assertStringContainsString('/akses/'.$access->token, (string) collect($this->sent())->last());
+        $this->assertStringNotContainsString('https://example.com/unduh/abc', (string) collect($this->sent())->last());
         $this->assertTrue($this->in(fn () => $lead->activities()->where('type', 'payment_received')->exists()));
 
         // The same button on the lead page, without a link: paid, nothing sent.

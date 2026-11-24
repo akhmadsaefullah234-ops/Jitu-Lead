@@ -8,12 +8,14 @@ use App\Ai\DigitalTools;
 use App\Automation\DigitalStages;
 use App\Billing\Ipaymu\CallbackSignature;
 use App\Billing\Ipaymu\IpaymuClient;
+use App\Digital\DigitalAccesses;
 use App\Enums\AiMode;
 use App\Enums\WaChannelStatus;
 use App\Enums\WaChannelType;
 use App\Filament\Pages\Inbox;
 use App\Filament\Pages\PaymentGatewayPage;
 use App\Mail\DigitalAccessReady;
+use App\Models\DigitalAccess;
 use App\Models\DigitalPayment;
 use App\Models\Lead;
 use App\Models\LeadActivity;
@@ -214,7 +216,9 @@ class DigitalCheckoutTest extends TestCase
         $this->assertSame(DigitalPayment::PAID, $payment->refresh()->status);
         $this->assertSame(1500, (int) $payment->fee);
         $access = collect($this->sent())->last();
-        $this->assertStringContainsString('/akses/'.$payment->token, $access);
+        $grant = $this->in(fn () => DigitalAccess::query()->where('lead_id', $lead->id)->firstOrFail());
+        $this->assertSame($payment->id, (int) $grant->digital_payment_id);
+        $this->assertStringContainsString('/akses/'.$grant->token, $access);
         $this->assertStringContainsString('signature=', $access);
         $this->assertStringNotContainsString('https://example.com/unduh/resep', $access, 'the real product link is never sent');
         Mail::assertSent(DigitalAccessReady::class, fn ($mail) => $mail->hasTo('dina@example.com'));
@@ -267,19 +271,21 @@ class DigitalCheckoutTest extends TestCase
     public function test_the_access_link_opens_only_signed_in_time_and_for_a_paid_purchase(): void
     {
         $payment = $this->confirmedPurchase();
-        $url = DigitalCheckout::accessUrl($payment);
-
-        $this->get($url)->assertStatus(410);
+        $this->assertSame(0, $this->in(fn () => DigitalAccess::query()->count()), 'no access before payment');
 
         $this->paidTransaction($payment);
         $this->notify($this->payload($payment))->assertOk();
+        $access = $this->in(fn () => DigitalAccess::query()->firstOrFail());
+        $url = DigitalAccesses::url($access);
 
-        $this->get($url)->assertRedirect('https://example.com/unduh/resep');
-        $this->assertNotNull($payment->refresh()->access_opened_at);
+        // A page with the buyer's name and a button, never a redirect to the product.
+        $this->get($url)->assertOk()->assertSee('Dina')->assertSee('Buka dengan Chrome');
+        $this->assertNotNull($access->refresh()->opened_at);
+        $this->get(DigitalAccesses::downloadUrl($access))->assertRedirect('https://example.com/unduh/resep');
         $this->get(str_replace('signature=', 'signature=x', $url))->assertForbidden();
-        $this->get(route('digital.access', $payment->token))->assertForbidden();
+        $this->get(route('digital.access', $access->token))->assertForbidden();
 
-        $this->travel(8)->days();
+        $this->travel(91)->days();
         $this->get($url)->assertForbidden();
     }
 

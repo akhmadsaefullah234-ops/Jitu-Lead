@@ -6,6 +6,7 @@ use App\Automation\StageAutomation;
 use App\Filament\Concerns\NotifiesShipmentFormErrors;
 use App\Filament\Pages\Inbox;
 use App\Filament\Resources\Leads\LeadResource;
+use App\Filament\Support\DigitalAccessActions;
 use App\Filament\Support\DigitalPaymentAction;
 use App\Filament\Support\LocationActions;
 use App\Filament\Support\ShipmentActions;
@@ -42,6 +43,11 @@ class EditLead extends EditRecord
                 }),
             DigitalPaymentAction::make(fn () => $this->record, after: fn () => $this->refreshFormData(['paid_at', 'access_link', 'stage_id'])),
             DigitalPaymentAction::sendLink(fn () => $this->record),
+            ActionGroup::make([
+                DigitalAccessActions::resend(fn () => $this->record),
+                DigitalAccessActions::reissue(fn () => $this->record),
+                DigitalAccessActions::revoke(fn () => $this->record),
+            ])->label('Akses produk')->icon(Heroicon::OutlinedKey)->button()->color('gray'),
             Action::make('chat')->label('Chat WhatsApp')->icon(Heroicon::OutlinedChatBubbleLeftRight)
                 ->visible(fn () => filled($this->record->phone) && ! $this->record->trashed())
                 ->url(fn () => Inbox::getUrl(['lead' => $this->record->getKey()])),
