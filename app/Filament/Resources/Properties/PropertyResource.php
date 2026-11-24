@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Properties;
 
+use App\Digital\DigitalAccesses;
 use App\Enums\PropertyKind;
 use App\Filament\Resources\Properties\Pages\EditProperty;
 use App\Filament\Resources\Properties\Pages\ManageProperties;
@@ -14,6 +15,7 @@ use App\Welcome\WelcomeFields;
 use App\Welcome\WelcomeSettings;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
@@ -105,7 +107,17 @@ class PropertyResource extends Resource
                 ]),
                 TextInput::make('access_url')->label('Tautan akses produk')->url()->maxLength(500)->placeholder('https://...')->columnSpanFull()
                     ->visible(! $property && ! $shipped)
-                    ->helperText('Tautan unduhan, kelas, atau grup yang dibuka pembeli setelah lunas. Tidak pernah dibaca AI; pembeli menerima tautan bertanda tangan yang berlaku terbatas.'),
+                    ->helperText('Tautan unduhan, kelas, atau grup yang dibuka pembeli setelah lunas, bila produk tidak punya berkas. Tidak pernah dibaca AI; pembeli menerima tautan bertanda tangan yang berlaku terbatas.'),
+                FileUpload::make('access_file_path')->label('Berkas produk (HTML, ZIP, atau PDF)')->columnSpanFull()
+                    ->visible(! $property && ! $shipped)
+                    ->disk('digital')->directory(fn () => (string) app(CurrentTenant::class)->id())->visibility('private')
+                    ->acceptedFileTypes(DigitalAccesses::FILE_MIMES)->rules(['extensions:'.implode(',', DigitalAccesses::FILE_EXTENSIONS)])
+                    ->maxSize(DigitalAccesses::FILE_MAX_KB)->storeFileNamesIn('access_file_name')->downloadable(false)->openable(false)->previewable(false)
+                    ->helperText('Disimpan privat, tidak bisa dibuka lewat alamat langsung. Pembeli mengunduhnya dari halaman aksesnya; berkas HTML diberi teks lisensi pembeli di penanda data-lic="{{LISENSI}}". Maks 10 MB.'),
+                TextInput::make('access_days')->label('Masa akses')->numeric()->integer()->minValue(1)->maxValue(DigitalAccesses::MAX_DAYS)->suffix('hari')
+                    ->visible(! $property && ! $shipped)->placeholder((string) DigitalAccesses::DEFAULT_DAYS)->helperText('Kosong = '.DigitalAccesses::DEFAULT_DAYS.' hari.'),
+                TextInput::make('access_max_downloads')->label('Batas unduhan per pembeli')->numeric()->integer()->minValue(1)->maxValue(DigitalAccesses::MAX_DOWNLOADS)
+                    ->visible(! $property && ! $shipped)->placeholder((string) DigitalAccesses::DEFAULT_DOWNLOADS)->helperText('Kosong = '.DigitalAccesses::DEFAULT_DOWNLOADS.' kali.'),
                 KeyValue::make('details')->label('Rincian tambahan')->keyLabel('Nama')->valueLabel('Isi')
                     ->helperText($property ? 'Contoh: luas tanah, luas bangunan, sertifikat.' : 'Contoh: ukuran, warna, bahan, berat.')->columnSpanFull(),
             ]),

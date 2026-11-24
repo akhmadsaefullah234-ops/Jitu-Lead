@@ -78,7 +78,7 @@ Decisions used (chosen 23 Nov 2026):
 - Prices come from the catalogue. A product without a price gets no invoice, and an admin confirms the price.
 - Refunds are manual: an admin moves the lead to Refund. Nothing is refunded through iPaymu.
 - The invoice expires after 24 hours by default (1–168). One reminder goes out 3 hours before it expires, and the `no_payment` rule still moves the lead to Tidak jadi bayar afterwards.
-- The access link is signed, lasts 7 days by default (1–90) and belongs to that buyer's invoice.
+- The access link is the buyer's own access page (see [digital-access.md](digital-access.md)): 90 days and 10 downloads by default, set per product. The gateway's old "Tautan akses berlaku" setting is no longer used.
 - No licence keys for now.
 
 Flow (`App\Payments\DigitalCheckout`):
@@ -97,7 +97,7 @@ Flow (`App\Payments\DigitalCheckout`):
    Only status 1, 6 or 7 marks the invoice paid, and it happens once, under a row lock. A repeated callback changes nothing.
 5. `DigitalStageAutomation::paidByGateway()` runs next:
    - sets `paid_at`, logs "Pembayaran ... diterima lewat iPaymu (channel)", and moves the lead to Lunas & akses terkirim with the paid amount as the deal value;
-   - sends the buyer `/akses/{token}?signature=…` on WhatsApp (origin `digital_access`) and by email (`DigitalAccessReady`). The link redirects to `leads.access_link` or the product's **Tautan akses produk** (`properties.access_url`, never given to the AI). It opens only for a paid invoice;
+   - sends the buyer their access page `/akses/{token}?signature=…` (App\Digital\DigitalAccesses) on WhatsApp (origin `digital_access`) and by email (`DigitalAccessReady`). The page has a download button for the product's private file, or sends on to `leads.access_link` / **Tautan akses produk** (`properties.access_url`, never given to the AI). It opens only for a paid lead;
    - when there is no access link at all, the buyer gets a "paid" message, and the staff get a push "Lunas lewat iPaymu, kirim akses".
 6. iPaymu's return page is `/bayar/{token}`. It shows the status. On a paid invoice, the Meta Pixel fires `Purchase` with the same `event_id` the pipeline sends through CAPI (`lead-{id}-Purchase-{purchase_recorded activity}`), so Meta counts it once.
 

@@ -31,6 +31,7 @@ use App\Ai\VoiceNoteTranscript;
 use App\Automation\PropertyStageAutomation;
 use App\Billing\PlanLimits;
 use App\Catalog\ProductMatcher;
+use App\Digital\DigitalAccesses;
 use App\Enums\AiMode;
 use App\Enums\MessageStatus;
 use App\Enums\Role;
@@ -200,6 +201,11 @@ class GenerateAiReply
 
         if ($this->handoff->matches($text, $tenant->ai_handoff_keywords)) {
             return $this->handoffTo($inbound, 'Klien meminta bicara dengan agen atau menyebut hal sensitif');
+        }
+
+        // A digital buyer who cannot open the product, or wants a refund, always gets a person (App\Digital\DigitalAccesses).
+        if ($tenant->industry()->key === 'digital' && $this->handoff->matches($text, implode(', ', DigitalAccesses::HANDOFF_WORDS))) {
+            return $this->handoffTo($inbound, 'Pembeli produk digital tidak bisa membuka akses atau meminta refund');
         }
 
         // Otomatisasi tahap (property): a client ready to book is a person's job, with a task.
@@ -381,7 +387,7 @@ class GenerateAiReply
                     implode("\n\n", array_filter([$base, $quote?->instructions(), ...$notes, $retry])), $history, $tools,
                     fn (string $name, array $input) => in_array($name, [PropertyTools::NEEDS, PropertyTools::SURVEY, PropertyTools::CANCEL], true) && $property !== null
                         ? $property->run($name, $input)
-                        : ($name === DigitalTools::RECORD && $digital !== null ? $digital->run($name, $input) : $shop?->run($name, $input) ?? ['status' => 'error', 'pesan' => 'Tool tidak dikenal.']),
+                        : (in_array($name, [DigitalTools::RECORD, DigitalTools::RESEND], true) && $digital !== null ? $digital->run($name, $input) : $shop?->run($name, $input) ?? ['status' => 'error', 'pesan' => 'Tool tidak dikenal.']),
                     self::MAX_TOKENS, self::MAX_ROUNDS, stopTools: [ReplySignals::HANDOFF_TOOL, ReplySignals::SILENT_TOOL],
                 );
             } catch (Throwable $e) {
@@ -1024,6 +1030,18 @@ class GenerateAiReply
                 } catch (Throwable $e) {
                     report($e);
                     $actions[$i]['outcome'] = ['status' => 'gagal', 'pesan' => $e->getMessage()];
+                }
+            }
+
+            // Only the same working link, within the lead's resend limit (App\Digital\DigitalAccesses); never a new one.
+            if (($action['type'] ?? null) === 'access_resend' && ! ($action['applied'] ?? false)) {
+                $actions[$i]['applied'] = true;
+
+                try {
+                    $actions[$i]['outcome'] = app(DigitalAccesses::class)->resend($lead->refresh(), $actor, $by, false);
+                } catch (Throwable $e) {
+                    report($e);
+                    $actions[$i]['outcome'] = ['ok' => false, 'pesan' => $e->getMessage()];
                 }
             }
 

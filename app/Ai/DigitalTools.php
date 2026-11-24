@@ -2,6 +2,8 @@
 
 namespace App\Ai;
 
+use App\Digital\DigitalAccesses;
+use App\Models\DigitalAccess;
 use App\Models\Lead;
 use App\Models\Property;
 use App\Models\Tenant;
@@ -20,6 +22,8 @@ use Illuminate\Support\Collection;
 class DigitalTools
 {
     public const RECORD = 'catat_pembelian';
+
+    public const RESEND = 'kirim_ulang_akses';
 
     public const DRAFT = 'draft';
 
@@ -49,7 +53,7 @@ class DigitalTools
     /** @return list<array{name: string, description: string, input_schema: array}> */
     public function definitions(): array
     {
-        return [[
+        $tools = [[
             'name' => self::RECORD,
             'description' => 'Catat pembelian produk digital ke data lead. Tanpa alamat, kurir, atau ongkir. status "draft": pembeli sudah menyebut produk dan jumlahnya tapi belum '
                 .'memastikan; rangkum lalu minta konfirmasi. status "konfirmasi": pembeli sudah memastikan mau membeli; total dihitung sistem dari katalog, lead pindah ke '
@@ -77,10 +81,31 @@ class DigitalTools
                 'required' => ['items', 'status'],
             ],
         ]];
+
+        if ($this->canAskResend()) {
+            $tools[] = [
+                'name' => self::RESEND,
+                'description' => 'Minta sistem mengirim ulang tautan akses yang sama ke pembeli yang SUDAH LUNAS, bila pembeli bilang tautannya hilang atau minta dikirim lagi. '
+                    .'Tidak membuat tautan baru. Bila hasilnya perlu_admin, serahkan ke agen.',
+                'input_schema' => ['type' => 'object', 'properties' => (object) []],
+            ];
+        }
+
+        return $tools;
+    }
+
+    /** A paid buyer who already got an access link may ask for it again. */
+    private function canAskResend(): bool
+    {
+        return $this->lead->paid_at !== null && DigitalAccess::query()->where('lead_id', $this->lead->getKey())->exists();
     }
 
     public function run(string $name, array $input): array
     {
+        if ($name === self::RESEND && $this->canAskResend()) {
+            return $this->resend();
+        }
+
         if ($name !== self::RECORD) {
             return ['status' => 'error', 'pesan' => 'Tool tidak dikenal.'];
         }
@@ -147,6 +172,23 @@ class DigitalTools
             ?? $catalogue->first(fn (Property $p) => str_contains(mb_strtolower($p->name), $name) || str_contains($name, mb_strtolower($p->name))));
     }
 
+    /** Checked now, sent once the answer goes out (GenerateAiReply::applyActions); the AI never sees or writes the link. */
+    private function resend(): array
+    {
+        if (array_filter($this->actions, fn ($a) => $a['type'] === 'access_resend') !== []) {
+            return ['status' => 'akan_dikirim', 'pesan' => 'Sudah diminta. Katakan tautan akses dikirim ulang di pesan berikutnya.'];
+        }
+
+        if (($why = app(DigitalAccesses::class)->cannotResend($this->lead, null)) !== null) {
+            return ['status' => 'perlu_admin', 'pesan' => "Tautan tidak bisa dikirim ulang otomatis ({$why}). Panggil tool ".ReplySignals::HANDOFF_TOOL.' agar admin membantu.'];
+        }
+
+        $result = ['status' => 'akan_dikirim', 'pesan' => 'Sistem mengirim ulang tautan akses di pesan berikutnya. Katakan itu singkat. Jangan menulis tautan sendiri dan jangan menjanjikan tautan baru.'];
+        $this->actions[] = ['type' => 'access_resend', 'input' => [], 'result' => $result];
+
+        return $result;
+    }
+
     /** @return list<array{type: string, input: array, result: array}> what this answer recorded, written once it is sent */
     public function actions(): array
     {
@@ -174,6 +216,7 @@ class DigitalTools
             'Jangan pernah menyatakan pembayaran sudah diterima, lunas, atau akses sudah aktif. Bila pembeli mengirim atau menyebut bukti transfer, katakan admin akan mengeceknya dulu dan akses dikirim setelah pembayaran dikonfirmasi.',
             DigitalCheckout::applies($this->tenant) ? 'PEMBAYARAN OTOMATIS: setelah pembelian dikonfirmasi, sistem mengirim tautan bayar QRIS atau virtual account, dan akses dikirim otomatis begitu pembayaran diterima. Jangan pernah menulis tautan bayar, nomor rekening, atau nomor virtual account sendiri.' : null,
             ! DigitalCheckout::applies($this->tenant) && PaymentInstructions::applies($this->tenant) ? 'REKENING: nomor rekening dan instruksi bayar dikirim otomatis oleh sistem setelah pembelian dikonfirmasi. Jangan pernah menulis nomor rekening atau nama bank sendiri.' : null,
+            $this->canAskResend() ? 'AKSES: pembeli ini sudah lunas dan sudah menerima tautan akses. Bila tautannya hilang atau minta dikirim lagi, panggil '.self::RESEND.'. Jangan pernah menulis tautan akses sendiri dan jangan menjanjikan tautan baru.' : null,
             $products !== '' ? "PRODUK DIGITAL (id | nama | harga):\n".$products : null,
         ]));
     }

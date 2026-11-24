@@ -215,7 +215,7 @@ TXT,
             'handoff_keywords' => [
                 'bicara dengan manusia', 'bicara dengan orang', 'bicara dengan admin', 'bicara langsung',
                 'telepon saya', 'hubungi saya', 'refund', 'pengembalian dana', 'komplain', 'keluhan', 'kecewa',
-                'gagal akses', 'tidak bisa akses', 'tidak bisa login', 'tidak bisa unduh', 'tidak bisa download', 'kode error',
+                'gagal akses', 'tidak bisa akses', 'tidak bisa buka', 'link mati', 'tidak bisa login', 'tidak bisa unduh', 'tidak bisa download', 'kode error',
                 'nego', 'reseller', 'penipuan',
             ],
 

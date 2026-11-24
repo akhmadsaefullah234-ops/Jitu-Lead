@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Public\DigitalAccessController;
 use App\Http\Controllers\Public\DigitalPaymentController;
 use App\Http\Controllers\Public\LandingPageController;
 use App\Http\Controllers\Public\LeadFormController;
@@ -32,8 +33,9 @@ Route::get('harga', fn () => view('billing.pricing', [
 ]))->middleware('throttle:public-pages')->name('pricing');
 
 // Digital products paid through the agency's iPaymu account: the buyer's payment page (by its unguessable token) and
-// the signed, time-limited access link sent once iPaymu confirmed the payment.
+// the buyer's signed, time-limited access page and download (App\Digital\DigitalAccesses), sent once paid.
 Route::middleware('throttle:public-pages')->group(function () {
     Route::get('bayar/{token}', [DigitalPaymentController::class, 'show'])->where('token', '[A-Za-z0-9]{40}')->name('digital.pay.show');
-    Route::get('akses/{token}', [DigitalPaymentController::class, 'access'])->where('token', '[A-Za-z0-9]{40}')->middleware('signed')->name('digital.access');
+    Route::get('akses/{token}', [DigitalAccessController::class, 'show'])->where('token', '[A-Za-z0-9]{40}')->middleware('signed')->name('digital.access');
+    Route::get('akses/{token}/unduh', [DigitalAccessController::class, 'download'])->where('token', '[A-Za-z0-9]{40}')->middleware('signed')->name('digital.access.download');
 });

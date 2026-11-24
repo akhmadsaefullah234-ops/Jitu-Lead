@@ -60,7 +60,7 @@ class PaymentGatewayPage extends Page
 
         $this->form->fill([
             'active' => (bool) $g?->active, 'sandbox' => $g?->sandbox ?? true, 'va' => null, 'api_key' => null,
-            'invoice_hours' => $g?->invoice_hours ?? 24, 'access_days' => $g?->access_days ?? 7,
+            'invoice_hours' => $g?->invoice_hours ?? 24,
         ]);
     }
 
@@ -84,8 +84,7 @@ class PaymentGatewayPage extends Page
             Section::make('Invoice dan akses')->columns(2)->schema([
                 TextInput::make('invoice_hours')->label('Tautan bayar berlaku')->numeric()->integer()->minValue(1)->maxValue(168)->suffix('jam')->required()
                     ->helperText('Pengingat dikirim sekali, 3 jam sebelum kedaluwarsa.'),
-                TextInput::make('access_days')->label('Tautan akses berlaku')->numeric()->integer()->minValue(1)->maxValue(90)->suffix('hari')->required()
-                    ->helperText('Tautan akses bertanda tangan, khusus untuk pembeli itu. Isi tautan produknya di katalog (Tautan akses produk).'),
+                Text::make('Masa berlaku dan batas unduhan tautan akses pembeli diatur per produk di Katalog (bawaan 90 hari, 10 kali unduh).'),
             ]),
         ]);
     }
@@ -106,7 +105,6 @@ class PaymentGatewayPage extends Page
             'sandbox' => (bool) $state['sandbox'],
             'active' => (bool) $state['active'],
             'invoice_hours' => (int) $state['invoice_hours'],
-            'access_days' => (int) $state['access_days'],
         ]);
 
         if ($gateway->active && (blank($gateway->va) || blank($gateway->api_key))) {

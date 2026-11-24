@@ -2,6 +2,7 @@
 
 namespace App\WhatsApp;
 
+use App\Digital\DigitalAccesses;
 use App\Models\WaMessage;
 use App\Payments\PaymentInstructions;
 
@@ -206,6 +207,11 @@ final class MessageContent
         // The system's payment instruction: the AI reads that it was sent, never the account number.
         if ($message->origin === PaymentInstructions::ORIGIN && $body !== '') {
             return PaymentInstructions::forAi($body);
+        }
+
+        // The buyer's access link: the AI reads that it was sent, never the link.
+        if ($message->origin === DigitalAccesses::ORIGIN && $body !== '') {
+            return '[Tautan akses produk dari sistem] '.preg_replace('#https?://\S+#i', '[tautan akses]', $body);
         }
 
         return match ($message->type) {

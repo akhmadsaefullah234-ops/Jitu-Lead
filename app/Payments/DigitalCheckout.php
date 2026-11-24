@@ -15,7 +15,6 @@ use App\Shipping\ShippingQuote;
 use App\Support\CurrentTenant;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 
 /**
@@ -275,14 +274,6 @@ class DigitalCheckout
         Log::info('Callback iPaymu digital diproses', $context + ['status_api' => $code, 'hasil' => $status]);
 
         return $paidNow || $payment->refresh()->status === DigitalPayment::PAID ? DigitalPayment::PAID : $status;
-    }
-
-    /** The signed link to the product for the buyer of this paid invoice, valid for the agency's access days. */
-    public static function accessUrl(DigitalPayment $payment, ?PaymentGateway $gateway = null): string
-    {
-        $days = max(1, min(90, (int) ($gateway?->access_days ?? 7)));
-
-        return URL::temporarySignedRoute('digital.access', now()->addDays($days), ['token' => $payment->token]);
     }
 
     /** Must run inside the tenant: one reminder for an invoice about to expire. */

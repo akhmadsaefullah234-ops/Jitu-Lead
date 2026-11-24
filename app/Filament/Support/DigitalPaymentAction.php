@@ -16,8 +16,8 @@ use Filament\Support\Icons\Heroicon;
 
 /**
  * "Pembayaran diterima" for a digital-product agency (Inbox and the lead page): a person checked the money. The lead
- * is marked paid and moves to "Lunas & akses terkirim"; the access link, when given, is kept on the lead and can be
- * sent to the buyer on WhatsApp. A shop's button (App\Automation\StageAutomation) is untouched.
+ * is marked paid and moves to "Lunas & akses terkirim"; the buyer's own access link (App\Digital\DigitalAccesses,
+ * the same as after iPaymu) can be sent on WhatsApp. A shop's button (App\Automation\StageAutomation) is untouched.
  */
 final class DigitalPaymentAction
 {
@@ -33,9 +33,9 @@ final class DigitalPaymentAction
             ->fillForm(fn () => ['access_link' => $lead()?->access_link, 'send' => true])
             ->schema([
                 TextInput::make('access_link')->label('Tautan akses (opsional)')->url()->maxLength(500)->live(onBlur: true)
-                    ->placeholder('https://...')->helperText('Tautan unduhan, undangan grup, atau halaman login produk. Disimpan di lead.'),
+                    ->placeholder('https://...')->helperText('Kosongkan bila produk punya berkas atau tautan di Katalog. Pembeli selalu menerima tautan akses khusus miliknya, bukan tautan ini.'),
                 Toggle::make('send')->label('Kirim tautan akses ke pembeli lewat WhatsApp')
-                    ->visible(fn (Get $get) => filled($get('access_link'))),
+                    ->visible(fn (Get $get) => filled($get('access_link')) || (bool) $lead()?->property?->hasAccessFile() || filled($lead()?->property?->access_url)),
             ])
             ->action(function (array $data) use ($lead, $after) {
                 $note = app(DigitalStageAutomation::class)->paymentReceived($lead(), auth()->user(), $data['access_link'] ?? null, (bool) ($data['send'] ?? false));

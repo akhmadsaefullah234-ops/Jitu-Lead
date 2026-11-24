@@ -3,9 +3,8 @@
 namespace App\Automation;
 
 use App\Actions\MoveLeadToStage;
-use App\Actions\SendWhatsAppMessage;
 use App\Billing\PlanLimits;
-use App\Enums\MessageStatus;
+use App\Digital\DigitalAccesses;
 use App\Enums\Role;
 use App\Enums\StageType;
 use App\Mail\DigitalAccessReady;
@@ -16,7 +15,6 @@ use App\Models\LostReason;
 use App\Models\Stage;
 use App\Models\Tenant;
 use App\Models\User;
-use App\Models\WaConversation;
 use App\Models\WaMessage;
 use App\Payments\DigitalCheckout;
 use App\Payments\PaymentInstructions;
@@ -38,11 +36,9 @@ use Throwable;
  */
 class DigitalStageAutomation
 {
-    public const GATEWAY_ACCESS_MESSAGE = "Halo {nama}, pembayaran {produk} sebesar {total} sudah kami terima lewat {cara}. Terima kasih 🙏\nAkses Anda (berlaku {hari} hari, khusus untuk Anda): {tautan}\nKalau ada kendala membuka, balas chat ini ya.";
+    public const GATEWAY_ACCESS_MESSAGE = "Halo {nama}, pembayaran {produk} sebesar {total} sudah kami terima lewat {cara}. Terima kasih 🙏\nAkses Anda (khusus untuk Anda, berlaku sampai {sampai}, maksimal {unduhan} kali unduh): {tautan}\nBuka dengan Chrome. Kalau ada kendala membuka, balas chat ini ya.";
 
     public const GATEWAY_NO_ACCESS_MESSAGE = "Halo {nama}, pembayaran {produk} sebesar {total} sudah kami terima lewat {cara}. Terima kasih 🙏\nAdmin segera mengirim akses Anda di chat ini.";
-
-    public const ACCESS_MESSAGE = "Halo {nama}, pembayaran {produk} sudah kami terima. Terima kasih 🙏\nAkses Anda: {tautan}\nKalau ada kendala membuka, balas chat ini ya.";
 
     private ?DigitalStages $stages = null;
 
@@ -124,7 +120,8 @@ class DigitalStageAutomation
 
     /**
      * "Pembayaran diterima": a person checked the money. The lead is marked paid and moves to "Lunas & akses
-     * terkirim"; with an access link, the link is kept and, when asked, sent to the buyer on WhatsApp.
+     * terkirim"; a link typed here is kept on the lead. When the product has a file or a link, the buyer gets their
+     * own signed access link (App\Digital\DigitalAccesses), on WhatsApp when asked: the same flow as iPaymu.
      *
      * @return string what happened, for the person who pressed it
      */
@@ -156,7 +153,21 @@ class DigitalStageAutomation
 
         $note = $moved ? 'Pembayaran dicatat diterima dan lead pindah ke '.$this->stages()->stage(DigitalStages::PAID)?->name.'.' : 'Pembayaran dicatat diterima.';
 
-        return $link !== null && $send ? $note.' '.$this->sendAccess($lead->refresh(), $actor) : $note;
+        // The buyer's own signed link (App\Digital\DigitalAccesses), never the product's real link.
+        $lead->refresh()->load('property');
+        $access = app(DigitalAccesses::class)->issue($lead);
+
+        if ($access === null) {
+            return DigitalAccesses::hasTarget($lead) ? $note : $note.' Produk belum punya berkas atau tautan akses: isi di Katalog, lalu kirim akses dari lead.';
+        }
+
+        if (! $send) {
+            return $note.' Tautan akses pembeli dibuat, belum dikirim.';
+        }
+
+        $why = app(DigitalAccesses::class)->sendNew($lead, $access, $actor);
+
+        return $note.' '.($why === null ? 'Tautan akses dikirim ke pembeli lewat WhatsApp.' : "Tautan akses belum terkirim: {$why}. Kirim ulang dari lead.");
     }
 
     /**
@@ -204,20 +215,19 @@ class DigitalStageAutomation
 
     private function sendGatewayAccess(Lead $lead, DigitalPayment $payment, string $way, string $total): void
     {
-        $gateway = DigitalCheckout::gateway($this->current->get());
-        $target = $lead->access_link ?: $lead->property?->access_url;
-        $link = filled($target) ? DigitalCheckout::accessUrl($payment, $gateway) : null;
+        $access = app(DigitalAccesses::class)->issue($lead, $payment);
+        $link = $access ? DigitalAccesses::url($access) : null;
         $text = strtr($link ? self::GATEWAY_ACCESS_MESSAGE : self::GATEWAY_NO_ACCESS_MESSAGE, [
             '{nama}' => $lead->name ?: 'Kak', '{produk}' => $lead->property?->name ?? 'produk', '{total}' => $total, '{cara}' => $way,
-            '{tautan}' => (string) $link, '{hari}' => (string) max(1, (int) ($gateway?->access_days ?? 7)),
+            '{tautan}' => (string) $link, '{sampai}' => $access ? DigitalAccesses::date($access->expires_at) : '', '{unduhan}' => (string) $access?->max_downloads,
         ]);
         $actor = $this->staffActor($lead);
-        $why = $actor ? app(PaymentInstructions::class)->deliver($lead, $actor, $text, 'digital_access') : 'tidak ada admin';
+        $why = $actor ? app(PaymentInstructions::class)->deliver($lead, $actor, $text, DigitalAccesses::ORIGIN) : 'tidak ada admin';
 
         $lead->activities()->create(['type' => $why === null && $link ? 'access_sent' : 'access_not_sent', 'body' => match (true) {
-            $link === null => 'Produk belum punya tautan akses (isi di katalog atau di lead): kirim akses manual dari Inbox.'.($why ? " Pesan lunas tidak terkirim ({$why})." : ''),
+            $link === null => 'Produk belum punya berkas atau tautan akses (isi di katalog atau di lead): kirim akses manual dari lead.'.($why ? " Pesan lunas tidak terkirim ({$why})." : ''),
             $why !== null => "Tautan akses belum terkirim lewat WhatsApp ({$why}).",
-            default => 'Tautan akses bertanda tangan dikirim ke pembeli lewat WhatsApp.',
+            default => 'Tautan akses khusus pembeli dikirim lewat WhatsApp (berlaku sampai '.DigitalAccesses::date($access->expires_at).', '.$access->max_downloads.' kali unduh).',
         }]);
 
         if ($link === null) {
@@ -232,37 +242,12 @@ class DigitalStageAutomation
 
         if (filter_var((string) $lead->email, FILTER_VALIDATE_EMAIL)) {
             try {
-                Mail::to($lead->email)->send(new DigitalAccessReady($this->current->get(), $lead, $link, max(1, (int) ($gateway?->access_days ?? 7))));
+                Mail::to($lead->email)->send(new DigitalAccessReady($this->current->get(), $lead, $link, max(1, (int) ceil(now()->diffInDays($access->expires_at)))));
                 $lead->activities()->create(['type' => 'access_sent', 'body' => 'Tautan akses dikirim ke email pembeli.']);
             } catch (Throwable $e) {
                 report($e);
             }
         }
-    }
-
-    private function sendAccess(Lead $lead, User $actor): string
-    {
-        $conversation = filled($lead->phone) ? WaConversation::query()->firstOrCreate(['lead_id' => $lead->getKey()], ['phone' => $lead->phone]) : null;
-        $decision = $conversation ? $this->routes->decide($conversation) : null;
-
-        if ($decision === null || ! $decision->canSend() || $decision->isPaid()) {
-            $why = $decision?->isPaid() ? 'jendela chat gratis sudah tutup' : ($decision?->note ?: 'lead belum punya nomor WhatsApp');
-            $lead->activities()->create(['type' => 'access_not_sent', 'body' => "Tautan akses belum terkirim ke pembeli: {$why}. Kirim manual dari Inbox."]);
-
-            return 'Tautan akses belum terkirim: '.$why.'.';
-        }
-
-        $text = strtr(self::ACCESS_MESSAGE, ['{nama}' => $lead->name, '{produk}' => $lead->property?->name ?? 'produk', '{tautan}' => $lead->access_link]);
-
-        try {
-            $message = app(SendWhatsAppMessage::class)($conversation, $actor, $text);
-        } catch (Throwable $e) {
-            $lead->activities()->create(['type' => 'access_not_sent', 'body' => "Tautan akses gagal terkirim ke pembeli: {$e->getMessage()}"]);
-
-            return 'Tautan akses gagal terkirim: '.$e->getMessage();
-        }
-
-        return $message->status === MessageStatus::Failed ? 'Tautan akses gagal terkirim: '.$message->error : 'Tautan akses dikirim ke pembeli lewat WhatsApp.';
     }
 
     /** @return array{no_payment: int} */
