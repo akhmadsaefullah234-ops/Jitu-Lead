@@ -30,6 +30,7 @@ class WelcomeText
         'nama' => 'nama depan pembeli',
         'produk' => 'produk yang dipesan',
         'agensi' => 'nama toko / agensi',
+        'wa_agensi' => 'WhatsApp bisnis agensi (Profil agensi)',
         'agen' => 'nama agen pemilik lead',
         'ringkasan' => 'ringkasan pesanan',
         'total' => 'harga x jumlah + ongkir',
@@ -57,7 +58,7 @@ class WelcomeText
     {
         $used = self::used($text);
         // The usual {nama}, {produk}, {agensi}, {agen} ... as App\WhatsApp\TemplateRenderer fills them ({daftar_produk} only when used).
-        $own = array_values(array_filter(TemplateRenderer::PLACEHOLDERS, fn ($k) => $k !== 'daftar_produk' || in_array($k, $used, true)));
+        $own = array_values(array_filter(TemplateRenderer::PLACEHOLDERS, fn ($k) => ! in_array($k, ['daftar_produk', 'wa_agensi'], true) || in_array($k, $used, true)));
         $base = $this->renderer->render(implode("\x1F", array_map(fn ($k) => '{'.$k.'}', $own)), $lead, $agent, $tenant->name)['text'];
         $values = array_combine($own, explode("\x1F", $base));
         $shipping = array_intersect($used, ['ongkir', 'kurir']) !== [] ? $this->shipping($lead, $tenant) : null;
