@@ -54,13 +54,13 @@ class LandingSnapshotTest extends TestCase
         $this->assertSame(file_get_contents($file), $html);
     }
 
-    /** Ids that differ per run (database keys, tokens) become placeholders. */
+    /** Ids that differ per run (database keys, tokens, the form's time stamp signed with APP_KEY) become placeholders. */
     public static function normalize(string $html): string
     {
         return (string) preg_replace([
             '/lf_hp_[A-Za-z0-9]+/', '/name="_token" value="[^"]*"/', '/"csrf-token" content="[^"]*"/', '/\/(f|p)\/([a-z-]+)\/[a-z0-9-]+\?[^"\']*/',
             '/(form_id|data-form|data-page|name="page" value)[="]*\d+/', '/ev-[A-Za-z0-9-]{8,}/',
-            '/(?<=["\/=])\d{1,6}(?=\/)/',
-        ], ['lf_hp_x', 'name="_token" value=""', '"csrf-token" content=""', '/$1/$2/x', '$1=N', 'ev-x', 'N'], $html);
+            '/(?<=["\/=])\d{1,6}(?=\/)/', '/name="lf_ts" value="[^"]*"/',
+        ], ['lf_hp_x', 'name="_token" value=""', '"csrf-token" content=""', '/$1/$2/x', '$1=N', 'ev-x', 'N', 'name="lf_ts" value=""'], $html);
     }
 }
