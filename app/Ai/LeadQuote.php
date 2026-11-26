@@ -81,15 +81,23 @@ class LeadQuote
     {
         $destination = $lead ? self::destination($lead) : null;
 
+        return $destination !== null && self::isOwnCity($lead, $city)
+            ? array_filter(['kode_pos' => $destination['kode_pos'] ?? null, 'kelurahan' => $destination['kelurahan'] ?? null], fn ($v) => filled($v)) : [];
+    }
+
+    /** Whether $city is the lead's own shipping city ("Kab Bdg" and "Kabupaten Bandung" are the same). */
+    public static function isOwnCity(?Lead $lead, ?string $city): bool
+    {
+        $destination = $lead ? self::destination($lead) : null;
+
         if ($destination === null || blank($city)) {
-            return [];
+            return false;
         }
 
         $name = fn (string $c) => RegionDirectory::matchCity($c)['name'] ?? null;
         [$own, $asked] = [$name($destination['kota']), $name((string) $city)];
-        $same = $own !== null && $asked !== null ? $own === $asked : Regions::city($destination['kota']) === Regions::city($city);
 
-        return $same ? array_filter(['kode_pos' => $destination['kode_pos'] ?? null, 'kelurahan' => $destination['kelurahan'] ?? null], fn ($v) => filled($v)) : [];
+        return $own !== null && $asked !== null ? $own === $asked : Regions::city($destination['kota']) === Regions::city($city);
     }
 
     /** @return array{kota: string, provinsi: ?string, kecamatan: ?string, kelurahan?: ?string, kode_pos?: ?string}|null */

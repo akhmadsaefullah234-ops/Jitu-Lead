@@ -2,6 +2,7 @@
 
 namespace App\Shipping;
 
+use App\Ai\LeadQuote;
 use App\Models\Lead;
 use App\Models\Property;
 use App\Models\Tenant;
@@ -55,18 +56,59 @@ class Shipping
         $postalCode = preg_match('/^\d{5}$/', $code = preg_replace('/\D/', '', (string) $postalCode)) ? $code : null;
         $subDistrict = filled($subDistrict) ? trim($subDistrict) : null;
         $request = new ShippingRequest($city, $province, self::items($items), $district, $couriers, $postalCode, $subDistrict);
-        $quote = self::provider($tenant)->quote($request);
+        $quote = $settings->everproStrict() ? (new EverproShippingRates($settings, $tenant))->strict($request, $lead) : self::provider($tenant)->quote($request);
 
         if ($quote->status === ShippingQuote::NEEDS_ADMIN && (new ZoneShippingRates($settings))->confirmsAdmin($quote->zone)) {
             $quote = (new EverproShippingRates($settings, $tenant))->forAdminZone($request, $quote, $lead) ?? $quote;
         }
 
         if ($quote->ok() && (is_array($courier) ? $courier === [] : blank($courier))) {
-            $quote = $quote->copy(['primaryCourier' => $settings->primaryCourier()]);
+            $primary = $settings->primaryCourier();
+            // "Hanya Everpro" may price another shop courier when the primary one does not serve the place.
+            $quote = $quote->copy(['primaryCourier' => $settings->everproStrict() && $primary !== null && $quote->option($primary) === null ? $quote->options[0]->courier : $primary]);
+        }
+
+        if ($settings->everproStrict() && ($kept = self::keptCost($settings, $quote, $lead, $courier)) !== null) {
+            return $kept;
         }
 
         // The product's shipping promo (Produk > Iklan & promo) is taken off here, for every caller.
         return ShippingPromos::apply($quote);
+    }
+
+    /**
+     * "Hanya Everpro": the lead's own order keeps the shipping cost it already has, for its own city and courier. A
+     * cost CS typed (shipping_cost_source null) always wins over a new price; a cost the buyer already agreed to is
+     * kept when Everpro cannot price it now, so the order is never blocked or changed behind the buyer's back.
+     * Kept as is: a promo was already taken off it.
+     *
+     * @param  list<string>|string|null  $courier
+     */
+    private static function keptCost(ShippingSettings $settings, ShippingQuote $quote, ?Lead $lead, array|string|null $courier): ?ShippingQuote
+    {
+        if ($lead === null || $lead->shipping_cost === null || $quote->items === [] || ! LeadQuote::isOwnCity($lead, $quote->city)) {
+            return null;
+        }
+
+        $manual = $lead->shipping_cost_source === null;
+
+        if (! $manual && $quote->ok()) {
+            return null;
+        }
+
+        $owned = $lead->courier ?: $settings->primaryCourier();
+        $asked = is_array($courier) ? ($courier === [] ? null : $courier) : (blank($courier) || $courier === CourierChoice::ALL ? null : [$courier]);
+
+        if ($owned === null || ($asked !== null && ! in_array(mb_strtolower($owned), array_map(fn ($c) => mb_strtolower(trim((string) $c)), $asked), true))) {
+            return null;
+        }
+
+        return $quote->copy([
+            'status' => ShippingQuote::OK, 'options' => [new ShippingOption($owned, (int) $lead->shipping_cost, null, null)],
+            'message' => $manual ? 'Ongkir dari isian CS di data lead.' : 'Ongkir yang sudah disepakati pembeli (Everpro belum bisa menghitung ulang sekarang).',
+            'zone' => null, 'source' => $manual ? ShippingSettings::MANUAL : (string) $lead->shipping_cost_source,
+            'sourceNote' => $manual ? null : 'ongkir yang sudah disepakati', 'primaryCourier' => $asked === null ? $owned : null, 'adminReason' => null,
+        ]);
     }
 
     /** Input items with a product that exists in this agency's catalogue (by id, else by name). Must run inside the tenant. */

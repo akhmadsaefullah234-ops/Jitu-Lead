@@ -130,6 +130,205 @@ class EverproShippingRates implements ShippingProvider
         ]);
     }
 
+    public const ADMIN_PLACE_NOT_FOUND = 'kota, kecamatan, atau kelurahan tujuan tidak ditemukan di Everpro';
+
+    public const ADMIN_NO_ACCOUNT = 'akun Everpro belum aktif';
+
+    public const ADMIN_NO_ORIGIN = 'lokasi asal Everpro belum diatur';
+
+    /** What the AI is told when the address is not enough yet: ask, never guess an amount. */
+    public const STRICT_UNCLEAR = 'Alamat tujuan belum cukup untuk menghitung ongkir dari Everpro. Tanyakan kecamatan dan kelurahan (atau kode pos) tujuan. Jangan menyebut nominal ongkir dulu.';
+
+    /**
+     * "Hanya pakai tarif Everpro" (ShippingSettings::everproStrict): the price comes from Everpro or not at all, the
+     * zone table is never a price. Called by Shipping::quote instead of quote().
+     *
+     * - An address without a usable postal code, kelurahan or kecamatan: UNCLEAR_DESTINATION, ask for them.
+     * - An address Everpro matches (the lead's place for certain, or its kecamatan and city with one postal code):
+     *   Everpro's price, for the couriers asked, else the shop's first other courier served there.
+     * - An address Everpro does not know, a province that differs, Everpro failing twice, no courier served:
+     *   NEEDS_ADMIN with adminReason, so the AI hands the chat to CS and the inbox shows why.
+     * A zone marked "konfirmasi admin" is returned as the zone quote, for forAdminZone() as before.
+     */
+    public function strict(ShippingRequest $request, ?Lead $lead): ShippingQuote
+    {
+        $zones = new ZoneShippingRates($this->settings);
+        $zone = $zones->quote($request);
+        $unclear = fn () => $zone->copy(['status' => ShippingQuote::UNCLEAR_DESTINATION, 'message' => self::STRICT_UNCLEAR, 'options' => [], 'zone' => null, 'source' => ShippingSettings::EVERPRO]);
+        $admin = fn (string $why) => $zone->copy([
+            'status' => ShippingQuote::NEEDS_ADMIN, 'message' => 'Ongkir ke tujuan ini perlu dikonfirmasi admin ('.$why.').', 'options' => [],
+            'zone' => null, 'source' => ShippingSettings::EVERPRO, 'sourceNote' => null, 'adminReason' => $why,
+        ]);
+
+        if ($zone->status === ShippingQuote::UNCLEAR_DESTINATION) {
+            // No city yet: ask. A city given that no region list knows: a person checks it.
+            return blank($request->city) || $request->items === [] ? $zone->copy(['message' => self::STRICT_UNCLEAR]) : $admin(self::ADMIN_PLACE_NOT_FOUND);
+        }
+
+        if ($zone->status === ShippingQuote::NOT_AVAILABLE || $zones->confirmsAdmin($zone->zone)) {
+            return $zone;
+        }
+
+        $account = Carriers::configured($this->tenant) ? Carriers::account($this->tenant) : null;
+
+        if ($account === null || $account->provider !== 'everpro') {
+            return $admin(self::ADMIN_NO_ACCOUNT);
+        }
+
+        if (($origin = Shipments::originPostal($account)) === null) {
+            return $admin(self::ADMIN_NO_ORIGIN);
+        }
+
+        $provider = Carriers::make($account);
+
+        if (method_exists($provider, 'withTimeout')) {
+            $provider->withTimeout((int) config('shipping.everpro.timeout', 3));
+        }
+
+        try {
+            $place = $this->strictPlace($provider, $request, $lead, $zone);
+        } catch (Throwable $e) {
+            Log::warning('Everpro location lookup for a strict quote failed', ['tenant' => $this->tenant?->getKey(), 'lead' => $lead?->getKey(), 'error' => mb_substr($e->getMessage(), 0, 200)]);
+
+            return $admin(self::ADMIN_EVERPRO_FAILED);
+        }
+
+        if ($place === 'unclear') {
+            return $unclear();
+        }
+
+        if (is_string($place)) {
+            return $admin($place);
+        }
+
+        [$postal, $subDistrict] = $place;
+        $rates = null;
+
+        // Once more when Everpro fails or is slow, then a person checks it.
+        for ($try = 1; $try <= 2 && $rates === null; $try++) {
+            try {
+                $rates = $this->rates($provider, $account, $origin, $postal, $subDistrict, $zone);
+            } catch (Throwable $e) {
+                Log::warning('Everpro strict quote failed', ['tenant' => $this->tenant?->getKey(), 'lead' => $lead?->getKey(), 'try' => $try, 'error' => mb_substr($e->getMessage(), 0, 200)]);
+            }
+        }
+
+        if ($rates === null) {
+            return $admin(self::ADMIN_EVERPRO_FAILED);
+        }
+
+        $options = $this->served($rates, $request->couriers ?? $this->settings->couriers());
+
+        if ($options === [] && $request->couriers !== null) {
+            $options = array_slice($this->served($rates, $this->settings->couriers()), 0, 1);
+        }
+
+        if ($options === []) {
+            return $admin(self::ADMIN_NO_SERVICE);
+        }
+
+        return $zone->copy([
+            'status' => ShippingQuote::OK, 'message' => 'Ongkir dihitung dari tarif Everpro.', 'options' => $options,
+            'zone' => null, 'source' => ShippingSettings::EVERPRO, 'sourceNote' => null, 'adminReason' => null,
+        ]);
+    }
+
+    /**
+     * Where a strict quote prices to: [postal code, kelurahan], 'unclear' (ask the buyer for more), or why a person
+     * must check it. The lead's own address uses its Everpro match; any other address is looked up by name.
+     *
+     * @return array{0: string, 1: ?string}|string
+     */
+    private function strictPlace(CarrierProvider $provider, ShippingRequest $request, ?Lead $lead, ShippingQuote $zone): array|string
+    {
+        $own = LeadQuote::isOwnCity($lead, $zone->city) ? LeadQuote::destination($lead) : null;
+
+        if ($own !== null) {
+            if ($lead->provider_location_state === null && ProviderLocations::key($lead) !== null) {
+                app(ProviderLocations::class)->match($lead, provider: $provider);
+                $lead->refresh();
+            }
+
+            $fresh = ProviderLocations::key($lead) === $lead->provider_location_key;
+            $state = $fresh ? $lead->provider_location_state : null;
+
+            if ($state === ProviderLocations::EXACT && ($place = ProviderLocations::place($lead)) !== null) {
+                if (ProviderLocations::provinceDifference((array) $lead->shipping_address_parts + ['provinsi' => $own['provinsi']], $place) !== null) {
+                    return 'provinsi tujuan berbeda dengan data Everpro';
+                }
+
+                $postal = $place->postalCode ?: ($own['kode_pos'] ?? null);
+
+                return $postal !== null ? [$postal, $place->subDistrict ?: null] : self::ADMIN_PLACE_UNCERTAIN;
+            }
+
+            if ($state === ProviderLocations::MULTIPLE) {
+                return $this->inDistrict(ProviderLocations::candidates($lead), $own['kecamatan'] ?? $request->district, $own['kota'], $own['kode_pos'] ?? $request->postalCode);
+            }
+
+            if ($state === ProviderLocations::NONE) {
+                return str_contains((string) $lead->provider_location_note, 'belum ada kode pos atau kelurahan') ? 'unclear' : self::ADMIN_PLACE_NOT_FOUND;
+            }
+        }
+
+        if ($request->postalCode === null && blank($request->subDistrict) && blank($request->district)) {
+            return 'unclear';
+        }
+
+        if ($request->postalCode !== null) {
+            return [$request->postalCode, $request->subDistrict];
+        }
+
+        $places = $provider->locations(null, implode(', ', array_filter([$request->subDistrict, $request->district, $request->city], fn ($v) => filled($v))));
+
+        if (filled($request->subDistrict)) {
+            $norm = ProviderLocations::norm(...);
+            $found = array_values(array_filter($places, fn (CarrierLocation $l) => $norm($l->subDistrict) === $norm($request->subDistrict) && filled($l->postalCode)
+                && (blank($request->district) || $l->district === null || $norm($l->district) === $norm($request->district))));
+
+            if (count($found) === 1) {
+                return [$found[0]->postalCode, $found[0]->subDistrict];
+            }
+
+            if (count($found) > 1 || blank($request->district)) {
+                return count($found) > 1 ? 'unclear' : self::ADMIN_PLACE_NOT_FOUND;
+            }
+        }
+
+        return $this->inDistrict($places, $request->district, (string) $request->city, null);
+    }
+
+    /**
+     * The kelurahan is not certain: priced when the kecamatan and city match places of Everpro's list that share one
+     * postal code (or the buyer's own postal code is one of theirs). Several postal codes: ask for the kelurahan.
+     *
+     * @param  list<CarrierLocation>  $places
+     * @return array{0: string, 1: null}|string
+     */
+    private function inDistrict(array $places, ?string $district, string $city, ?string $postal): array|string
+    {
+        $norm = ProviderLocations::norm(...);
+
+        if (blank($district)) {
+            return 'unclear';
+        }
+
+        $inKec = array_values(array_filter($places, fn (CarrierLocation $l) => $l->district !== null && $norm($l->district) === $norm($district)
+            && ($l->city === null || $norm(Regions::city($l->city)) === $norm(Regions::city($city))) && filled($l->postalCode)));
+
+        if ($inKec === []) {
+            return self::ADMIN_PLACE_NOT_FOUND;
+        }
+
+        $codes = array_values(array_unique(array_map(fn (CarrierLocation $l) => (string) $l->postalCode, $inKec)));
+
+        if ($postal !== null && in_array($postal, $codes, true)) {
+            return [$postal, null];
+        }
+
+        return count($codes) === 1 ? [$codes[0], null] : 'unclear';
+    }
+
     /**
      * The lead's Everpro place when it is certain (state exact, for the current address) and the quote is for the
      * lead's own city. A lead not matched yet is matched now.

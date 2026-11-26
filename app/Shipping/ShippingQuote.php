@@ -56,9 +56,11 @@ final class ShippingQuote
     /** "Everpro" or "tabel zona Jabodetabek", with why the zone table was used when the shop prices with Everpro. */
     public function sourceLabel(): string
     {
-        return $this->source === ShippingSettings::EVERPRO
-            ? 'Everpro'
-            : trim('tabel zona '.$this->zone).($this->sourceNote ? ' ('.$this->sourceNote.')' : '');
+        return match ($this->source) {
+            ShippingSettings::EVERPRO => 'Everpro'.($this->sourceNote ? ' ('.$this->sourceNote.')' : ''),
+            ShippingSettings::MANUAL => 'isian manual CS',
+            default => trim('tabel zona '.$this->zone).($this->sourceNote ? ' ('.$this->sourceNote.')' : ''),
+        };
     }
 
     public function ok(): bool

@@ -87,7 +87,8 @@ class RecordOrder
                 'shipping_address' => $fullAddress,
                 'courier' => $option->courier,
                 'shipping_cost' => $option->price,
-                'shipping_cost_source' => $quote->source,
+                // A cost CS typed stays marked as typed (null), so it is never priced over.
+                'shipping_cost_source' => $quote->source === ShippingSettings::MANUAL ? null : $quote->source,
                 'order_items' => array_map(fn (ShippingItem $i) => $i->toArray(), $quote->items),
                 'deal_value' => $total ?? $lead->deal_value,
             ]);
