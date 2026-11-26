@@ -55,6 +55,11 @@
         .wa-prod.none { color: var(--gray-500); background: var(--gray-100); }
         .dark .wa-prod { background: var(--gray-800); color: var(--primary-300); }
         .wa-act { background: #ffe4e6; color: #9f1239; font-weight: 600; border-radius: 9999px; padding: 0 .45rem; font-size: .75rem; white-space: nowrap; }
+        .wa-search { position: sticky; top: 0; z-index: 1; background: white; padding: .5rem .6rem; border-bottom: 1px solid var(--gray-200); }
+        .wa-search input { width: 100%; min-width: 0; border: 1px solid var(--gray-300); border-radius: .5rem; padding: .45rem .7rem; font-size: 1rem; background: transparent; }
+        @media (min-width: 801px) { .wa-search input { font-size: .875rem; } }
+        .dark .wa-search { background: var(--gray-900); border-color: var(--gray-700); }
+        .dark .wa-search input { border-color: var(--gray-700); color: var(--gray-100); }
         .wa-filter { display: flex; flex-wrap: wrap; gap: .35rem; padding: .5rem .6rem; border-bottom: 1px solid var(--gray-200); }
         .wa-fchip { display: inline-flex; align-items: center; gap: .3rem; border: 1px solid var(--gray-300); border-radius: 9999px; padding: .2rem .65rem; font-size: .75rem; font-weight: 500; background: transparent; }
         .wa-fchip[aria-pressed="true"] { background: var(--primary-600); border-color: var(--primary-600); color: white; }
@@ -125,7 +130,10 @@
 
     <div class="wa {{ $conversation ? 'wa--open' : '' }}" wire:poll.10s>
         <aside class="wa-list" aria-label="Daftar percakapan">
-            @if ($closingCount > 0)
+            <div class="wa-search" role="search">
+                <input type="search" wire:model.live.debounce.400ms="search" placeholder="Cari nama atau nomor" aria-label="Cari nama atau nomor" autocomplete="off" enterkeyhint="search">
+            </div>
+            @if ($closingCount > 0 && ! $searching)
                 <div class="wa-filter" role="group" aria-label="Saring chat">
                     <button type="button" class="wa-fchip" aria-pressed="{{ $activeFilter === 'all' ? 'true' : 'false' }}" wire:click="$set('filter', 'all')">Semua</button>
                     <button type="button" class="wa-fchip" aria-pressed="{{ $activeFilter === 'closing' ? 'true' : 'false' }}" wire:click="$set('filter', 'closing')">Closing ({{ $closingCount }})</button>
@@ -140,7 +148,11 @@
                     @if ($c->lead->property)<span class="wa-prod" title="Produk yang ditanyakan">{{ $c->lead->property->name }}</span>@endif
                 </button>
             @empty
-                <div class="wa-empty">Belum ada percakapan. Buka chat dari kartu lead, atau tunggu pesan masuk.</div>
+                @if ($searching)
+                    <div class="wa-empty">Tidak ditemukan. Coba nama lain, atau nomor seperti 0812… atau 4 digit terakhir.</div>
+                @else
+                    <div class="wa-empty">Belum ada percakapan. Buka chat dari kartu lead, atau tunggu pesan masuk.</div>
+                @endif
             @endforelse
         </aside>
 

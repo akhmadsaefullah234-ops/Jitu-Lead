@@ -37,6 +37,7 @@ use App\Shipping\ShippingQuote;
 use App\Shipping\ShippingSettings;
 use App\Support\CurrentTenant;
 use App\Support\Industry;
+use App\Support\LeadSearch;
 use App\WhatsApp\RouteDecision;
 use App\WhatsApp\RouteSelector;
 use App\WhatsApp\WhatsAppException;
@@ -80,6 +81,9 @@ class Inbox extends Page
     /** Chat list filter: "all", or "closing" (OK orders nobody has handled yet, App\Shipping\Shipments\InboxShipping). */
     #[Url(as: 'f')]
     public string $filter = 'all';
+
+    /** Chat list search: name, email or phone typed any way (App\Support\LeadSearch). */
+    public string $search = '';
 
     /** The AI suggestion the agent loaded into the box, marked as used once sent. */
     public ?int $usedAiDraft = null;
@@ -137,9 +141,13 @@ class Inbox extends Page
         $shipping = ShipmentActions::available();
         // Every unhandled closing (also beyond the 100 newest): the filter "Closing (N)", hidden while there is none.
         $waiting = $shipping ? InboxShipping::waiting(LeadResource::getEloquentQuery()) : [];
-        $filter = $this->filter === 'closing' && $waiting !== [] ? 'closing' : 'all';
+        $search = trim($this->search);
+        // A search looks through every chat the user may see, so the "Closing" filter steps aside while it runs.
+        $filter = $search === '' && $this->filter === 'closing' && $waiting !== [] ? 'closing' : 'all';
         // Newest message first, always: the OK mark never reorders the list.
+        // The search narrows the query before the limit of 100, so older chats are found too.
         $conversations = static::visibleConversations()
+            ->when($search !== '', fn ($q) => $q->whereIn('lead_id', LeadSearch::apply(LeadResource::getEloquentQuery(), $search, ['name' => 'leads.name', 'email' => 'leads.email', 'phone' => 'leads.phone'])->select('leads.id')))
             ->when($filter === 'closing', fn ($q) => $q->whereIn('lead_id', array_keys($waiting)))
             ->with(['lead', 'lead.owner:id,name', 'lead.property:id,name', 'latestMessage'])->orderByDesc('last_message_at')->limit(100)->get();
         $closings = $shipping ? InboxShipping::closings($conversations->pluck('lead')->push($conversation?->lead)) : [];
@@ -148,6 +156,7 @@ class Inbox extends Page
             'seesAll' => app(CurrentTenant::class)->roleOf(auth()->user())?->seesAllLeads() ?? false,
             'conversations' => $conversations,
             'activeFilter' => $filter,
+            'searching' => $search !== '',
             'closings' => $closings,
             'closingCount' => count($waiting),
             'conversation' => $conversation?->load(['lead.stage', 'lead.owner', 'lead.property', 'messages.channel']),

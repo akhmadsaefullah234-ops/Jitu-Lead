@@ -15,6 +15,7 @@ use App\Reports\LeadOrigin;
 use App\Shipping\Shipments\AutoShipments;
 use App\Support\CurrentTenant;
 use App\Support\Industry;
+use App\Support\LeadSearch;
 use App\Support\Period;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
@@ -52,16 +53,18 @@ class LeadsTable
             // Sorting by "Tenggat" is one click away, and the Pipeline and Tugas pages order by urgency.
             ->defaultSort('id', 'desc')
             ->defaultPaginationPageOption(25)
+            // "0812 3456 7890" is one phone number, not three words (App\Support\LeadSearch).
+            ->splitSearchTerms(false)
             ->columns([
                 TextColumn::make('name')
                     ->label('Nama')
-                    ->searchable()
+                    ->searchable(query: fn (Builder $query, string $search) => LeadSearch::apply($query, $search, ['name' => 'leads.name', 'email' => 'leads.email', 'phone' => null]))
                     ->sortable()
                     ->wrap()
                     ->description(fn (Lead $record) => collect([$record->spamReasons() ? '⚠ Dicurigai spam' : null, $record->phone, LeadForm::showsIndustryFields() ? $record->property?->name : null])->filter()->implode(' · ')),
                 TextColumn::make('phone')
                     ->label('Telepon')
-                    ->searchable()
+                    ->searchable(query: fn (Builder $query, string $search) => LeadSearch::apply($query, $search, ['name' => null, 'email' => null, 'phone' => 'leads.phone']))
                     ->copyable()
                     ->visibleFrom('lg')
                     ->toggleable(),
