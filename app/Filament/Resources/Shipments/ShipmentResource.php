@@ -17,6 +17,7 @@ use App\Shipping\Shipments\LabelStore;
 use App\Shipping\Shipments\ProviderLocations;
 use App\Shipping\Shipments\Shipments;
 use App\Support\CurrentTenant;
+use App\Support\LeadSearch;
 use BackedEnum;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
@@ -156,10 +157,13 @@ class ShipmentResource extends Resource
         $tz = fn () => app(CurrentTenant::class)->get()?->timezone ?: 'Asia/Jakarta';
 
         return $table
+            // A buyer's "0812 3456 7890" is one phone number, not three words.
+            ->splitSearchTerms(false)
             ->modifyQueryUsing(fn (Builder $query) => $query->with(['lead:id,name,phone,variant,quantity,order_items,property_id,owner_id', 'lead.property:id,name', 'printer:id,name']))
             ->columns([
                 TextColumn::make('created_at')->label('Tanggal resi')->dateTime('d M H:i')->timezone($tz())->sortable(),
-                TextColumn::make('lead.name')->label('Pembeli')->searchable(['name', 'phone'])->weight('bold')
+                TextColumn::make('lead.name')->label('Pembeli')
+                    ->searchable(query: fn (Builder $query, string $search) => $query->whereHas('lead', fn (Builder $q) => LeadSearch::apply($q, $search, ['name' => 'leads.name', 'email' => null, 'phone' => 'leads.phone'])))->weight('bold')
                     ->url(fn (Shipment $r) => $r->lead ? Inbox::getUrl(['lead' => $r->lead_id]) : null)
                     ->description(fn (Shipment $r) => $r->lead ? new HtmlString('<a href="'.e(LeadResource::getUrl('edit', ['record' => $r->lead_id])).'" style="text-decoration:underline">Buka lead</a>') : null),
                 TextColumn::make('items')->label('Produk')->state(fn (Shipment $r) => self::items($r))->wrap(),

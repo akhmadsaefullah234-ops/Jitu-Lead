@@ -20,6 +20,7 @@ use App\Shipping\Carriers\ShipmentStatus;
 use App\Shipping\Shipments\PackingState;
 use App\Support\CurrentTenant;
 use App\Support\Industry;
+use App\Support\LeadSearch;
 use App\Support\Period;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -353,13 +354,7 @@ class Pipeline extends Page
             ->when($period, fn (Builder $q) => $period->apply($q, $this->dasar === 'tahap' ? 'leads.stage_entered_at' : 'leads.created_at'))
             ->when(filled($this->produk), fn (Builder $q) => $this->produk === 'none' ? $q->whereNull('leads.property_id') : $q->where('leads.property_id', (int) $this->produk))
             ->when($this->agent && $this->canSeeTeam(), fn (Builder $q) => $q->where('owner_id', $this->agent))
-            ->when(filled($this->search), function (Builder $q) {
-                $term = '%'.mb_strtolower(trim($this->search)).'%';
-                $q->where(fn (Builder $w) => $w
-                    ->whereRaw('lower(name) like ?', [$term])
-                    ->orWhere('phone', 'like', '%'.preg_replace('/\D+/', '', $this->search).'%')
-                    ->orWhereRaw('lower(email) like ?', [$term]));
-            })
+            ->when(filled($this->search), fn (Builder $q) => LeadSearch::apply($q, $this->search, ['name' => 'leads.name', 'email' => 'leads.email', 'phone' => 'leads.phone']))
             ->when($this->filter === 'hot', fn (Builder $q) => $q->where('interest', Interest::Hot))
             ->when($this->filter === 'today', fn (Builder $q) => $q->open()->whereBetween('next_action_due_at', [now(), now()->endOfDay()]))
             ->when($this->filter === 'late', fn (Builder $q) => $q->overdue())

@@ -9,6 +9,7 @@ use App\Filament\Resources\Leads\Schemas\LeadForm;
 use App\Filament\Resources\Leads\Tables\LeadsTable;
 use App\Models\Lead;
 use App\Support\CurrentTenant;
+use App\Support\LeadSearch;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -73,6 +74,12 @@ class LeadResource extends Resource
     public static function getGloballySearchableAttributes(): array
     {
         return ['name', 'phone', 'email'];
+    }
+
+    /** Name, email or phone typed any way (0812..., +62 812-...), as on the Pipeline and the Lead list. */
+    protected static function applyGlobalSearchAttributeConstraints(Builder $query, string $search): void
+    {
+        LeadSearch::apply($query, $search, ['name' => 'leads.name', 'email' => 'leads.email', 'phone' => 'leads.phone']);
     }
 
     public static function getPages(): array
