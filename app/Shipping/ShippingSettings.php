@@ -17,6 +17,9 @@ final class ShippingSettings
 
     public const SOURCES = [self::ZONE => 'Tabel zona', self::EVERPRO => 'Everpro (cadangan tabel zona)'];
 
+    /** A shipping cost a person typed (lead form, "Buat resi"): kept as leads.shipping_cost_source null. */
+    public const MANUAL = 'manual';
+
     /** @param  array<string, mixed>  $data */
     public function __construct(private array $data) {}
 
@@ -29,7 +32,7 @@ final class ShippingSettings
     public static function blank(): array
     {
         return [
-            'enabled' => false, 'provider' => self::ZONE, 'origin' => null, 'couriers' => [], 'primary_courier' => null,
+            'enabled' => false, 'provider' => self::ZONE, 'everpro_strict' => false, 'origin' => null, 'couriers' => [], 'primary_courier' => null,
             'default_weight_grams' => config('shipping.default_weight_grams'), 'volumetric_divisor' => config('shipping.volumetric_divisor'),
             'zones' => [],
         ];
@@ -43,6 +46,16 @@ final class ShippingSettings
     public function provider(): string
     {
         return (string) ($this->data['provider'] ?? self::ZONE);
+    }
+
+    /**
+     * "Hanya pakai tarif Everpro (tanpa tarif cadangan)": buyers' prices come only from Everpro, the zone table is
+     * never a price, and an address Everpro cannot match goes to a person (EverproShippingRates::strict). Only with
+     * Everpro as the price source; off by default, so nothing changes until a shop turns it on.
+     */
+    public function everproStrict(): bool
+    {
+        return $this->provider() === self::EVERPRO && (bool) ($this->data['everpro_strict'] ?? false);
     }
 
     public function origin(): ?string

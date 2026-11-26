@@ -363,8 +363,14 @@ class ShippingSettingsPage extends Page
                     ->placeholder(fn (Get $get) => 'Kurir pertama'.(filled($get('couriers')[0] ?? null) ? ' ('.array_values($get('couriers'))[0].')' : ''))
                     ->helperText('Hanya kurir ini yang dihitung dan disebut ke pembeli (AI, Inbox, sambutan). Kurir lain dihitung hanya bila pembeli memintanya; kurir yang tidak ada di daftar diserahkan ke admin.'),
                 Select::make('provider')->label('Sumber ongkir')->native(false)->selectablePlaceholder(false)->options(ShippingSettings::SOURCES)
+                    ->live()
                     ->helperText('Everpro: ongkir ke pembeli dari tarif Everpro (sama dengan Buat resi) bila akun Everpro aktif dan kode pos/kelurahan tujuan diketahui. '
                         .'Bila tidak, atau Everpro lambat/gagal, dipakai tabel zona dan sumbernya dicatat di aktivitas lead.'),
+                Toggle::make('everpro_strict')->label('Hanya pakai tarif Everpro (tanpa tarif cadangan)')->columnSpanFull()
+                    ->visible(fn (Get $get) => $get('provider') === ShippingSettings::EVERPRO)
+                    ->helperText('Tabel zona tidak pernah dipakai sebagai harga. Alamat belum lengkap: AI menanyakan kecamatan dan kelurahan. '
+                        .'Alamat tidak cocok di Everpro, atau Everpro gagal dua kali: chat diserahkan ke CS dengan alasannya di Inbox. '
+                        .'Ongkir yang diisi manual oleh CS di lead tetap dipakai.'),
             ]),
             Section::make('Aturan berat')->columns(2)->schema([
                 TextInput::make('default_weight_grams')->label('Berat bawaan per produk')->numeric()->integer()->minValue(1)->maxValue(100000)->suffix('g')->required()
@@ -412,6 +418,7 @@ class ShippingSettingsPage extends Page
         $tenant->forceFill(['shipping' => [
             'enabled' => (bool) ($state['enabled'] ?? false),
             'provider' => isset(ShippingSettings::SOURCES[$state['provider'] ?? '']) ? $state['provider'] : ShippingSettings::of($tenant)->provider(),
+            'everpro_strict' => ($state['provider'] ?? null) === ShippingSettings::EVERPRO && (bool) ($state['everpro_strict'] ?? false),
             'origin' => filled($state['origin'] ?? null) ? trim($state['origin']) : null,
             'couriers' => $couriers = array_values(array_unique(array_map('trim', $state['couriers'] ?? []))),
             'primary_courier' => in_array($state['primary_courier'] ?? null, $couriers, true) ? $state['primary_courier'] : null,

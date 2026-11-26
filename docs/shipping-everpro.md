@@ -308,6 +308,35 @@ In each case the buyer gets `GenerateAiReply::SHIPPING_CHECK_REPLY` ("ongkir ke 
 A shop without an Everpro account is unchanged: it gets the same "konfirmasi admin" quote with no reason and a silent
 handoff. A zone without the flag (Jawa, for example) keeps its zone price.
 
+### "Hanya pakai tarif Everpro (tanpa tarif cadangan)"
+
+A setting under Pengaturan > Pengiriman, shown only when the price source is Everpro: `tenants.shipping.everpro_strict`
+(boolean, default `false`, no migration). Off, everything above is unchanged, the zone fallback included. On,
+`Shipping::quote` calls `EverproShippingRates::strict` instead of the provider, and the zone table is never a price:
+
+| Address | Result |
+| --- | --- |
+| No city, or no usable kode pos, kelurahan or kecamatan (an Everpro match noted "alamat belum ada kode pos atau kelurahan") | `tujuan_belum_jelas`: the AI asks for kecamatan and kelurahan, names no amount, no handoff |
+| The lead's place is certain (`exact`), or the kelurahan is uncertain but the kecamatan and city match places with one postal code (or the lead's own postal code) | Everpro's price |
+| City, kecamatan or kelurahan not found, Everpro's province differs, or the match is `none` | `perlu_konfirmasi_admin` with `kota, kecamatan, atau kelurahan tujuan tidak ditemukan di Everpro` (or the province reason) |
+| Everpro fails or is slow (`shipping.everpro.timeout`): tried once more | then `Everpro gagal atau tidak merespons saat cek ongkir` |
+| The primary courier does not serve the place | another shop courier Everpro serves there; none: `Everpro tidak punya layanan kurir toko ke tujuan ini` |
+| No active Everpro account or no Everpro origin | `akun Everpro belum aktif` / `lokasi asal Everpro belum diatur` |
+
+Several postal codes in the kecamatan and no certain kelurahan: asked again (kelurahan). Every admin case hands the
+chat to CS with `SHIPPING_CHECK_REPLY`, and the reason shows in the `ai_handoff` activity in Inbox. A "konfirmasi
+admin" zone still goes through `forAdminZone`. The shipping promo is taken off as before.
+
+Callers without a lead (the order form, the welcome message, Inbox "Hitung ongkir") price by the postal code or the
+kelurahan they have. The form shows "Ongkir dihitung setelah kecamatan dan kelurahan dipilih." while the address is
+incomplete and "Ongkir akan dikonfirmasi lewat WhatsApp." when Everpro cannot price it. The welcome message then says
+nothing about shipping.
+
+For the lead's own city, a cost already on the lead is kept (`Shipping::keptCost`): a cost CS typed
+(`shipping_cost_source` null, source label "isian manual CS") always wins over a new price and stays null; a cost the
+buyer already agreed to (`everpro`, `zone`) is kept when Everpro cannot price it now, so `RecordOrder` is not blocked.
+A different city or another courier asked is priced again.
+
 ## Keamanan
 
 Kredensial dan token tidak pernah ditulis di kode, tes, atau log. Token Everpro disimpan terenkripsi di cache per agensi

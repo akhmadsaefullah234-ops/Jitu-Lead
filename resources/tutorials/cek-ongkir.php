@@ -15,7 +15,7 @@ return [
             'shot' => ['page' => 'pengiriman', 'highlight' => ['.fi-fo-field:has-text("Kurir dan layanan") >> nth=0', '.fi-fo-field:has-text("Kurir utama")']],
         ],
         [
-            'text' => 'Pilih <b>Sumber ongkir</b>: <b>Tabel zona</b> (tarif per kg yang Anda isi sendiri) atau <b>Everpro (cadangan tabel zona)</b>: tarif Everpro, sama dengan di Buat resi, bila akun Everpro aktif dan kode pos atau kelurahan tujuan diketahui. Bila tidak, atau Everpro lambat, dipakai tabel zona dan sumbernya dicatat di aktivitas lead.',
+            'text' => 'Pilih <b>Sumber ongkir</b>: <b>Tabel zona</b> (tarif per kg yang Anda isi sendiri) atau <b>Everpro (cadangan tabel zona)</b>: tarif Everpro, sama dengan di Buat resi, bila akun Everpro aktif dan kode pos atau kelurahan tujuan diketahui. Bila tidak, atau Everpro lambat, dipakai tabel zona dan sumbernya dicatat di aktivitas lead. Nyalakan <b>Hanya pakai tarif Everpro (tanpa tarif cadangan)</b> agar tabel zona tidak pernah dipakai sebagai harga: alamat yang belum lengkap ditanyakan kecamatan dan kelurahannya, dan alamat yang tidak dikenali Everpro atau saat Everpro gagal diserahkan ke CS beserta alasannya.',
             'alt' => 'Pilihan Sumber ongkir: Tabel zona atau Everpro',
             'shot' => ['page' => 'pengiriman', 'highlight' => ['.fi-fo-field:has-text("Sumber ongkir")']],
         ],
@@ -27,5 +27,5 @@ return [
         ],
     ],
     'tips' => ['Berat dihitung dari berat produk, atau berat volume (P x L x T / pembagi, umumnya 6000) bila lebih besar. Produk tanpa berat memakai <b>Berat bawaan per produk</b>.'],
-    'perhatian' => ['Bila tujuan tidak ada di tabel, atau zonanya bertanda Konfirmasi admin, AI tidak menyebut angka dan menyerahkan chat ke agen. Toko yang punya akun Everpro aktif: zona Konfirmasi admin dihitung dari tarif Everpro untuk alamat lead yang lokasinya sudah pasti, tanpa agen. Bila Everpro gagal, lokasinya belum pasti, atau tidak ada layanan, pembeli diberi tahu ongkir sedang dicek dan chat diserahkan ke agen beserta alasannya. Promo ongkir per produk dipotong setelah tarif dihitung.'],
+    'perhatian' => ['Bila tujuan tidak ada di tabel, atau zonanya bertanda Konfirmasi admin, AI tidak menyebut angka dan menyerahkan chat ke agen. Toko yang punya akun Everpro aktif: zona Konfirmasi admin dihitung dari tarif Everpro untuk alamat lead yang lokasinya sudah pasti, tanpa agen. Bila Everpro gagal, lokasinya belum pasti, atau tidak ada layanan, pembeli diberi tahu ongkir sedang dicek dan chat diserahkan ke agen beserta alasannya. Promo ongkir per produk dipotong setelah tarif dihitung.', 'Dengan <b>Hanya pakai tarif Everpro</b>, ongkir yang diisi CS di data lead tidak pernah ditimpa, dan ongkir yang sudah disepakati pembeli tetap dipakai saat Everpro sedang gagal.'],
 ];

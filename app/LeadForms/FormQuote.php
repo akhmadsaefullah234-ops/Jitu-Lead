@@ -10,6 +10,7 @@ use App\Regions\RegionDirectory;
 use App\Shipping\Regions;
 use App\Shipping\Shipping;
 use App\Shipping\ShippingQuote;
+use App\Shipping\ShippingSettings;
 use Closure;
 use Illuminate\Support\Facades\Cache;
 use Throwable;
@@ -106,7 +107,8 @@ class FormQuote
 
         // v2: the entry is ShippingQuote::toData(). Entries before it held the object, which the cache cannot read back.
         $key = self::KEY_PREFIX.$tenant->getKey().'.'.$form->getKey().'.'.$product->getKey().'.'.$form->updated_at?->timestamp.'.'
-            .md5(json_encode([$city, $province, $parts['kecamatan'] ?? null, $parts['kelurahan'] ?? null, $parts['kode_pos'] ?? null, $quantity]));
+            .md5(json_encode([$city, $province, $parts['kecamatan'] ?? null, $parts['kelurahan'] ?? null, $parts['kode_pos'] ?? null, $quantity])
+                .(ShippingSettings::of($tenant)->everproStrict() ? '.everpro' : ''));
 
         try {
             $quote = self::cached($key, fn () => Shipping::quote($tenant, $city, $province, [['product_id' => $product->getKey(), 'jumlah' => $quantity]],
@@ -121,7 +123,10 @@ class FormQuote
         $option = $quote->ok() ? ($quote->primaryCourier !== null ? $quote->option($quote->primaryCourier) : null) ?? ($quote->options[0] ?? null) : null;
 
         if ($option === null) {
-            return $out + ['pesan' => 'Ongkir akan dikonfirmasi lewat WhatsApp.'];
+            // "Hanya Everpro" needs the kecamatan and kelurahan before it can price; ask for them while the form is filled.
+            $strict = $quote->status === ShippingQuote::UNCLEAR_DESTINATION && ShippingSettings::of($tenant)->everproStrict();
+
+            return $out + ['pesan' => $strict ? 'Ongkir dihitung setelah kecamatan dan kelurahan dipilih.' : 'Ongkir akan dikonfirmasi lewat WhatsApp.'];
         }
 
         return $out + array_filter([
