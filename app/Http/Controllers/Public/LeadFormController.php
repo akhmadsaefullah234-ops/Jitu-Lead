@@ -12,11 +12,14 @@ use App\LeadForms\SubmitLeadForm;
 use App\Models\LeadForm;
 use App\Models\Tenant;
 use App\Support\CurrentTenant;
+use App\Tracking\TrackingInput;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -70,6 +73,15 @@ class LeadFormController extends Controller
             // Step 1 of a two-step form: only the fields before the address; the lead is kept without its address.
             $stepOne = $request->input('step') === '1' && $form->twoStep();
             $asked = $stepOne ? FormFields::stepOneFields($fields) : $fields;
+            $context = ['tenant' => $tenant->getKey(), 'form' => $form->getKey(), 'step' => $stepOne ? 1 : null];
+
+            // Ad tags and browser ids never fail the order: one too long or not valid is dropped (App\Tracking\TrackingInput).
+            $dropped = TrackingInput::clean($request, $context, log: false);
+            [$answers, $hidden] = TrackingInput::cleanHidden($fields, (array) $request->input('f', []));
+            $request->merge(['f' => $answers]);
+            TrackingInput::logDropped($dropped + $hidden, $context);
+            // Buyers read the messages: "Nama penerima wajib diisi.", not "The nama penerima field is required."
+            App::setLocale('id');
 
             try {
                 $data = $request->validate([
@@ -77,10 +89,12 @@ class LeadFormController extends Controller
                     'page' => ['nullable', 'integer'],
                     'ab' => ['nullable', 'in:A,B'],
                     'event_id' => ['nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9_-]+$/'],
-                    'source_url' => ['nullable', 'url', 'max:500'],
-                    ...array_fill_keys([...SubmitLeadForm::CAMPAIGN_FIELDS, ...SubmitLeadForm::BROWSER_IDS], ['nullable', 'string', 'max:200']),
+                    ...TrackingInput::rules(),
                 ], [], FormFields::attributes($asked));
             } catch (ValidationException $e) {
+                // Field names only, never what the buyer typed, so a rule that turns buyers away shows up quickly.
+                Log::info('Public form submission rejected (422)', $context + ['fields' => array_keys($e->errors())]);
+
                 if ($request->expectsJson()) {
                     throw $e;
                 }

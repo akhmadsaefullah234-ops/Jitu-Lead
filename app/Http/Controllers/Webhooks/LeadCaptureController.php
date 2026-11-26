@@ -13,9 +13,13 @@ use App\Push\Alerts;
 use App\Support\CurrentTenant;
 use App\Tracking\ConversionPayload;
 use App\Tracking\PipelineConversions;
+use App\Tracking\TrackingInput;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 /**
@@ -33,18 +37,29 @@ class LeadCaptureController extends Controller
         $tenant = Tenant::query()->where('capture_token', $token)->where('status', '!=', 'suspended')->first();
         abort_if($tenant === null, 404);
 
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:120'],
-            'phone' => ['nullable', 'string', 'max:30', 'required_without:email'],
-            'email' => ['nullable', 'email:rfc', 'max:160', 'required_without:phone'],
-            'note' => ['nullable', 'string', 'max:1000'],
-            'source' => ['nullable', 'string', 'max:60'],
-            'website' => ['nullable', 'string', 'max:255'],
-            'page' => ['nullable', 'integer'],
-            'event_id' => ['nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9_-]+$/'],
-            'source_url' => ['nullable', 'url', 'max:500'],
-            ...array_fill_keys([...self::CAMPAIGN_FIELDS, ...self::BROWSER_IDS], ['nullable', 'string', 'max:200']),
-        ]);
+        // Ad tags and browser ids never fail the lead: one too long or not valid is dropped (App\Tracking\TrackingInput).
+        $context = ['tenant' => $tenant->getKey(), 'endpoint' => 'capture'];
+        TrackingInput::clean($request, $context);
+        App::setLocale('id');
+
+        try {
+            $data = $request->validate([
+                'name' => ['required', 'string', 'max:120'],
+                'phone' => ['nullable', 'string', 'max:30', 'required_without:email'],
+                'email' => ['nullable', 'email:rfc', 'max:160', 'required_without:phone'],
+                'note' => ['nullable', 'string', 'max:1000'],
+                'source' => ['nullable', 'string', 'max:60'],
+                'website' => ['nullable', 'string', 'max:255'],
+                'page' => ['nullable', 'integer'],
+                'event_id' => ['nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9_-]+$/'],
+                ...TrackingInput::rules(),
+            ]);
+        } catch (ValidationException $e) {
+            // Field names only, never the visitor's answers.
+            Log::info('Public form submission rejected (422)', $context + ['fields' => array_keys($e->errors())]);
+
+            throw $e;
+        }
 
         // A filled robot trap ("website") is saved and marked unless it is clearly a robot (App\LeadForms\SpamGuard).
         $spam = SpamGuard::check($request, $data['phone'] ?? null);

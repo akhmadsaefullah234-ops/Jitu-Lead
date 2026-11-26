@@ -301,7 +301,7 @@ class PipelineConversions
      */
     public static function rememberBrowserIds(Lead $lead, array $data): void
     {
-        $ids = array_filter(array_intersect_key($data, array_flip(['fbc', 'fbp', 'ttclid', 'ttp'])), fn ($v) => is_string($v) && $v !== '' && mb_strlen($v) <= 200);
+        $ids = array_filter(array_intersect_key($data, array_flip(['fbc', 'fbp', 'ttclid', 'ttp'])), fn ($v) => is_string($v) && $v !== '' && mb_strlen($v) <= 500);
 
         if ($ids !== []) {
             $lead->forceFill(['custom_fields' => ['pelacakan' => $ids] + (array) $lead->custom_fields])->save();
