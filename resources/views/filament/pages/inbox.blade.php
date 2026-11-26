@@ -68,6 +68,8 @@
         .dark .wa-okline { color: #86efac; } .dark .wa-okline span { color: var(--gray-400); }
         .wa-print { background: #fef3c7; color: #92400e; font-weight: 600; border-radius: 9999px; padding: 0 .45rem; font-size: .75rem; white-space: nowrap; }
         .wa-spam { background: #fef3c7; color: #92400e; border-radius: 9999px; padding: 0 .45rem; font-size: .75rem; white-space: nowrap; }
+        .wa-act { background: #ffe4e6; color: #9f1239; border-radius: 9999px; padding: 0 .45rem; font-size: .75rem; font-weight: 600; white-space: nowrap; }
+        .dark .wa-act { background: #4c0519; color: #fecdd3; }
         .wa-badge { background: var(--primary-600); color: white; border-radius: 9999px; padding: 0 .45rem; font-size: .75rem; }
         .wa-chat { display: flex; flex-direction: column; max-height: calc(100vh - 12rem); max-height: calc(100dvh - 12rem); }
         .wa-proof { font-size: .75rem; font-weight: 600; color: #92400e; background: #fef3c7; border-radius: 9999px; padding: .15rem .55rem; }
@@ -133,7 +135,7 @@
             @endif
             @forelse ($conversations as $c)
                 <button type="button" class="wa-item" wire:key="c-{{ $c->id }}" wire:click="open({{ $c->lead_id }})" aria-current="{{ $conversation?->id === $c->id ? 'true' : 'false' }}">
-                    <div class="n"><span>{{ $c->lead->name }}</span>@if ($c->lead->spamReasons())<span class="wa-spam" title="{{ implode(', ', $c->lead->spamReasons()) }}">Dicurigai spam</span>@endif@if (isset($closings[$c->lead_id]) || $c->unread_count)<span class="wa-tags">@if (isset($closings[$c->lead_id]))<span class="wa-ok" title="{{ \App\Shipping\Shipments\InboxShipping::TOOLTIP }}" aria-label="{{ \App\Shipping\Shipments\InboxShipping::TOOLTIP }}">OK</span>@endif @if ($c->unread_count)<span class="wa-badge">{{ $c->unread_count }}</span>@endif</span>@endif</div>
+                    <div class="n"><span>{{ $c->lead->name }}</span>@if ($c->lead->spamReasons())<span class="wa-spam" title="{{ implode(', ', $c->lead->spamReasons()) }}">Dicurigai spam</span>@endif@if ($why = $parcelAttention[$c->lead_id] ?? null)<span class="wa-act" title="Follow-up paket berhenti: {{ $why }}">Perlu tindakan</span>@endif@if (isset($closings[$c->lead_id]) || $c->unread_count)<span class="wa-tags">@if (isset($closings[$c->lead_id]))<span class="wa-ok" title="{{ \App\Shipping\Shipments\InboxShipping::TOOLTIP }}" aria-label="{{ \App\Shipping\Shipments\InboxShipping::TOOLTIP }}">OK</span>@endif @if ($c->unread_count)<span class="wa-badge">{{ $c->unread_count }}</span>@endif</span>@endif</div>
                     <div class="p">{{ $c->lead->phone }} · {{ $c->last_message_at?->diffForHumans() }}</div>
                     @if ($preview = \App\WhatsApp\MessageContent::preview($c->latestMessage))<div class="p wa-last" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ $c->latestMessage->direction === 'out' ? 'Anda: ' : '' }}{{ $preview }}</div>@endif
                     @if ($seesAll && $c->lead->owner)<div class="p">Agen: {{ $c->lead->owner->name }}</div>@endif
@@ -160,14 +162,19 @@
                         </button>
                         <button type="button" class="wa-name" x-on:click="toggle()" x-bind:aria-expanded="open ? 'true' : 'false'" aria-controls="wa-details" title="Detail lead">
                             <strong>{{ $lead->name }}</strong>
-                            @if ($lead->payment_proof_at && ! $lead->paid_at)<span class="wa-dot" title="Bukti transfer masuk, perlu dicek"></span>@endif
+                            @if ($why = $parcelAttention[$lead->id] ?? null)
+                            <div><span class="wa-act">Perlu tindakan</span> Follow-up paket berhenti: {{ $why }}. Balas pembeli dari sini untuk menghapus tanda ini.</div>
+                        @elseif ($parcelFollowUp)
+                            <div>Follow-up paket gagal antar aktif · terkirim {{ $parcelFollowUp->sent_count }} pesan</div>
+                        @endif
+                        @if ($lead->payment_proof_at && ! $lead->paid_at)<span class="wa-dot" title="Bukti transfer masuk, perlu dicek"></span>@endif
                             <x-filament::icon icon="heroicon-m-chevron-down" class="chev" />
                         </button>
                         @if ($lead->stage)<span class="wa-chip" title="Tahap: {{ $lead->stage->name }}">{{ $lead->stage->name }}</span>@endif
                         @if ($lead->auto_shipment_state === \App\Shipping\Shipments\AutoShipments::SCHEDULED)<span class="wa-print">{{ $this->cancelAutoShipmentAction }}</span>@endif
                         <span class="wa-chip-prod">{{ $this->productAction }}</span>
                         <span class="wa-more">
-                            <x-filament-actions::group :actions="[$this->paymentReceivedAction, $this->digitalPaymentReceivedAction, $this->digitalPaymentLinkAction, $this->digitalAccessResendAction, $this->createShipmentAction, $this->retryShipmentAction, $this->linkShipmentAction, $this->trackShipmentAction, $this->shipmentLabelAction, $this->cancelShipmentAction, $this->trackingAction, $this->shippingQuoteAction, $this->openLeadAction]"
+                            <x-filament-actions::group :actions="[$this->paymentReceivedAction, $this->digitalPaymentReceivedAction, $this->digitalPaymentLinkAction, $this->digitalAccessResendAction, $this->createShipmentAction, $this->retryShipmentAction, $this->linkShipmentAction, $this->trackShipmentAction, $this->shipmentLabelAction, $this->cancelShipmentAction, $this->stopParcelFollowUpAction, $this->trackingAction, $this->shippingQuoteAction, $this->openLeadAction]"
                                 icon="heroicon-m-ellipsis-horizontal" label="Aksi lain" tooltip="Aksi lain" color="gray" :icon-button="true" dropdown-placement="bottom-end" />
                         </span>
                     </div>

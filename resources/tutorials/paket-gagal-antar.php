@@ -21,6 +21,9 @@ return [
                 'highlight' => ['.fi-dropdown-panel:visible button:has-text("Lacak paket")']],
         ],
     ],
-    'tips' => ['Minta kurir mengantar ulang lewat dashboard Everpro atau kantor kurir. Bila pembeli tidak bisa dihubungi atau menolak, paket akan kembali (retur).'],
+    'tips' => [
+        'Minta kurir mengantar ulang lewat dashboard Everpro atau kantor kurir. Bila pembeli tidak bisa dihubungi atau menolak, paket akan kembali (retur).',
+        'Nyalakan <b>Paket gagal antar → follow-up WhatsApp sehari sekali</b> di Pengaturan > Otomatisasi tahap agar pembeli diingatkan tiap hari di jam kirim sampai membalas. Bila pembeli membalas atau batas pesan tercapai, chat ditandai <b>Perlu tindakan</b> di Inbox. Untuk menghentikan satu paket: <b>Aksi lain</b> > <b>Hentikan follow-up paket</b>.',
+    ],
     'perhatian' => ['Paket yang kembali tidak membatalkan lead otomatis. Putuskan sendiri: kirim ulang atau pindahkan lead ke Batal.'],
 ];

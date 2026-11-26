@@ -21,7 +21,7 @@ class StageAutomationSettings
         'tracking' => ['Nomor resi diisi → kirim WhatsApp resi dan pindah ke Dikemas & dikirim',
             'Pesan ke pembeli berisi kurir, nomor resi, dan tautan lacak.', []],
         'delivered' => ['Setelah resi dikirim → Selesai',
-            'Dihitung dari waktu nomor resi dikirim ke pembeli, menurut provinsi alamat kirim.', ['days_java' => ['Hari untuk tujuan Pulau Jawa', 5], 'days_other' => ['Hari untuk tujuan luar Jawa', 8]]],
+            'Dihitung dari waktu nomor resi dikirim ke pembeli, menurut provinsi alamat kirim. Lead yang paketnya dilaporkan kurir gagal diantar, sedang diretur, atau sudah kembali ke toko tidak dipindah.', ['days_java' => ['Hari untuk tujuan Pulau Jawa', 5], 'days_other' => ['Hari untuk tujuan luar Jawa', 8]]],
         'no_reply' => ['Tidak ada balasan di Tanya produk → Batal ("Tidak ada respons")',
             'Dihitung dari chat terakhir pembeli (atau sejak masuk tahap bila belum pernah chat). Lead yang chatnya belum dibalas agen tidak dibatalkan.', ['days' => ['Setelah berapa hari', 7]]],
         'no_payment' => ['Belum bayar di Menunggu pembayaran → Batal ("Batal setelah order")',

@@ -32,6 +32,7 @@ use App\Regions\RegionDirectory;
 use App\Shipping\CourierChoice;
 use App\Shipping\Regions;
 use App\Shipping\Shipments\InboxShipping;
+use App\Shipping\Shipments\ParcelFollowUps;
 use App\Shipping\Shipping;
 use App\Shipping\ShippingQuote;
 use App\Shipping\ShippingSettings;
@@ -150,6 +151,8 @@ class Inbox extends Page
             'activeFilter' => $filter,
             'closings' => $closings,
             'closingCount' => count($waiting),
+            'parcelAttention' => ParcelFollowUps::attention($conversations->pluck('lead_id')->push($conversation?->lead_id)),
+            'parcelFollowUp' => ParcelFollowUps::activeFor($conversation?->lead),
             'conversation' => $conversation?->load(['lead.stage', 'lead.owner', 'lead.property', 'messages.channel']),
             'decision' => $decision,
             'aiMode' => $conversation?->lastInboundChannel?->ai_mode,
@@ -181,6 +184,7 @@ class Inbox extends Page
         }
 
         $conversation->pauseAiFor(AiSettings::of(app(CurrentTenant::class)->get())->agentPauseSeconds());
+        ParcelFollowUps::handled($conversation->lead);
         $this->markAiDraft($conversation, AiDraft::SENT);
         $this->applySuggestedOrder($conversation);
         app(LearnFromReply::class)($conversation, $message);
@@ -486,6 +490,11 @@ class Inbox extends Page
     public function retryShipmentAction(): Action
     {
         return ShipmentActions::retry(fn () => $this->current()?->lead)->size('sm');
+    }
+
+    public function stopParcelFollowUpAction(): Action
+    {
+        return ShipmentActions::stopFollowUp(fn () => $this->current()?->lead)->size('sm');
     }
 
     public function trackShipmentAction(): Action

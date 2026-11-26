@@ -25,7 +25,6 @@ use App\Welcome\WelcomeText;
 use App\WhatsApp\RouteSelector;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
-use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
 use Throwable;
@@ -43,6 +42,7 @@ use Throwable;
  *   returning and returned never reach the buyer: a note and the owner is told. delivered moves the lead to
  *   Selesai through StageAutomation; returned does not cancel it, a person decides. pickup_failed ("Gagal dijemput")
  *   only tells staff.
+ * - delivery_failed (and returning, when switched on) is then followed up once a day by ParcelFollowUps.
  * - A catch-up after a tracking gap tells only the newest status, and nothing that happened more than 24 hours
  *   before it reached us (an open failed delivery excepted); an older message still waiting is dropped.
  */
@@ -102,6 +102,13 @@ class StatusNotices
         $label = ShipmentStatus::label($status);
         $lead->activities()->create(['type' => 'note', 'body' => 'Status kiriman '.($shipment->awb ?? $shipment->client_order_no).': '.$label.($shipment->status_reason ? ' ('.$shipment->status_reason.')' : '').'.']);
 
+        // The daily follow-up of a failed delivery (App\Shipping\Shipments\ParcelFollowUps): a new cycle, or its end.
+        try {
+            app(ParcelFollowUps::class)->statusChanged($shipment, $status, $at);
+        } catch (Throwable $e) {
+            report($e);
+        }
+
         if (in_array($status, [ShipmentStatus::RETURNING, ShipmentStatus::RETURNED], true)) {
             $lead->activities()->create(['type' => 'note', 'body' => $status === ShipmentStatus::RETURNED
                 ? 'Paket sudah kembali ke toko. Hubungi pembeli lalu putuskan: kirim ulang atau batalkan pesanan. Lead tidak dipindah otomatis.'
@@ -145,11 +152,13 @@ class StatusNotices
             ->filter(fn (ShipmentNotice $n) => ShipmentStatus::rank($n->status) <= ShipmentStatus::rank($status))
             ->each(fn (ShipmentNotice $n) => $n->forceFill(['state' => ShipmentNotice::SKIPPED, 'note' => 'Status kiriman sudah berlanjut'])->save());
 
-        try {
-            $notice = ShipmentNotice::query()->create([
-                'shipment_id' => $shipment->getKey(), 'status' => $status, 'state' => ShipmentNotice::PENDING, 'event_at' => $at->copy()->setTimezone(config('app.timezone')), 'due_at' => $this->dueAt(now()),
-            ]);
-        } catch (UniqueConstraintViolationException) {
+        // Once per parcel and status (a second failed delivery is not told again). createOrFirst keeps an outer
+        // transaction usable when the row already exists.
+        $notice = ShipmentNotice::query()->createOrFirst(['shipment_id' => $shipment->getKey(), 'status' => $status], [
+            'state' => ShipmentNotice::PENDING, 'event_at' => $at->copy()->setTimezone(config('app.timezone')), 'due_at' => $this->dueAt(now()),
+        ]);
+
+        if (! $notice->wasRecentlyCreated) {
             return;
         }
 

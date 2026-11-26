@@ -12,6 +12,7 @@ use App\Mail\PaymentProofReceived;
 use App\Models\FollowUpLog;
 use App\Models\Lead;
 use App\Models\LostReason;
+use App\Models\Shipment;
 use App\Models\Stage;
 use App\Models\Tenant;
 use App\Models\User;
@@ -19,6 +20,7 @@ use App\Models\WaConversation;
 use App\Models\WaMessage;
 use App\Push\Alerts;
 use App\Regions\RegionDirectory;
+use App\Shipping\Carriers\ShipmentStatus;
 use App\Shipping\Regions;
 use App\Support\CurrentTenant;
 use App\WhatsApp\RouteSelector;
@@ -254,6 +256,12 @@ class StageAutomation
                 foreach (Lead::query()->where('stage_id', $stage->getKey())->whereNotNull('shipped_at')->where('shipped_at', '<=', now()->subDays(min($java, $other)))->get() as $lead) {
                     $days = $this->toJava($lead) ? $java : $other;
 
+                    // The courier said the parcel did not arrive (failed, on its way back, back at the shop): time
+                    // alone says nothing then, so a person (or a later "delivered") decides.
+                    if (self::parcelProblem($lead) !== null) {
+                        continue;
+                    }
+
                     if ($lead->shipped_at->lte(now()->subDays($days)) && $this->moveTo($lead, RetailStages::DONE, "{$days} hari setelah nomor resi dikirim", $this->doneDetails($lead))) {
                         $count['done']++;
                     }
@@ -293,6 +301,17 @@ class StageAutomation
 
             return $count;
         });
+    }
+
+    /** Courier statuses that block the time-based "Selesai": the parcel did not reach the buyer. */
+    public const NOT_ARRIVED = [ShipmentStatus::DELIVERY_FAILED, ShipmentStatus::RETURNING, ShipmentStatus::RETURNED];
+
+    /** The status of the lead's newest active parcel when it is one of NOT_ARRIVED, else null. */
+    public static function parcelProblem(Lead $lead): ?string
+    {
+        $status = Shipment::latestFor($lead)?->status;
+
+        return in_array($status, self::NOT_ARRIVED, true) ? $status : null;
     }
 
     public function toJava(Lead $lead): bool
