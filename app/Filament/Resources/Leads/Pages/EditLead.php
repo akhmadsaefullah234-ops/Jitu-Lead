@@ -60,6 +60,7 @@ class EditLead extends EditRecord
                 ShipmentActions::track(fn () => $this->record),
                 ShipmentActions::label(fn () => $this->record),
                 ShipmentActions::cancel(fn () => $this->record),
+                ShipmentActions::stopFollowUp(fn () => $this->record),
             ])->label('Pengiriman')->icon(Heroicon::OutlinedTruck)->button()->color('gray')->visible(fn () => ShipmentActions::available() && ! $this->record->trashed())
                 ->badge(fn () => Shipment::query()->tab('unprinted')->where('lead_id', $this->record->getKey())->exists() ? 'Belum dicetak' : null)->badgeColor('warning'),
             DeleteAction::make(),

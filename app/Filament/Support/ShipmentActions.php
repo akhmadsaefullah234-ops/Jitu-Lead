@@ -12,6 +12,7 @@ use App\Shipping\Carriers\CarrierLocation;
 use App\Shipping\Carriers\Carriers;
 use App\Shipping\Shipments\AutoShipments;
 use App\Shipping\Shipments\LabelSheet;
+use App\Shipping\Shipments\ParcelFollowUps;
 use App\Shipping\Shipments\ProviderLocations;
 use App\Shipping\Shipments\ShipmentDraft;
 use App\Shipping\Shipments\Shipments;
@@ -837,6 +838,20 @@ class ShipmentActions
                 }
             })
             ->schema([Text::make(fn () => ShipmentTimeline::html(Shipment::latestFor($lead())))]);
+    }
+
+    /** "Hentikan follow-up paket": ends the daily follow-up of a failed delivery (App\Shipping\Shipments\ParcelFollowUps). */
+    public static function stopFollowUp(Closure $lead, string $name = 'stopParcelFollowUp'): Action
+    {
+        return Action::make($name)->label('Hentikan follow-up paket')->icon(Heroicon::OutlinedBellSlash)->color('danger')
+            ->visible(fn () => ($l = $lead()) !== null && ParcelFollowUps::activeFor($l) !== null)
+            ->requiresConfirmation()->modalHeading('Hentikan follow-up paket gagal antar?')
+            ->modalDescription('Pesan harian ke pembeli untuk paket ini berhenti. Bila paket gagal diantar lagi nanti, follow-up mulai lagi.')
+            ->action(function () use ($lead) {
+                app(ParcelFollowUps::class)->stopByHand($lead(), auth()->user())
+                    ? Notification::make()->title('Follow-up paket dihentikan')->success()->send()
+                    : Notification::make()->title('Tidak ada follow-up paket yang aktif')->warning()->send();
+            });
     }
 
     /** Bulk "Buat resi" for leads in Dikemas & dikirim: each is checked; the ones that pass are queued. */
