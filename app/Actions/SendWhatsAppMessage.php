@@ -133,7 +133,7 @@ class SendWhatsAppMessage
     private function assertWritable(): void
     {
         if ($this->current->get() && PlanLimits::for($this->current->get())->readOnly()) {
-            throw new WhatsAppException('Langganan hanya-baca, pesan tidak bisa dikirim. Perpanjang paket di menu Langganan.');
+            throw new WhatsAppException('Langganan hanya-baca, pesan tidak bisa dikirim. Perpanjang paket di Profil agensi > Langganan.');
         }
     }
 

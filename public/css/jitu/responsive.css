@@ -224,6 +224,8 @@ html, body { max-width: 100%; overflow-x: hidden; overflow-x: clip; }
     .fi-sidebar-item-btn { min-height: 2.75rem; }
     .fi-btn { min-width: 2.75rem; min-height: 2.75rem; }
     .fi-select-input-btn, .fi-tabs-item, .fi-dropdown-list-item { min-height: 2.75rem; }
+    /* The account menu (avatar, top right) opens Profil saya and Profil agensi */
+    .fi-user-menu-trigger { display: inline-flex; align-items: center; justify-content: center; min-width: 2.75rem; min-height: 2.75rem; }
     /* Row ticks: bigger than Filament's 16px, still inside the card's corner */
     .fi-ta-record-checkbox, .fi-ta-page-checkbox { width: 1.375rem; height: 1.375rem; }
 }

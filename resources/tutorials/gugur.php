@@ -5,7 +5,7 @@ return [
     'group' => 'penjualan',
     'order' => 24,
     'industries' => ['properti'],
-    'menu' => 'Pipeline, dan Pengaturan > Alasan gugur',
+    'menu' => 'Pipeline, dan Pengaturan & Alat > Alasan gugur',
     'intro' => '<p>Lead yang tidak jadi membeli dipindah ke tahap <b>Gugur</b> dengan satu alasan. Alasan yang konsisten membuat laporan menunjukkan di mana penjualan paling sering lepas.</p>',
     'steps' => [
         [
@@ -17,8 +17,8 @@ return [
                 'highlight' => ['.fi-modal-window:visible .fi-fo-field:has-text("Alasan gugur")']],
         ],
         [
-            'text' => 'Admin mengubah daftar alasan di <b>Pengaturan > Alasan gugur</b>: klik <b>Buat alasan gugur</b> untuk menambah, atau ubah dan hapus alasan yang tidak dipakai.',
-            'alt' => 'Daftar Alasan gugur di Pengaturan',
+            'text' => 'Admin mengubah daftar alasan di <b>Pengaturan & Alat > Alasan gugur</b>: klik <b>Buat alasan gugur</b> untuk menambah, atau ubah dan hapus alasan yang tidak dipakai.',
+            'alt' => 'Daftar Alasan gugur di Pengaturan & Alat',
             'shot' => ['page' => 'lost-reasons', 'highlight' => ['.fi-ta-table']],
         ],
     ],

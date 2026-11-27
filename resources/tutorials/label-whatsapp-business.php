@@ -5,11 +5,11 @@ return [
     'group' => 'iklan',
     'order' => 20,
     'admin' => true,
-    'menu' => 'Pengaturan > Koneksi WhatsApp > klik nomor gateway > Label WhatsApp Business',
+    'menu' => 'Pengaturan & Alat > Koneksi WhatsApp > klik nomor gateway > Label WhatsApp Business',
     'intro' => '<p>Memasang label WhatsApp Business (misalnya Prospek, Order baru, Lunas) di chat lead secara otomatis saat lead pindah tahap atau ditandai Hot, sebagai sinyal untuk iklan Klik ke WhatsApp. Hanya untuk nomor gateway yang memakai akun WhatsApp Business.</p>',
     'steps' => [
         [
-            'text' => 'Buka <b>Koneksi WhatsApp</b>, klik nomor gateway, lalu buka bagian <b>Label WhatsApp Business (uji coba)</b>. Klik <b>Muat label dari WhatsApp</b> agar sistem mengenali label di akun Anda. Bila label belum ada, ikuti petunjuk di layar: di WhatsApp Bisnis, label standar ada di bagian Saran dan baru menjadi Daftar Anda setelah dipakai sekali. Buka satu chat UJI (bukan pelanggan), centang Prospek, Order baru, dan Lunas, pilih Selesai, lalu klik tombol itu lagi.',
+            'text' => 'Buka <b>Pengaturan & Alat > Koneksi WhatsApp</b>, klik nomor gateway, lalu buka bagian <b>Label WhatsApp Business (uji coba)</b>. Klik <b>Muat label dari WhatsApp</b> agar sistem mengenali label di akun Anda. Bila label belum ada, ikuti petunjuk di layar: di WhatsApp Bisnis, label standar ada di bagian Saran dan baru menjadi Daftar Anda setelah dipakai sekali. Buka satu chat UJI (bukan pelanggan), centang Prospek, Order baru, dan Lunas, pilih Selesai, lalu klik tombol itu lagi.',
             'alt' => 'Bagian Label WhatsApp Business dengan tombol Muat label dari WhatsApp',
             'shot' => ['page' => 'wa-channels', 'steps' => [['click' => '.fi-ta-row >> nth=0 >> a.fi-ta-col >> nth=0'], ['waitFor' => '.fi-section-header-heading:has-text("Label WhatsApp Business")'],
                 ['click' => '.fi-section-header-heading:has-text("Label WhatsApp Business")'], ['wait' => 500], ['scroll' => '.fi-section:has(.fi-section-header-heading:has-text("Label WhatsApp Business"))']],

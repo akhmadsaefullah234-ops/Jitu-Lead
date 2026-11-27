@@ -23,7 +23,7 @@ Changes from the plan's proposal:
 
 ## Stage automation (`App\Automation\DigitalStageAutomation`)
 
-The settings are under **Pengaturan > Otomatisasi tahap** and stored in `tenants.stage_automation['digital']`
+The settings are under **Pengaturan & Alat > Otomatisasi tahap** and stored in `tenants.stage_automation['digital']`
 (`DigitalStageAutomationSettings`). The shop rules keep the top level of the same column, and the property rules keep
 `property`. None of them reads another industry's key.
 
@@ -67,7 +67,7 @@ was not sent. Later the payment gateway (Prompt C) will call the same `paymentRe
 
 ## Pembayaran otomatis (Tahap 3, iPaymu)
 
-The agency connects its **own** iPaymu account under **Pengaturan > Pembayaran otomatis** (`PaymentGatewayPage`, digital
+The agency connects its **own** iPaymu account under **Pengaturan & Alat > Pembayaran otomatis** (`PaymentGatewayPage`, digital
 agencies and admins only). The VA and API key go into `payment_gateways`, encrypted with `APP_KEY` and hidden from
 arrays. They are never shown back: an empty box keeps the saved key. JITU's own subscription payments (`IpaymuPayments`,
 `/billing/ipaymu/notify`, `IPAYMU_*` in `.env`) are untouched. `IpaymuClient::using()` gives a copy that signs with the

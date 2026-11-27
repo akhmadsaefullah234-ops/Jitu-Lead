@@ -6,11 +6,11 @@ return [
     'order' => 40,
     'industries' => ['retail'],
     'admin' => true,
-    'menu' => 'Pengaturan > Pengiriman > Resi otomatis',
+    'menu' => 'Pengaturan & Alat > Pengaturan pengiriman > Resi otomatis',
     'intro' => '<p>Mati secara bawaan. Bila aktif, lead yang masuk tahap pemicu dan datanya lengkap dibuatkan resi sendiri setelah jeda. Lead yang datanya belum lengkap tetap dibuat manual, dengan alasannya tercatat di lead.</p>',
     'steps' => [
         [
-            'text' => 'Buka <b>Pengaturan > Pengiriman</b>, bagian <b>Resi otomatis</b>, nyalakan <b>Aktifkan resi otomatis</b>. Pilih <b>Tahap pemicu</b> (bawaan Dikemas & dikirim), <b>Jeda sebelum resi dibuat</b> (bawaan 30 menit), <b>Batas resi otomatis per hari</b> (bawaan 50), dan <b>Batas nilai COD per paket</b> (bawaan Rp1.000.000). Klik <b>Simpan pengiriman otomatis</b>.',
+            'text' => 'Buka <b>Pengaturan & Alat > Pengaturan pengiriman</b>, bagian <b>Resi otomatis</b>, nyalakan <b>Aktifkan resi otomatis</b>. Pilih <b>Tahap pemicu</b> (bawaan Dikemas & dikirim), <b>Jeda sebelum resi dibuat</b> (bawaan 30 menit), <b>Batas resi otomatis per hari</b> (bawaan 50), dan <b>Batas nilai COD per paket</b> (bawaan Rp1.000.000). Klik <b>Simpan pengiriman otomatis</b>.',
             'alt' => 'Bagian Resi otomatis dengan tahap pemicu, jeda, batas harian, dan batas COD',
             'shot' => ['page' => 'pengiriman', 'steps' => [['scroll' => '.fi-section:has(.fi-section-header-heading:text-is("Resi otomatis"))'], ['click' => '.fi-fo-field:has-text("Aktifkan resi otomatis") button[role=switch]'], ['wait' => 600],
                 ['scroll' => '.fi-section:has(.fi-section-header-heading:text-is("Resi otomatis"))']],

@@ -6,11 +6,11 @@ return [
     'order' => 61,
     'industries' => ['properti'],
     'admin' => true,
-    'menu' => 'Follow-up otomatis',
+    'menu' => 'Pengaturan & Alat > Follow-up otomatis',
     'intro' => '<p>Agensi properti mendapat tiga follow-up bawaan untuk tahap awal penjualan. Semuanya dibuat <b>nonaktif</b> sampai Anda memeriksa kalimatnya. Cara kerja follow-up dijelaskan di bab Follow-up otomatis.</p>',
     'steps' => [
         [
-            'text' => 'Buka <b>Follow-up otomatis</b>. Rangkaian bawaan agensi baru: <b>Lead baru</b> tiap 2 hari (H+2 sampai H+14), <b>Dihubungi</b> dan <b>Terkualifikasi</b> setiap hari (H+1 sampai H+7), masing-masing 7 pesan. Agensi lama tetap memakai aturan yang sudah ada. Pada mode <b>Otomatis</b>, follow-up umum selalu dipakai untuk agensi properti, berapa pun jumlah properti aktifnya.',
+            'text' => 'Buka <b>Pengaturan & Alat > Follow-up otomatis</b>. Rangkaian bawaan agensi baru: <b>Lead baru</b> tiap 2 hari (H+2 sampai H+14), <b>Dihubungi</b> dan <b>Terkualifikasi</b> setiap hari (H+1 sampai H+7), masing-masing 7 pesan. Agensi lama tetap memakai aturan yang sudah ada. Pada mode <b>Otomatis</b>, follow-up umum selalu dipakai untuk agensi properti, berapa pun jumlah properti aktifnya.',
             'alt' => 'Daftar Follow-up otomatis dengan Lead baru H+2, Tanya kebutuhan H+3, dan Tawarkan survei H+7',
             'shot' => ['page' => 'follow-up-rules', 'highlight' => ['.fi-callout >> nth=0', '.fi-ta-table']],
         ],

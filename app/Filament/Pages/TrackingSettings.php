@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Billing\PlanLimits;
 use App\Enums\Role;
+use App\Filament\Concerns\InSettingsAndTools;
 use App\Filament\Support\NoAutofill;
 use App\Jobs\SendConversionEvents;
 use App\Models\Stage;
@@ -35,6 +36,8 @@ use Throwable;
  */
 class TrackingSettings extends Page
 {
+    use InSettingsAndTools;
+
     protected string $view = 'filament.pages.tracking-settings';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedSignal;
@@ -43,7 +46,8 @@ class TrackingSettings extends Page
 
     protected static ?string $title = 'Pelacakan iklan';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Pengaturan';
+    // Opened from "Pengaturan & Alat" (App\Filament\Support\SettingsCatalog), not from the sidebar.
+    protected static bool $shouldRegisterNavigation = false;
 
     protected static ?int $navigationSort = 15;
 

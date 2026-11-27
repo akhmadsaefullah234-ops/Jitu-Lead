@@ -6,11 +6,11 @@ return [
     'order' => 10,
     'industries' => ['retail'],
     'admin' => true,
-    'menu' => 'Pengaturan > Pengiriman > Pengiriman otomatis',
+    'menu' => 'Pengaturan & Alat > Pengaturan pengiriman > Pengiriman otomatis',
     'intro' => '<p>Dengan Everpro, toko membuat resi, mencetak label, meminta jemput paket, dan melacak kiriman langsung dari JITU LEAD. Setelah tersambung, menu <b>Pengiriman</b> muncul di samping.</p>',
     'steps' => [
         [
-            'text' => 'Buka <b>Pengaturan > Pengiriman</b>, gulir ke <b>Pengiriman otomatis</b>, pilih <b>Penyedia</b> Everpro. Isi <b>Client key</b>, <b>Client secret</b>, dan <b>Callback key (x-everpro-key)</b> dari dashboard Everpro. Ketiganya tersimpan terenkripsi dan tidak ditampilkan lagi.',
+            'text' => 'Buka <b>Pengaturan & Alat > Pengaturan pengiriman</b>, gulir ke <b>Pengiriman otomatis</b>, pilih <b>Penyedia</b> Everpro. Isi <b>Client key</b>, <b>Client secret</b>, dan <b>Callback key (x-everpro-key)</b> dari dashboard Everpro. Ketiganya tersimpan terenkripsi dan tidak ditampilkan lagi.',
             'alt' => 'Bagian Pengiriman otomatis dengan penyedia, mode sandbox, dan tiga kunci Everpro',
             'shot' => ['page' => 'pengiriman', 'steps' => [['scroll' => '.fi-section:has(.fi-section-header-heading:text-is("Pengiriman otomatis"))']],
                 'highlight' => ['.fi-section:has(.fi-section-header-heading:text-is("Pengiriman otomatis"))']],

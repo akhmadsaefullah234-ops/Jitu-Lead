@@ -5,11 +5,11 @@ return [
     'group' => 'akun',
     'order' => 40,
     'admin' => true,
-    'menu' => 'Pengaturan > Langganan',
+    'menu' => 'Menu akun (kanan atas) > Profil agensi > Langganan',
     'intro' => '<p>Paket aktif, masa berlaku, pemakaian terhadap batas paket, dan pilihan paket.</p>',
     'steps' => [
         [
-            'text' => 'Buka <b>Langganan</b>. <b>Paket Anda</b> menampilkan status dan masa berlaku; <b>Pemakaian</b> menampilkan batas paket, misalnya jumlah halaman landing dan aturan follow-up.',
+            'text' => 'Buka <b>Profil agensi</b> dari menu akun (foto di kanan atas), lalu tab <b>Langganan</b>. <b>Paket Anda</b> menampilkan status dan masa berlaku; <b>Pemakaian</b> menampilkan batas paket, misalnya jumlah halaman landing dan aturan follow-up.',
             'alt' => 'Bagian Paket Anda dan Pemakaian',
             'shot' => ['page' => 'subscription', 'highlight' => ['.fi-section:has(.fi-section-header-heading:text-is("Pemakaian"))']],
         ],

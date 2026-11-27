@@ -2,7 +2,7 @@
 
 `App\Automation\PropertyStageAutomation` is the property counterpart of the shops' `StageAutomation`. It moves a
 property agency's leads through its pipeline by itself and keeps the agents' task list (`leads.next_action`) to what
-needs a person. Settings are under **Pengaturan > Otomatisasi tahap** and are stored in
+needs a person. Settings are under **Pengaturan & Alat > Otomatisasi tahap** and are stored in
 `tenants.stage_automation['property']` (`PropertyStageAutomationSettings`). The shop rules keep the top-level keys
 of the same column and never read `property`.
 

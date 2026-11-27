@@ -5,11 +5,11 @@ return [
     'group' => 'percakapan',
     'order' => 40,
     'admin' => true,
-    'menu' => 'AI Asisten > Pengetahuan AI, dan AI Asisten > Usulan Q&A',
+    'menu' => 'Pengaturan & Alat > Pengetahuan AI, dan Pengaturan & Alat > Usulan Q&A',
     'intro' => '<p>AI hanya menjawab dari pengetahuan yang Anda tulis. Makin jelas isinya, makin sedikit chat yang diserahkan ke agen.</p>',
     'steps' => [
         [
-            'text' => 'Buka <b>AI Asisten > Pengetahuan AI</b>. Daftar ini berisi pengetahuan umum yang berlaku untuk semua {item}. Kolom <b>Dipakai</b> menyalakan atau mematikan catatan tanpa menghapusnya.',
+            'text' => 'Buka <b>Pengaturan & Alat > Pengetahuan AI</b>. Daftar ini berisi pengetahuan umum yang berlaku untuk semua {item}. Kolom <b>Dipakai</b> menyalakan atau mematikan catatan tanpa menghapusnya.',
             'alt' => 'Halaman Pengetahuan umum dengan daftar catatan dan kolom Dipakai',
             'shot' => ['page' => 'ai-knowledge', 'highlight' => ['.fi-ta-ctn']],
         ],
@@ -34,9 +34,9 @@ return [
                 'highlight' => ['.fi-modal-window:visible .fi-modal-content']],
         ],
         [
-            'text' => 'Dari chat yang dijawab agen, AI mengusulkan tanya jawab baru di <b>AI Asisten > Usulan Q&A</b>. Periksa, lalu klik <b>Setujui</b> dan pilih <b>Simpan ke</b> {item} tertentu atau pengetahuan umum, atau klik <b>Tolak</b>.',
+            'text' => 'Dari chat yang dijawab agen, AI mengusulkan tanya jawab baru di <b>Pengaturan & Alat > Usulan Q&A</b>. Periksa, lalu klik <b>Setujui</b> dan pilih <b>Simpan ke</b> {item} tertentu atau pengetahuan umum, atau klik <b>Tolak</b>.',
             'alt' => 'Halaman Usulan Q&A',
-            'shot' => ['page' => 'ai-suggestions', 'highlight' => ['.fi-sidebar-item-btn:has-text("Usulan Q&A")']],
+            'shot' => ['page' => 'ai-suggestions', 'highlight' => ['.fi-breadcrumbs', '.fi-ta-ctn']],
         ],
     ],
     'tips' => ['Tulis aturan alamat di pengetahuan umum: data apa yang wajib ditanyakan dan mana yang tidak perlu, supaya AI tidak menanyakan hal yang sudah ada.'],

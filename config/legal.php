@@ -73,7 +73,7 @@ return [
                 ]],
                 ['Berapa lama data disimpan', [
                     ['ul', [
-                        'Data akun dan data lead disimpan selama agensi memakai layanan. Agensi dapat menghapus lead, dan dapat menghapus seluruh agensinya beserta isinya kapan saja dari menu Pengaturan; penghapusan itu berlaku seketika pada data aktif dan tidak perlu persetujuan kami.',
+                        'Data akun dan data lead disimpan selama agensi memakai layanan. Agensi dapat menghapus lead, dan dapat menghapus seluruh agensinya beserta isinya kapan saja dari Profil agensi > Data & privasi; penghapusan itu berlaku seketika pada data aktif dan tidak perlu persetujuan kami.',
                         'Cadangan harian disimpan {backup_hari} hari di server dan {backup_luar_hari} hari di penyimpanan luar server, lalu dihapus otomatis. Data yang sudah dihapus dari aplikasi karena itu baru hilang seluruhnya dari cadangan setelah masa tersebut berlalu.',
                         'Pesan chat support disimpan selama diperlukan untuk menangani bantuan dan riwayatnya.',
                         'Bila agensi berhenti berlangganan, akunnya menjadi hanya-baca dan datanya tetap tersimpan sampai agensi memilih paket kembali atau menghapusnya.',
@@ -82,7 +82,7 @@ return [
                 ['Hak Anda atas data pribadi', [
                     ['p', 'Sesuai UU PDP, Anda berhak: mendapatkan informasi tentang pemrosesan data Anda; mengakses dan memperoleh salinan data Anda; memperbaiki data yang keliru; meminta data Anda dihapus atau dimusnahkan; menarik persetujuan; mengajukan keberatan atas pemrosesan tertentu; dan meminta data Anda dipindahkan dalam format yang dapat dibaca.'],
                     ['ul', [
-                        'Pengguna aplikasi: admin agensi dapat mengekspor seluruh data agensinya (lead, aktivitas, chat, properti) sebagai berkas ZIP berisi CSV, dan dapat menghapus agensinya, dari menu Pengaturan. Untuk hak lain, hubungi {kontak}.',
+                        'Pengguna aplikasi: admin agensi dapat mengekspor seluruh data agensinya (lead, aktivitas, chat, properti) sebagai berkas ZIP berisi CSV, dan dapat menghapus agensinya, dari Profil agensi > Data & privasi. Untuk hak lain, hubungi {kontak}.',
                         'Calon pembeli yang datanya ada di sebuah agensi: hubungi agensi tersebut terlebih dulu karena agensi adalah pengendali datanya. Bila Anda tidak dapat menghubunginya, kirim permintaan ke {kontak} dan kami akan meneruskannya serta membantu agensi memenuhinya.',
                     ]],
                     ['p', 'Kami menanggapi permintaan dalam waktu yang wajar dan sesuai batas waktu dalam UU PDP. Kami dapat meminta bukti identitas untuk memastikan permintaan datang dari orang yang berhak.'],

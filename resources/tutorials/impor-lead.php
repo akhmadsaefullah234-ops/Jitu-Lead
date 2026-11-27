@@ -4,11 +4,11 @@ return [
     'title' => 'Impor lead',
     'group' => 'lead',
     'order' => 50,
-    'menu' => 'Impor lead',
+    'menu' => 'Lead > tombol Impor lead',
     'intro' => '<p>Memasukkan banyak lead sekaligus dari Excel atau Google Sheets, misalnya data pameran atau data lama.</p>',
     'steps' => [
         [
-            'text' => 'Buka <b>Impor lead</b> dan klik <b>Unduh template</b>. Isi data di bawah judul kolom (nama, telepon, email, catatan) tanpa mengubah judulnya. Kolom wajib: nama, dan telepon atau email.',
+            'text' => 'Buka <b>Lead</b>, klik tombol <b>Impor lead</b> di kanan atas, dan klik <b>Unduh template</b>. Isi data di bawah judul kolom (nama, telepon, email, catatan) tanpa mengubah judulnya. Kolom wajib: nama, dan telepon atau email.',
             'alt' => 'Halaman Impor lead dengan tombol Unduh template dan Unggah file CSV',
             'shot' => ['page' => 'import-leads', 'highlight' => ['.fi-header button:has-text("Unduh template"), .fi-header a:has-text("Unduh template")', '.fi-header button:has-text("Unggah file CSV")']],
         ],

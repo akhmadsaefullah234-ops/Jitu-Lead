@@ -22,6 +22,6 @@ return [
     ],
     'tips' => [
         'Tugas hilang dari daftar saat lead masuk tahap Menang atau Gugur. Jumlah tugas terlambat tampil sebagai angka merah di menu Tugas.',
-        'Aturan yang membuat dan menutup tugas sendiri ada di Pengaturan > Otomatisasi tahap (aturan 9).',
+        'Aturan yang membuat dan menutup tugas sendiri ada di Pengaturan & Alat > Otomatisasi tahap (aturan 9).',
     ],
 ];

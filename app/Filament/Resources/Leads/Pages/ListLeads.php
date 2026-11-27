@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Leads\Pages;
 
 use App\Actions\ExportLeadsCsv;
 use App\Enums\Role;
+use App\Filament\Pages\ImportLeads;
 use App\Filament\Pages\ImportResi;
 use App\Filament\Resources\Leads\LeadResource;
 use App\Models\Lead;
@@ -85,6 +86,9 @@ class ListLeads extends ListRecords
 
                     Notification::make()->title('Pengaturan disimpan')->success()->send();
                 }),
+            Action::make('importLeads')->label('Impor lead')->icon(Heroicon::OutlinedArrowUpTray)->color('gray')
+                ->tooltip('Tambah banyak lead sekaligus dari berkas CSV')
+                ->visible(fn () => ImportLeads::canAccess())->url(fn () => ImportLeads::getUrl()),
             CreateAction::make(),
         ];
     }

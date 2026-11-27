@@ -8,6 +8,7 @@ use App\Ai\AnthropicClient;
 use App\Ai\DocumentException;
 use App\Ai\DocumentReader;
 use App\Ai\PropertyPlaybook;
+use App\Filament\Concerns\InSettingsAndTools;
 use App\Filament\Resources\AiKnowledge\AiKnowledgeResource;
 use App\Models\MediaAsset;
 use App\Privacy\KnowledgeScan;
@@ -35,6 +36,8 @@ use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class ManageAiKnowledge extends ManageRecords
 {
+    use InSettingsAndTools;
+
     protected static string $resource = AiKnowledgeResource::class;
 
     public const TEMPLATES = [
@@ -51,7 +54,7 @@ class ManageAiKnowledge extends ManageRecords
     {
         $item = Industry::t('catalog_item');
         $text = app(AnthropicClient::class)->configured()
-            ? "Yang berlaku untuk semua {$item}: alamat, jam buka, cara bayar, aturan umum. Pengetahuan khusus satu {$item} (harga, promo, cara pakai) diatur di halaman {$item} itu, tab Pengetahuan AI. AI hanya menjawab dari catatan ini dan catatan {$item} yang sedang dibahas. Memilih siapa yang membalas chat ada di menu Mode AI."
+            ? "Yang berlaku untuk semua {$item}: alamat, jam buka, cara bayar, aturan umum. Pengetahuan khusus satu {$item} (harga, promo, cara pakai) diatur di halaman {$item} itu, tab Pengetahuan AI. AI hanya menjawab dari catatan ini dan catatan {$item} yang sedang dibahas. Memilih siapa yang membalas chat ada di Pengaturan & Alat > Mode AI."
             : 'Layanan AI belum diaktifkan di server ini, hubungi penyedia aplikasi. Catatan di sini tetap tersimpan.';
         $warning = self::personalDataWarning();
 

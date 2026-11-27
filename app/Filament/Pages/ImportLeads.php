@@ -3,11 +3,13 @@
 namespace App\Filament\Pages;
 
 use App\Actions\ImportLeadsFromCsv;
+use App\Filament\Resources\Leads\LeadResource;
 use App\Models\Lead;
 use App\Models\User;
 use App\Support\CurrentTenant;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Facades\Filament;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -27,11 +29,22 @@ class ImportLeads extends Page
 
     protected static ?string $title = 'Impor lead';
 
-    protected static ?int $navigationSort = 9;
+    // A button on the Lead list (ListLeads), next to "Tambah lead"; not in the sidebar.
+    protected static bool $shouldRegisterNavigation = false;
 
     public static function canAccess(): bool
     {
         return auth()->user()?->can('create', Lead::class) ?? false;
+    }
+
+    /** @return array<string> */
+    public function getBreadcrumbs(): array
+    {
+        if (Filament::getTenant() === null) {
+            return [];
+        }
+
+        return [LeadResource::getUrl('index') => LeadResource::getNavigationLabel(), static::getNavigationLabel()];
     }
 
     protected function getHeaderActions(): array

@@ -59,7 +59,7 @@ class ShipmentResource extends Resource
 
     protected static ?string $navigationLabel = 'Pengiriman';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 4;
 
     public static function canAccess(): bool
     {

@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Agency\AgencyProfile;
 use App\Enums\Role;
+use App\Filament\Concerns\HasAgencyProfileTabs;
 use App\LandingPages\ImageOptimizer;
 use App\Support\CurrentTenant;
 use App\Support\PhoneNumber;
@@ -27,6 +28,8 @@ use Filament\Support\Icons\Heroicon;
  */
 class AgencyProfilePage extends Page
 {
+    use HasAgencyProfileTabs;
+
     protected string $view = 'filament.pages.agency-profile';
 
     protected static ?string $slug = 'profil-agensi';
@@ -37,7 +40,8 @@ class AgencyProfilePage extends Page
 
     protected static ?string $title = 'Profil agensi';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Pengaturan';
+    // A tab of "Profil agensi" (App\Filament\Support\AgencyProfileTabs), opened from the account menu.
+    protected static bool $shouldRegisterNavigation = false;
 
     protected static ?int $navigationSort = 1;
 

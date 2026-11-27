@@ -52,7 +52,7 @@ class CtwaReadiness
         $automation = PropertyStageAutomationSettings::of($tenant);
         $checks[] = ['key' => 'automation', 'title' => 'Otomatisasi tahap menyala', 'state' => $automation->enabled('contacted') && $automation->enabled('qualified') ? self::OK : self::WARN,
             'detail' => $automation->chosen() ? 'Lead pindah ke Terkualifikasi dan seterusnya sendiri, sehingga QualifiedLead dan Schedule terkirim tanpa menunggu agen.'
-                : 'Belum menyala: QualifiedLead dan Schedule hanya terkirim bila agen memindah lead. Nyalakan di Pengaturan > Otomatisasi tahap.'];
+                : 'Belum menyala: QualifiedLead dan Schedule hanya terkirim bila agen memindah lead. Nyalakan di Pengaturan & Alat > Otomatisasi tahap.'];
 
         $checks[] = ['key' => 'sent', 'title' => 'Conversions API terkirim', 'state' => match (true) {
             $last === [] => self::WARN, (bool) ($last['ok'] ?? false) => self::OK, default => self::FAIL,

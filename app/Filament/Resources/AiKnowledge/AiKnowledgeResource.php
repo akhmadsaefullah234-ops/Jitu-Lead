@@ -36,7 +36,8 @@ class AiKnowledgeResource extends Resource
 
     protected static ?string $navigationLabel = 'Pengetahuan AI';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'AI Asisten';
+    // Opened from "Pengaturan & Alat" (App\Filament\Support\SettingsCatalog), not from the sidebar.
+    protected static bool $shouldRegisterNavigation = false;
 
     protected static ?int $navigationSort = 1;
 

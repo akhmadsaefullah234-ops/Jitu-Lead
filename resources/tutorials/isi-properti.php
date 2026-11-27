@@ -6,11 +6,11 @@ return [
     'order' => 25,
     'industries' => ['properti'],
     'admin' => true,
-    'menu' => 'AI Asisten > Isi properti',
+    'menu' => 'Pengaturan & Alat > Isi properti',
     'intro' => '<p>AI menjawab harga, luas, cara bayar, dan jadwal survei dari data proyek yang Anda isi sekali di <b>Isi properti</b>. Dari isian itu sistem menulis pengetahuan AI standar dengan penulisan yang sama di setiap jawaban, misalnya "38 m2" dan "Rp642.850.000 (sekitar Rp642,85 juta)", dan setiap tipe unit masuk Katalog properti. <b>Kesehatan AI</b> menunjukkan apa yang masih kurang sebelum AI boleh membalas otomatis.</p>',
     'steps' => [
         [
-            'text' => 'Buka <b>AI Asisten > Isi properti</b> dan isi empat langkahnya: <b>Proyek</b> (nama, developer, lokasi, legalitas, serah terima), <b>Tipe unit</b> (harga, luas bangunan, luas tanah, kamar, ketersediaan, bonus), <b>Pembayaran</b> (model pembayaran agensi), lalu <b>Survei</b> (jam, lokasi, dan kontak). Klik <b>Simpan dan perbarui pengetahuan AI</b> di langkah terakhir. Yang dikosongkan tidak dijawab AI, dan chat soal itu diserahkan ke agen.',
+            'text' => 'Buka <b>Pengaturan & Alat > Isi properti</b> dan isi empat langkahnya: <b>Proyek</b> (nama, developer, lokasi, legalitas, serah terima), <b>Tipe unit</b> (harga, luas bangunan, luas tanah, kamar, ketersediaan, bonus), <b>Pembayaran</b> (model pembayaran agensi), lalu <b>Survei</b> (jam, lokasi, dan kontak). Klik <b>Simpan dan perbarui pengetahuan AI</b> di langkah terakhir. Yang dikosongkan tidak dijawab AI, dan chat soal itu diserahkan ke agen.',
             'alt' => 'Wizard Isi properti dengan langkah Proyek, Tipe unit, Pembayaran, dan Survei',
             'shot' => ['page' => 'isi-properti', 'highlight' => ['.fi-sc-wizard-header']],
         ],
@@ -30,7 +30,7 @@ return [
             'shot' => ['page' => 'tinjau-data-ai', 'highlight' => ['.fi-ta']],
         ],
         [
-            'text' => 'Buka <b>Kesehatan AI</b>. <b>Kesiapan AI</b> memberi skor dari 100 dan menyebut apa yang belum ada. Tombol <b>Naikkan ke Auto</b> di Mode AI baru aktif setelah skor minimal 80 dan semua yang <b>Wajib</b> terpenuhi, termasuk <b>Uji AI saya</b>: 10 pertanyaan klien contoh dari data Anda dan dari playbook, tanpa mengirim pesan ke siapa pun.',
+            'text' => 'Buka <b>Pengaturan & Alat > Kesehatan AI</b>. <b>Kesiapan AI</b> memberi skor dari 100 dan menyebut apa yang belum ada. Tombol <b>Naikkan ke Auto</b> di Mode AI baru aktif setelah skor minimal 80 dan semua yang <b>Wajib</b> terpenuhi, termasuk <b>Uji AI saya</b>: 10 pertanyaan klien contoh dari data Anda dan dari playbook, tanpa mengirim pesan ke siapa pun.',
             'alt' => 'Halaman Kesehatan AI dengan skor Kesiapan AI dan hasil uji terakhir',
             'shot' => ['page' => 'kesehatan-ai', 'highlight' => ['.fi-section >> nth=0', '.fi-header button:has-text("Uji AI saya")']],
         ],

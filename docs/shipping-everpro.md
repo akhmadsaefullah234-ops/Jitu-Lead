@@ -12,9 +12,9 @@ tabel `carrier_accounts`, `shipments`, `shipment_notices`, konfigurasi `config/c
 Everpro adalah penyedia pertama. Bagian lain (tombol, pesan status, garis waktu, tahap otomatis, AI) hanya memakai
 `CarrierProvider`, jadi KiriminAja atau Biteship cukup ditambah sebagai kelas baru di `config/carriers.php`.
 
-## 1. Mengisi kredensial (Pengaturan > Pengiriman)
+## 1. Mengisi kredensial (Pengaturan & Alat > Pengaturan pengiriman)
 
-1. Masuk sebagai admin toko, buka **Pengaturan > Pengiriman**, bagian **Pengiriman otomatis**.
+1. Masuk sebagai admin toko, buka **Pengaturan & Alat > Pengaturan pengiriman**, bagian **Pengiriman otomatis**.
 2. Pilih penyedia **Everpro**, biarkan **Mode sandbox** menyala untuk uji coba.
 3. Isi **Client key** dan **Client secret** dari dashboard Everpro, lalu **Callback key** (nilai header `x-everpro-key`
    yang juga Anda isi di dashboard Everpro). Ketiganya disimpan terenkripsi dan tidak pernah ditampilkan lagi; kolom
@@ -63,7 +63,7 @@ tidak), juga untuk resi yang tidak dikenal. URL satu agensi tidak bisa menyentuh
   lalu kode pos itu dicari di `/postalcode` dan hanya kelurahan yang namanya cocok yang dipakai. Hanya jawaban yang
   berhasil yang di-cache (30 hari). Bila tidak pasti, agen memilih kelurahan dari daftar.
 - Divalidasi: nama, HP, alamat lengkap, produk dan jumlah, nilai barang > 0, kode pos asal (dari lokasi asal di
-  Pengaturan > Pengiriman) dan kode pos kelurahan tujuan. Berat dari katalog (dibulatkan ke atas per kg).
+  Pengaturan & Alat > Pengaturan pengiriman) dan kode pos kelurahan tujuan. Berat dari katalog (dibulatkan ke atas per kg).
 - Body `/shipment/v2/rates` dan `/shipment/v2/orders` datar sesuai dokumentasi prepaid: kode pos asal/tujuan (bukan
   id lokasi), `package_type_id` 1, `weight` dalam kg (1000 g = 1, 1500 g = 1,5), `item_price`/`package_price` = nilai
   barang, nama kelurahan pengirim/penerima.
@@ -128,7 +128,7 @@ tidak), juga untuk resi yang tidak dikenal. URL satu agensi tidak bisa menyentuh
 
 ## Resi otomatis
 
-Pengaturan > Pengiriman > **Resi otomatis** (mati secara bawaan). Bila aktif, lead yang masuk **tahap pemicu**
+Pengaturan & Alat > Pengaturan pengiriman > **Resi otomatis** (mati secara bawaan). Bila aktif, lead yang masuk **tahap pemicu**
 (bawaan "Dikemas & dikirim"), baik dipindah AI maupun agen, dijadwalkan resinya setelah **jeda** (bawaan 30 menit).
 Selama jeda, Inbox dan halaman lead menampilkan "Resi otomatis dalam N menit · Batalkan". `shipping:auto-resi`
 (terjadwal tiap menit) membuat resi yang jedanya sudah lewat, setelah memeriksa ulang semua syarat:
@@ -203,7 +203,7 @@ Status Everpro dinormalkan di `config/carriers.php` (`everpro.status_map`) menja
 `in_transit`, `out_for_delivery`, `delivery_failed`, `delivered`, `returning`, `returned` (serta `cancelled`). Kode yang
 tidak dikenal hanya dicatat di riwayat paket. Status yang lebih awal yang datang terlambat diabaikan.
 
-Teks per status diatur di **Pengaturan > Pengiriman > Pesan status kiriman** (aktif/nonaktif + teks; variabel `{nama}`,
+Teks per status diatur di **Pengaturan & Alat > Pengaturan pengiriman > Pesan status kiriman** (aktif/nonaktif + teks; variabel `{nama}`,
 `{produk}`, `{resi}`, `{kurir}`, `{link_lacak}`, `{alasan}`, `{cod_total}`, `{agensi}`). Variabel tak dikenal tidak
 pernah terkirim mentah: baris "Label: {variabel}" dihapus, selain itu diganti "-".
 
@@ -310,7 +310,7 @@ handoff. A zone without the flag (Jawa, for example) keeps its zone price.
 
 ### "Hanya pakai tarif Everpro (tanpa tarif cadangan)"
 
-A setting under Pengaturan > Pengiriman, shown only when the price source is Everpro: `tenants.shipping.everpro_strict`
+A setting under Pengaturan & Alat > Pengaturan pengiriman, shown only when the price source is Everpro: `tenants.shipping.everpro_strict`
 (boolean, default `false`, no migration). Off, everything above is unchanged, the zone fallback included. On,
 `Shipping::quote` calls `EverproShippingRates::strict` instead of the provider, and the zone table is never a price:
 

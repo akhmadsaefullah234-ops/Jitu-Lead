@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Leads;
 
+use App\Filament\Pages\ImportLeads;
 use App\Filament\Resources\Leads\Pages\CreateLead;
 use App\Filament\Resources\Leads\Pages\EditLead;
 use App\Filament\Resources\Leads\Pages\ListLeads;
@@ -33,6 +34,12 @@ class LeadResource extends Resource
     protected static ?int $navigationSort = 2;
 
     protected static ?string $recordTitleAttribute = 'name';
+
+    /** "Lead" stays lit on Impor lead, which is opened from a button on the list. */
+    public static function getNavigationItemActiveRoutePattern(): string|array
+    {
+        return [parent::getNavigationItemActiveRoutePattern(), ImportLeads::getRouteName()];
+    }
 
     public static function form(Schema $schema): Schema
     {

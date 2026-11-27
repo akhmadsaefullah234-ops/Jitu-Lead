@@ -4,6 +4,7 @@ namespace App\Filament\Resources\FollowUpRules\Pages;
 
 use App\Billing\Deny;
 use App\Billing\PlanLimits;
+use App\Filament\Concerns\InSettingsAndTools;
 use App\Filament\Resources\FollowUpRules\FollowUpRuleResource;
 use App\Filament\Resources\Properties\Pages\EditProperty;
 use App\Filament\Resources\Properties\PropertyResource;
@@ -26,6 +27,8 @@ use Filament\Support\Icons\Heroicon;
 
 class ManageFollowUpRules extends ManageRecords
 {
+    use InSettingsAndTools;
+
     protected static string $resource = FollowUpRuleResource::class;
 
     public function getTitle(): string

@@ -4,11 +4,11 @@ return [
     'title' => 'Laporan harian WhatsApp',
     'group' => 'iklan',
     'order' => 40,
-    'menu' => 'Pengaturan > Laporan harian',
+    'menu' => 'Menu akun (kanan atas) > Profil agensi > Laporan harian',
     'intro' => '<p>Ringkasan lead, penjualan, AI, dan hal yang perlu perhatian, dikirim ke WhatsApp Anda dari nomor resmi JITU LEAD (bukan nomor toko). Angkanya sama dengan Dasbor periode Kemarin dan tidak memuat nama atau nomor pembeli. Aktif sejak awal untuk admin, mati untuk team leader dan agen.</p>',
     'steps' => [
         [
-            'text' => 'Buka <b>Laporan harian</b>. Nomor penerima diambil dari profil Anda; nomor baru dikonfirmasi dengan kode 6 digit lewat WhatsApp (<b>Kirim kode</b>, lalu <b>Verifikasi</b>).',
+            'text' => 'Buka <b>Profil agensi</b> dari menu akun (foto di kanan atas), lalu tab <b>Laporan harian</b>. Nomor penerima diambil dari profil Anda; nomor baru dikonfirmasi dengan kode 6 digit lewat WhatsApp (<b>Kirim kode</b>, lalu <b>Verifikasi</b>).',
             'alt' => 'Nomor WhatsApp penerima dengan tombol Kirim kode',
             'shot' => ['page' => 'laporan-harian', 'highlight' => ['button:has-text("Kirim kode")']],
         ],

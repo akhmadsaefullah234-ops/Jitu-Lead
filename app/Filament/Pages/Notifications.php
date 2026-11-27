@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Concerns\HasAgencyProfileTabs;
 use App\Models\PushSubscription;
 use App\Push\PushTransport;
 use BackedEnum;
@@ -16,6 +17,8 @@ use Illuminate\Support\Facades\Validator;
  */
 class Notifications extends Page
 {
+    use HasAgencyProfileTabs;
+
     protected string $view = 'filament.pages.notifications';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBell;
@@ -24,7 +27,8 @@ class Notifications extends Page
 
     protected static ?string $title = 'Notifikasi di HP dan komputer';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Pengaturan';
+    // A tab of "Profil agensi" (App\Filament\Support\AgencyProfileTabs), opened from the account menu.
+    protected static bool $shouldRegisterNavigation = false;
 
     protected static ?int $navigationSort = 1;
 

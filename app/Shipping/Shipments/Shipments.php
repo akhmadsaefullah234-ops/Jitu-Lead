@@ -65,7 +65,7 @@ class Shipments
 
     public function provider(): CarrierProvider
     {
-        return Carriers::for($this->current->get()) ?? throw new CarrierException('Pengiriman otomatis belum diatur di Pengaturan > Pengiriman.', CarrierException::AUTH);
+        return Carriers::for($this->current->get()) ?? throw new CarrierException('Pengiriman otomatis belum diatur di Pengaturan & Alat > Pengaturan pengiriman.', CarrierException::AUTH);
     }
 
     // ---- Preview -------------------------------------------------------------------------------------------
@@ -117,14 +117,14 @@ class Shipments
         $draft->shipmentType = (string) ($account?->setting('shipment_type') ?: 'PICKUP');
 
         if ($account === null) {
-            $draft->problems[] = 'Pengiriman otomatis belum diatur di Pengaturan > Pengiriman.';
+            $draft->problems[] = 'Pengiriman otomatis belum diatur di Pengaturan & Alat > Pengaturan pengiriman.';
 
             return $draft;
         }
 
         foreach (['sender_name' => 'nama toko pengirim', 'sender_phone' => 'nomor HP pengirim', 'sender_address' => 'alamat pengirim', 'origin_id' => 'lokasi asal Everpro', 'origin_postal' => 'kode pos asal (pilih ulang lokasi asal)'] as $key => $label) {
             if (blank($key === 'origin_postal' ? $this->originPostal($account) : $account->setting($key))) {
-                $draft->problems[] = 'Lengkapi '.$label.' di Pengaturan > Pengiriman.';
+                $draft->problems[] = 'Lengkapi '.$label.' di Pengaturan & Alat > Pengaturan pengiriman.';
             }
         }
 
@@ -1188,7 +1188,7 @@ class Shipments
             throw new CarrierException($problem);
         }
 
-        $account = $this->account() ?? throw new CarrierException('Pengiriman otomatis belum diatur di Pengaturan > Pengiriman.', CarrierException::AUTH);
+        $account = $this->account() ?? throw new CarrierException('Pengiriman otomatis belum diatur di Pengaturan & Alat > Pengaturan pengiriman.', CarrierException::AUTH);
         $orderNo = null;
 
         if (self::isProviderOrderNo($awb)) {

@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Enums\Role;
+use App\Filament\Concerns\InSettingsAndTools;
 use App\Support\CurrentTenant;
 use App\Support\Industry;
 use App\Tracking\CtwaReadiness;
@@ -18,6 +19,8 @@ use Throwable;
 /** "Siap iklan CTWA" (property agencies): App\Tracking\CtwaReadiness on a page, with a test event button. */
 class CtwaReadinessPage extends Page
 {
+    use InSettingsAndTools;
+
     protected string $view = 'filament.pages.ctwa-readiness';
 
     protected static ?string $slug = 'siap-iklan-ctwa';
@@ -28,7 +31,8 @@ class CtwaReadinessPage extends Page
 
     protected static ?string $title = 'Siap iklan Klik ke WhatsApp';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Pengaturan';
+    // Opened from "Pengaturan & Alat" (App\Filament\Support\SettingsCatalog), not from the sidebar.
+    protected static bool $shouldRegisterNavigation = false;
 
     protected static ?int $navigationSort = 16;
 

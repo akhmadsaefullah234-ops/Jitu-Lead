@@ -8,7 +8,7 @@
                     <div><x-filament::button tag="a" :href="\App\Filament\Pages\Subscription::getUrl()" icon="heroicon-o-credit-card">Pilih paket dan perpanjang</x-filament::button></div>
                 @else
                     @php($admins = $this->adminNames())
-                    <p>Untuk membuka kembali, minta admin agensi{{ $admins->isNotEmpty() ? ' ('.$admins->join(', ', ' dan ').')' : '' }} memilih paket di menu Langganan.</p>
+                    <p>Untuk membuka kembali, minta admin agensi{{ $admins->isNotEmpty() ? ' ('.$admins->join(', ', ' dan ').')' : '' }} memilih paket di Profil agensi > Langganan.</p>
                 @endif
             </div>
         @else

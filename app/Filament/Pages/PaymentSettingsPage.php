@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Enums\Role;
+use App\Filament\Concerns\InSettingsAndTools;
 use App\Models\PaymentAccount;
 use App\Payments\PaymentInstructions;
 use App\Payments\PaymentSettings;
@@ -33,6 +34,8 @@ use Illuminate\Validation\ValidationException;
  */
 class PaymentSettingsPage extends Page
 {
+    use InSettingsAndTools;
+
     protected string $view = 'filament.pages.payment-settings';
 
     protected static ?string $slug = 'pembayaran';
@@ -43,7 +46,8 @@ class PaymentSettingsPage extends Page
 
     protected static ?string $title = 'Pembayaran';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Pengaturan';
+    // Opened from "Pengaturan & Alat" (App\Filament\Support\SettingsCatalog), not from the sidebar.
+    protected static bool $shouldRegisterNavigation = false;
 
     protected static ?int $navigationSort = 14;
 

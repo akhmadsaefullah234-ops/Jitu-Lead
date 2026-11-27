@@ -146,7 +146,7 @@ class LeadFormResource extends Resource
                         ->description('Lead selalu tersimpan lebih dulu, apa pun pilihannya.')
                         ->schema([
                             Radio::make('after_submit.type')->label('Aksi')->options(fn () => LeadForm::AFTER + (Industry::current()->key === 'digital' ? LeadForm::DIGITAL_AFTER : []))->default('message')->required()->live()
-                                ->helperText(fn (Get $get) => $get('after_submit.type') === 'payment' ? 'Butuh Pengaturan > Pembayaran otomatis aktif dan kolom produk yang dicocokkan ke katalog berharga. Bila tidak, pembeli melihat pesan terima kasih dan admin melanjutkan lewat WhatsApp.' : null),
+                                ->helperText(fn (Get $get) => $get('after_submit.type') === 'payment' ? 'Butuh Pengaturan & Alat > Pembayaran otomatis aktif dan kolom produk yang dicocokkan ke katalog berharga. Bila tidak, pembeli melihat pesan terima kasih dan admin melanjutkan lewat WhatsApp.' : null),
                             Textarea::make('after_submit.message')->label('Pesan terima kasih')->rows(2)->maxLength(300)
                                 ->helperText('Tampil setelah kirim, juga sesaat sebelum pindah halaman.'),
                             Grid::make(['default' => 1, 'sm' => 2])->visible($isAfter('redirect'))->schema([

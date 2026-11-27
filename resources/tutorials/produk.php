@@ -15,7 +15,7 @@ return [
             'shot' => ['page' => 'properties', 'highlight' => ['.fi-header button:has-text("Buat produk"), .fi-header a:has-text("Buat produk")', '.fi-ta-row >> nth=0']],
         ],
         [
-            'text' => 'Halaman produk punya empat tab. <b>Detail produk</b>: nama, kategori, harga, stok, berat, ukuran, dan rincian tambahan. Isi <b>Berat</b> siap kirim termasuk kemasan agar ongkir dan resi tepat; kosong berarti memakai berat bawaan di Pengaturan > Pengiriman.',
+            'text' => 'Halaman produk punya empat tab. <b>Detail produk</b>: nama, kategori, harga, stok, berat, ukuran, dan rincian tambahan. Isi <b>Berat</b> siap kirim termasuk kemasan agar ongkir dan resi tepat; kosong berarti memakai berat bawaan di Pengaturan & Alat > Pengaturan pengiriman.',
             'alt' => 'Tab Detail produk dengan isian harga, stok, berat, dan ukuran',
             'shot' => ['page' => 'properties', 'steps' => [['click' => 'text="Tas Raket Pro Demo"'], ['waitFor' => '[role=tab]:has-text("Detail produk")']],
                 'highlight' => ['.product-tabs [role=tablist], [role=tablist]', '.fi-fo-field:has-text("Berat (gram)")']],

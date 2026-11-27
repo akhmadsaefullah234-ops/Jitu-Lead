@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Ai\Facts\FactFormat;
 use App\Ai\Facts\FactKeys;
 use App\Ai\Facts\Facts;
+use App\Filament\Concerns\InSettingsAndTools;
 use App\Models\AiFact;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -25,6 +26,7 @@ use Illuminate\Database\Eloquent\Collection;
  */
 class FactReview extends Page implements HasTable
 {
+    use InSettingsAndTools;
     use InteractsWithTable;
 
     protected string $view = 'filament.pages.fact-review';
@@ -37,7 +39,8 @@ class FactReview extends Page implements HasTable
 
     protected static ?string $title = 'Tinjau data AI';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'AI Asisten';
+    // Opened from "Pengaturan & Alat" (App\Filament\Support\SettingsCatalog), not from the sidebar.
+    protected static bool $shouldRegisterNavigation = false;
 
     protected static ?int $navigationSort = 3;
 

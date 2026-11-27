@@ -351,7 +351,7 @@
                         </div>
                         <p class="wa-compose-hint" x-data x-text="/Mac|iP(hone|ad)/.test(navigator.platform) ? 'Cmd+Enter untuk kirim' : 'Ctrl+Enter untuk kirim'">Ctrl+Enter untuk kirim</p>
                     @else
-                        <span class="wa-empty" style="padding:.3rem">Hubungkan nomor di menu Koneksi WhatsApp.</span>
+                        <span class="wa-empty" style="padding:.3rem">Hubungkan nomor di Pengaturan & Alat > Koneksi WhatsApp.</span>
                     @endif
                 </div>
             @else

@@ -2,11 +2,14 @@
 
 namespace App\Filament\Resources\AiSuggestions\Pages;
 
+use App\Filament\Concerns\InSettingsAndTools;
 use App\Filament\Resources\AiSuggestions\AiSuggestionResource;
 use Filament\Resources\Pages\ManageRecords;
 
 class ManageAiSuggestions extends ManageRecords
 {
+    use InSettingsAndTools;
+
     protected static string $resource = AiSuggestionResource::class;
 
     public function getSubheading(): ?string

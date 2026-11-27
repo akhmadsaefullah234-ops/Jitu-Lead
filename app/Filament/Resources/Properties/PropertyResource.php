@@ -37,7 +37,7 @@ class PropertyResource extends Resource
 {
     protected static ?string $model = Property::class;
 
-    protected static ?int $navigationSort = 8;
+    protected static ?int $navigationSort = 9;
 
     public const STATUSES = ['available' => 'Tersedia', 'booked' => 'Dibooking', 'sold' => 'Terjual'];
 

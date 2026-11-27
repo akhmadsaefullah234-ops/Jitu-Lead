@@ -1,7 +1,7 @@
 # Pengaturan per produk
 
 Semua yang hanya berlaku untuk satu produk (atau properti) diatur di halaman produk itu sendiri: menu Produk, klik
-produknya. Menu umum (AI Asisten > Pengetahuan AI, dan Follow-up otomatis) hanya berisi yang berlaku untuk semua produk.
+produknya. Menu umum (Pengaturan & Alat > Pengetahuan AI, dan Follow-up otomatis) hanya berisi yang berlaku untuk semua produk.
 
 ## Halaman produk
 
@@ -73,7 +73,7 @@ didahulukan bila jawabannya cocok dengan nama atau kata kunci produk. Produk yan
 
 ## Lainnya
 
-- Hasil belajar AI (AI Asisten > Usulan): saat disetujui, pemilik memilih "Simpan ke" produk mana; bawaannya produk lead
+- Hasil belajar AI (Pengaturan & Alat > Usulan Q&A): saat disetujui, pemilik memilih "Simpan ke" produk mana; bawaannya produk lead
   percakapan itu, kosong = pengetahuan umum.
 - Menu Pengetahuan AI umum punya filter "Tampilkan juga pengetahuan produk": item produk tampil baca saja dengan tautan
   "Buka di produk". Menu Follow-up umum punya tombol "Follow-up per produk" berisi tautan ke produk yang punya rangkaian

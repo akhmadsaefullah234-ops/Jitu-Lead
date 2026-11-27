@@ -9,6 +9,7 @@ use App\Ai\Facts\FactKeys;
 use App\Ai\Facts\Facts;
 use App\Ai\Facts\PaymentModel;
 use App\Enums\Role;
+use App\Filament\Concerns\InSettingsAndTools;
 use App\Support\CurrentTenant;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -38,6 +39,8 @@ use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
  */
 class PropertySetup extends Page
 {
+    use InSettingsAndTools;
+
     protected string $view = 'filament.pages.property-setup';
 
     protected static ?string $slug = 'isi-properti';
@@ -48,7 +51,8 @@ class PropertySetup extends Page
 
     protected static ?string $title = 'Isi properti untuk AI';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'AI Asisten';
+    // Opened from "Pengaturan & Alat" (App\Filament\Support\SettingsCatalog), not from the sidebar.
+    protected static bool $shouldRegisterNavigation = false;
 
     protected static ?int $navigationSort = 2;
 

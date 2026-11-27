@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Enums\Role;
+use App\Filament\Concerns\HasAgencyProfileTabs;
 use App\Models\Membership;
 use App\Models\ReportDelivery;
 use App\Models\Tenant;
@@ -30,6 +31,8 @@ use Illuminate\Support\Facades\RateLimiter;
  */
 class DailyReports extends Page
 {
+    use HasAgencyProfileTabs;
+
     protected string $view = 'filament.pages.daily-reports';
 
     protected static ?string $slug = 'laporan-harian';
@@ -40,7 +43,8 @@ class DailyReports extends Page
 
     protected static ?string $title = 'Laporan harian WhatsApp';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Pengaturan';
+    // A tab of "Profil agensi" (App\Filament\Support\AgencyProfileTabs), opened from the account menu.
+    protected static bool $shouldRegisterNavigation = false;
 
     protected static ?int $navigationSort = 2;
 

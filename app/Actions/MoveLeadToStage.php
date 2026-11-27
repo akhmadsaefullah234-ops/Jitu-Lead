@@ -29,7 +29,7 @@ class MoveLeadToStage
     public function __invoke(Lead $lead, Stage $stage, ?User $actor, array $details = [], ?string $auto = null): Lead
     {
         if (PlanLimits::current()?->readOnly()) {
-            throw ValidationException::withMessages(['stage' => 'Langganan hanya-baca, lead tidak bisa dipindah. Perpanjang paket di menu Langganan.']);
+            throw ValidationException::withMessages(['stage' => 'Langganan hanya-baca, lead tidak bisa dipindah. Perpanjang paket di Profil agensi > Langganan.']);
         }
 
         if ((int) $stage->tenant_id !== (int) $lead->tenant_id) {
@@ -140,7 +140,7 @@ class MoveLeadToStage
     public function reschedule(Lead $lead, array $details, ?User $actor, ?string $auto = null): Lead
     {
         if (PlanLimits::current()?->readOnly()) {
-            throw ValidationException::withMessages(['stage' => 'Langganan hanya-baca, lead tidak bisa diubah. Perpanjang paket di menu Langganan.']);
+            throw ValidationException::withMessages(['stage' => 'Langganan hanya-baca, lead tidak bisa diubah. Perpanjang paket di Profil agensi > Langganan.']);
         }
 
         $changes = self::survey($details);
