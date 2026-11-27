@@ -18,8 +18,12 @@
  * Checked with scripts/ui-audit.mjs (npm run ui:audit); results and the list of findings in docs/ui-audit.md.
  */
 
-/* Small screens: comfortable touch targets and no sideways page scroll */
-html, body { max-width: 100%; overflow-x: hidden; }
+/* Small screens: comfortable touch targets and no sideways page scroll.
+ * overflow-x: clip, not hidden: hidden on both html and body turns body into its own scroll container (overflow-y
+ * computes to auto), so Filament's position: sticky on the top bar (.fi-topbar-ctn) and the sidebar (.fi-sidebar)
+ * sticks to body instead of the window and both scroll away with the page. clip cuts the same overflow without
+ * making a scroll container. hidden stays first as the fallback for browsers that do not know clip. */
+html, body { max-width: 100%; overflow-x: hidden; overflow-x: clip; }
 .fi-main { padding-inline: 1rem; }
 @media (max-width: 640px) {
     .fi-header-heading { font-size: 1.35rem; }
