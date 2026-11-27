@@ -20,7 +20,7 @@ Catatan: {{ $channel->last_error }}
 
 **Selama terputus, pesan pelanggan ke nomor ini tidak masuk ke CRM dan balasan dari CRM tidak terkirim.**
 
-Cara memeriksa: pastikan HP dengan nomor ini menyala dan tersambung ke internet, lalu buka menu Nomor WhatsApp dan tekan **Tes koneksi**. Bila diminta, tekan **Scan QR** dan pindai dari WhatsApp di HP (Perangkat tertaut). Kami akan mengabari lagi saat nomor ini tersambung.
+Cara memeriksa: pastikan HP dengan nomor ini menyala dan tersambung ke internet, lalu buka Pengaturan & Alat > Koneksi WhatsApp dan tekan **Tes koneksi**. Bila diminta, tekan **Scan QR** dan pindai dari WhatsApp di HP (Perangkat tertaut). Kami akan mengabari lagi saat nomor ini tersambung.
 @endif
 
 <x-mail::button :url="$url">

@@ -5,11 +5,11 @@ return [
     'group' => 'iklan',
     'order' => 10,
     'admin' => true,
-    'menu' => 'Pengaturan > Pelacakan iklan',
+    'menu' => 'Pengaturan & Alat > Pelacakan iklan',
     'intro' => '<p>JITU LEAD memasang pixel di halaman landing dan formulir yang terbit, dan mengirim event konversi lewat server ke Meta (Conversions API) dan TikTok (Events API), supaya iklan belajar dari lead dan penjualan sungguhan. Google (GA4 / Google Ads) didukung lewat browser.</p>',
     'steps' => [
         [
-            'text' => 'Buka <b>Pelacakan iklan</b>. Tiap platform menampilkan status browser dan server serta hasil kiriman terakhir. Klik <b>Atur pelacakan</b>.',
+            'text' => 'Buka <b>Pengaturan & Alat > Pelacakan iklan</b>. Tiap platform menampilkan status browser dan server serta hasil kiriman terakhir. Klik <b>Atur pelacakan</b>.',
             'alt' => 'Halaman Pelacakan iklan dengan tombol Atur pelacakan, Event dari pipeline, dan Kirim event uji',
             'shot' => ['page' => 'tracking-settings', 'highlight' => ['.fi-header button:has-text("Atur pelacakan")', '.fi-header button:has-text("Event dari pipeline")', '.fi-header button:has-text("Kirim event uji")']],
         ],

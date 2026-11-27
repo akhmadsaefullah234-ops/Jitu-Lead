@@ -6,7 +6,7 @@ return [
     'order' => 20,
     'industries' => ['retail'],
     'admin' => true,
-    'menu' => 'Pengaturan > Pengiriman > Asal dan kurir',
+    'menu' => 'Pengaturan & Alat > Pengaturan pengiriman > Asal dan kurir',
     'intro' => '<p>Ongkir yang disebut AI, yang muncul di tombol <b>Hitung ongkir</b> Inbox, dan yang ditagih ke pembeli dihitung dari satu sumber. AI tidak menyebut angka ongkir di luar hitungan ini.</p>',
     'steps' => [
         [

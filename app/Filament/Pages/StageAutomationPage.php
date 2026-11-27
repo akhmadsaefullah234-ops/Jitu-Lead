@@ -7,6 +7,7 @@ use App\Automation\PropertyStageAutomation;
 use App\Automation\PropertyStageAutomationSettings;
 use App\Automation\StageAutomationSettings;
 use App\Enums\Role;
+use App\Filament\Concerns\InSettingsAndTools;
 use App\Shipping\Carriers\ShipmentStatus;
 use App\Shipping\Shipments\ParcelFollowUps;
 use App\Shipping\Shipments\ParcelFollowUpSettings;
@@ -35,6 +36,8 @@ use Illuminate\Support\HtmlString;
  */
 class StageAutomationPage extends Page
 {
+    use InSettingsAndTools;
+
     protected string $view = 'filament.pages.stage-automation';
 
     protected static ?string $slug = 'otomatisasi-tahap';
@@ -45,7 +48,8 @@ class StageAutomationPage extends Page
 
     protected static ?string $title = 'Otomatisasi tahap';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Pengaturan';
+    // Opened from "Pengaturan & Alat" (App\Filament\Support\SettingsCatalog), not from the sidebar.
+    protected static bool $shouldRegisterNavigation = false;
 
     protected static ?int $navigationSort = 14;
 

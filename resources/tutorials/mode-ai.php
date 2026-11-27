@@ -5,14 +5,14 @@ return [
     'group' => 'percakapan',
     'order' => 30,
     'admin' => true,
-    'menu' => 'AI Asisten > Mode AI',
+    'menu' => 'Pengaturan & Alat > Mode AI',
     'intro' => '<p>Pilih siapa yang membalas chat untuk tiap nomor WhatsApp. Perubahan langsung berlaku untuk pesan berikutnya.</p><ul>'
         .'<li><b>Saya balas sendiri</b>: AI tidak ikut campur. Bawaan untuk nomor baru.</li>'
         .'<li><b>AI menyiapkan, agen yang kirim</b>: AI menulis saran balasan di Inbox. Agen memilih memakainya atau tidak.</li>'
         .'<li><b>AI membalas otomatis</b>: AI langsung membalas bila jawabannya ada di pengetahuan Anda.</li></ul>',
     'steps' => [
         [
-            'text' => 'Buka <b>AI Asisten > Mode AI</b>. Pada kolom <b>Pembalas</b>, pilih mode untuk tiap nomor. Pilihan tersimpan langsung, tanpa tombol simpan. Agensi properti baru dimulai dengan <b>AI menyiapkan, agen yang kirim</b>; pilihan <b>AI membalas otomatis</b> terbuka setelah tombol <b>Naikkan ke Auto</b> diklik, yang aktif setelah skor <b>Kesiapan AI</b> di <b>Kesehatan AI</b> lulus (lihat bab Isi properti, tinjau data, dan Kesehatan AI).',
+            'text' => 'Buka <b>Pengaturan & Alat > Mode AI</b>. Pada kolom <b>Pembalas</b>, pilih mode untuk tiap nomor. Pilihan tersimpan langsung, tanpa tombol simpan. Agensi properti baru dimulai dengan <b>AI menyiapkan, agen yang kirim</b>; pilihan <b>AI membalas otomatis</b> terbuka setelah tombol <b>Naikkan ke Auto</b> diklik, yang aktif setelah skor <b>Kesiapan AI</b> di <b>Kesehatan AI</b> lulus (lihat bab Isi properti, tinjau data, dan Kesehatan AI).',
             'alt' => 'Halaman Siapa yang membalas chat dengan kolom Pembalas untuk tiap nomor WhatsApp',
             'shot' => ['page' => 'ai-modes', 'highlight' => ['td select >> nth=0']],
         ],

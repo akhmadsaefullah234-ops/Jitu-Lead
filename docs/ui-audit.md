@@ -125,6 +125,16 @@ breadcrumb di tablet, serta beberapa tautan di dalam teks (lihat "Sisa temuan").
 seluruhnya ada di gambar contoh aplikasi pada beranda dan halaman harga publik (1.488) dan di navigasi bab Tutorial
 (20, sudah diperbaiki setelah putaran ini; diperiksa ulang: 0). Teks 12-13px yang tersisa adalah keterangan dan lencana.
 
+### Putaran Prompt N (Pengaturan & Alat)
+
+866 layar, 27 November 2026 (806 layar lama ditambah Pengaturan & Alat, Profil agensi, dan menu akun). Menu kiri
+diringkas, halaman pengaturan dibuka dari kartu "Pengaturan & Alat" dan tab "Profil agensi". Scroll horizontal,
+meluber, tertutup, area kosong, dan tombol lengket tetap **0**. Tombol menu akun (avatar di kanan atas), yang kini
+membuka Profil agensi, dibesarkan ke 44 x 44 di bawah 1024px (`responsive.css`): area sentuh kecil turun dari 2.128
+(sebelum perbaikan itu, di cabang ini) menjadi **1.480**. Teks di bawah 12px tetap 1.488, seluruhnya di gambar contoh
+aplikasi pada beranda dan halaman harga publik. Di HP, tab Profil agensi tampil sebagai satu tombol pilihan (bawaan
+Filament), jadi tidak menggeser halaman ke samping.
+
 ## Temuan dan status
 
 Tingkat keparahan: **tinggi** = isi tidak bisa dilihat atau dipakai; **sedang** = bisa dipakai tetapi sulit atau

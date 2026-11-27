@@ -32,7 +32,7 @@ return [
         ],
     ],
     'tips' => [
-        'Lead masuk dari Iklan Meta, Portal properti, Formulir web, Referral, Pameran, dan Walk-in. Daftar sumber ini bisa diubah di Pengaturan > Sumber lead.',
-        'Nama tahap, urutan, aksi berikutnya, dan tenggatnya bisa diubah di Pengaturan > Tahap pipeline (lihat bab Tahap pipeline, sumber lead, dan alasan gugur).',
+        'Lead masuk dari Iklan Meta, Portal properti, Formulir web, Referral, Pameran, dan Walk-in. Daftar sumber ini bisa diubah di Pengaturan & Alat > Sumber lead.',
+        'Nama tahap, urutan, aksi berikutnya, dan tenggatnya bisa diubah di Pengaturan & Alat > Tahap pipeline (lihat bab Tahap pipeline, sumber lead, dan alasan gugur).',
     ],
 ];

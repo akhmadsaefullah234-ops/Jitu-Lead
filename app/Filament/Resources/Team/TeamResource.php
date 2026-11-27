@@ -35,7 +35,8 @@ class TeamResource extends Resource
 
     protected static ?string $navigationLabel = 'Tim';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Pengaturan';
+    // A tab of "Profil agensi" (App\Filament\Support\AgencyProfileTabs), opened from the account menu.
+    protected static bool $shouldRegisterNavigation = false;
 
     protected static ?int $navigationSort = 13;
 

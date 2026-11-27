@@ -22,7 +22,7 @@ class Faq
             ['q' => 'Bagaimana lead dibagi ke agen?', 'a' => 'Bergiliran sesuai porsi yang Anda atur, misalnya 60% dan 40%, atau dibagi rata. Lead yang tidak ditanggapi dalam batas waktu bisa dipindah otomatis ke agen berikutnya.'],
             ['q' => 'Bagaimana jika lead melebihi batas paket?', 'a' => 'Lead dari formulir dan WhatsApp tetap diterima. Anda mendapat peringatan untuk menaikkan paket.'],
             ['q' => 'Apa yang terjadi jika langganan berakhir?', 'a' => "Ada masa tenggang {$graceDays} hari. Setelah itu akun menjadi baca saja. Data tidak dihapus dan bisa dipakai lagi setelah perpanjang."],
-            ['q' => 'Bagaimana cara membayar?', 'a' => 'Saat ini lewat transfer bank. Nomor rekening tertera di menu Langganan setelah Anda masuk.'],
+            ['q' => 'Bagaimana cara membayar?', 'a' => 'Saat ini lewat transfer bank. Nomor rekening tertera di Profil agensi > Langganan setelah Anda masuk.'],
             ['q' => 'Bisa dipakai di HP?', 'a' => "Bisa. Buka {$host} di browser HP, lalu pasang ke layar utama. Tampilannya seperti aplikasi dan notifikasi lead baru masuk langsung."],
         ];
     }

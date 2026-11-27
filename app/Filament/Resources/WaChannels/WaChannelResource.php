@@ -58,7 +58,8 @@ class WaChannelResource extends Resource
 
     protected static ?string $navigationLabel = 'Koneksi WhatsApp';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Pengaturan';
+    // Opened from "Pengaturan & Alat" (App\Filament\Support\SettingsCatalog), not from the sidebar.
+    protected static bool $shouldRegisterNavigation = false;
 
     protected static ?int $navigationSort = 20;
 
@@ -88,7 +89,7 @@ class WaChannelResource extends Resource
                     // A new property agency starts with drafts, and picks Auto only after "Naikkan ke Auto" (AutoGate).
                     ->options(fn (?WaChannel $record) => AutoGate::options(app(CurrentTenant::class)->get()) + ($record?->ai_mode === AiMode::Auto ? [AiMode::Auto->value => AiMode::Auto->getLabel()] : []))
                     ->default(fn () => AutoGate::locked(app(CurrentTenant::class)->get()) ? AiMode::Draft->value : AiMode::Off->value)->required()
-                    ->helperText('Saya balas sendiri: tanpa AI. AI menyiapkan: agen memutuskan mengirim. AI membalas otomatis: AI langsung membalas bila jawabannya ada di pengetahuan Anda, selain itu chat diserahkan ke agen. Mudah diganti juga di menu AI Asisten > Mode AI.'),
+                    ->helperText('Saya balas sendiri: tanpa AI. AI menyiapkan: agen memutuskan mengirim. AI membalas otomatis: AI langsung membalas bila jawabannya ada di pengetahuan Anda, selain itu chat diserahkan ke agen. Mudah diganti juga di Pengaturan & Alat > Mode AI.'),
             ]),
             Section::make('Panduan: menyambungkan WhatsApp Business API resmi')->collapsible()->collapsed(fn (?WaChannel $record) => $record !== null)
                 ->visible(fn (Get $get) => static::typeOf($get('type')) === 'official')
@@ -103,7 +104,7 @@ class WaChannelResource extends Resource
                         ->default(fn () => Str::random(24))->helperText('Sudah dibuatkan otomatis. Salin nilai ini ke kolom Verify token di Meta (langkah 6).'),
                     NoAutofill::text(TextInput::make('cred.waba_id'))->label('WhatsApp Business Account ID (opsional)')->regex('/^\d{6,30}$/')
                         ->validationMessages(['regex' => 'Berisi angka saja.'])
-                        ->helperText('Untuk event konversi WhatsApp Business (beta) di menu Pelacakan iklan. Terisi sendiri dari webhook pertama bila kosong.'),
+                        ->helperText('Untuk event konversi WhatsApp Business (beta) di Pengaturan & Alat > Pelacakan iklan. Terisi sendiri dari webhook pertama bila kosong.'),
                 ]),
             Section::make('Panduan: menyambungkan lewat scan QR')->collapsible()
                 ->visible(fn (Get $get) => static::typeOf($get('type')) === 'gateway')

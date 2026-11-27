@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Ai\AnthropicClient;
 use App\Ai\AutoGate;
 use App\Enums\Role;
+use App\Filament\Concerns\InSettingsAndTools;
 use App\Models\WaChannel;
 use App\Support\CurrentTenant;
 use BackedEnum;
@@ -23,6 +24,7 @@ use Filament\Tables\Table;
  */
 class AiModes extends Page implements HasTable
 {
+    use InSettingsAndTools;
     use InteractsWithTable;
 
     protected string $view = 'filament.pages.ai-modes';
@@ -33,7 +35,8 @@ class AiModes extends Page implements HasTable
 
     protected static ?string $title = 'Siapa yang membalas chat';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'AI Asisten';
+    // Opened from "Pengaturan & Alat" (App\Filament\Support\SettingsCatalog), not from the sidebar.
+    protected static bool $shouldRegisterNavigation = false;
 
     protected static ?int $navigationSort = 0;
 
@@ -84,7 +87,7 @@ class AiModes extends Page implements HasTable
             ->defaultSort('position')
             ->paginated(false)
             ->emptyStateHeading('Belum ada nomor WhatsApp')
-            ->emptyStateDescription('Hubungkan nomor di menu Koneksi WhatsApp, lalu atur mode AI-nya di sini.')
+            ->emptyStateDescription('Hubungkan nomor di Pengaturan & Alat > Koneksi WhatsApp, lalu atur mode AI-nya di sini.')
             ->columns([
                 TextColumn::make('name')->label('Nomor')->weight('bold')->description(fn (WaChannel $r) => $r->phone),
                 TextColumn::make('type')->label('Jenis')->badge(),

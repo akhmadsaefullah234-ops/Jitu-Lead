@@ -5,12 +5,15 @@ namespace App\Filament\Resources\WaChannels\Pages;
 use App\Billing\Deny;
 use App\Billing\PlanLimits;
 use App\Enums\WaChannelType;
+use App\Filament\Concerns\InSettingsAndTools;
 use App\Filament\Resources\WaChannels\WaChannelResource;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 
 class CreateWaChannel extends CreateRecord
 {
+    use InSettingsAndTools;
+
     protected static string $resource = WaChannelResource::class;
 
     protected function beforeCreate(): void

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Team\Pages;
 use App\Billing\Deny;
 use App\Billing\PlanLimits;
 use App\Enums\Role;
+use App\Filament\Concerns\HasAgencyProfileTabs;
 use App\Filament\Resources\Team\TeamResource;
 use App\Models\Membership;
 use App\Models\User;
@@ -19,6 +20,8 @@ use Illuminate\Support\Facades\DB;
 
 class ManageTeam extends ManageRecords
 {
+    use HasAgencyProfileTabs;
+
     protected static string $resource = TeamResource::class;
 
     protected function getHeaderActions(): array

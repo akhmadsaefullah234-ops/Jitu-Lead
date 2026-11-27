@@ -43,6 +43,9 @@ class FollowUpRuleResource extends Resource
 
     protected static ?string $navigationLabel = 'Follow-up otomatis';
 
+    // Opened from "Pengaturan & Alat" (App\Filament\Support\SettingsCatalog), not from the sidebar.
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static ?int $navigationSort = 5;
 
     public static function form(Schema $schema): Schema

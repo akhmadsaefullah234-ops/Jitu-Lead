@@ -28,7 +28,8 @@ class LeadSourceResource extends Resource
 
     protected static ?string $navigationLabel = 'Sumber lead';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Pengaturan';
+    // Opened from "Pengaturan & Alat" (App\Filament\Support\SettingsCatalog), not from the sidebar.
+    protected static bool $shouldRegisterNavigation = false;
 
     protected static ?int $navigationSort = 11;
 

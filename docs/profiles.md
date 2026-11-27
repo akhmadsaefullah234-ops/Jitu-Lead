@@ -20,7 +20,7 @@ is in the panel middleware). With the database session driver, it also deletes t
 
 ## Profil agensi (`App\Filament\Pages\AgencyProfilePage`, admins only)
 
-The page is at Pengaturan > Profil agensi, slug `profil-agensi`. The name and time zone (WIB, WITA, WIT) go in their own
+The page is the first tab of Profil agensi (account menu, top right), slug `profil-agensi`. The name and time zone (WIB, WITA, WIT) go in their own
 `tenants` columns. Everything else goes in `tenants.profile`, a JSON column, through `App\Agency\AgencyProfile::clean`:
 
 - logo (`landing/{tenant id}/…` on the public disk, JPG, PNG or WebP up to 2 MB);

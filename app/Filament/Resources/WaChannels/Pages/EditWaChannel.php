@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\WaChannels\Pages;
 
+use App\Filament\Concerns\InSettingsAndTools;
 use App\Filament\Resources\WaChannels\WaChannelResource;
 use App\WhatsApp\BusinessLabels;
 use Filament\Actions\DeleteAction;
@@ -9,6 +10,8 @@ use Filament\Resources\Pages\EditRecord;
 
 class EditWaChannel extends EditRecord
 {
+    use InSettingsAndTools;
+
     protected static string $resource = WaChannelResource::class;
 
     protected function getHeaderActions(): array

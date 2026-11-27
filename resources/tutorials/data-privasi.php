@@ -5,7 +5,7 @@ return [
     'group' => 'akun',
     'order' => 50,
     'admin' => true,
-    'menu' => 'Pengaturan > Data & privasi',
+    'menu' => 'Menu akun (kanan atas) > Profil agensi > Data & privasi',
     'intro' => '<p>Mengunduh semua data toko, atau menghapus akun beserta datanya.</p>',
     'steps' => [
         [

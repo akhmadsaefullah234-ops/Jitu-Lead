@@ -24,7 +24,7 @@ class AutomateStagesCatchUpCommand extends Command
         }
 
         if (! PropertyStageAutomationSettings::of($tenant)->chosen()) {
-            $this->warn('Otomatisasi tahap belum dinyalakan untuk agensi ini (Pengaturan > Otomatisasi tahap > Nyalakan).');
+            $this->warn('Otomatisasi tahap belum dinyalakan untuk agensi ini (Pengaturan & Alat > Otomatisasi tahap > Nyalakan).');
 
             return self::SUCCESS;
         }

@@ -5,11 +5,11 @@ return [
     'group' => 'percakapan',
     'order' => 60,
     'admin' => true,
-    'menu' => 'Follow-up otomatis, dan tab Follow-up di halaman {item}',
+    'menu' => 'Pengaturan & Alat > Follow-up otomatis, dan tab Follow-up di halaman {item}',
     'intro' => '<p>Pesan lanjutan yang terkirim sendiri pada hari dan jam tertentu setelah lead masuk sebuah tahap. Pesan dikirim sekali per lead di tahap itu; lead yang sudah pindah tahap tidak lagi menerimanya.</p>',
     'steps' => [
         [
-            'text' => 'Buka <b>Follow-up otomatis</b>. Kotak di atas menjelaskan apakah <b>follow-up umum</b> sedang dipakai dan alasannya. Klik <b>Ubah pengaturan</b> untuk memilih: <b>Otomatis</b> (dipakai bila toko punya paling banyak 1 {item} aktif), <b>Selalu dipakai</b>, atau <b>Tidak dipakai</b>.',
+            'text' => 'Buka <b>Pengaturan & Alat > Follow-up otomatis</b>. Kotak di atas menjelaskan apakah <b>follow-up umum</b> sedang dipakai dan alasannya. Klik <b>Ubah pengaturan</b> untuk memilih: <b>Otomatis</b> (dipakai bila toko punya paling banyak 1 {item} aktif), <b>Selalu dipakai</b>, atau <b>Tidak dipakai</b>.',
             'alt' => 'Kotak status follow-up umum dengan tombol Ubah pengaturan',
             'shot' => ['page' => 'follow-up-rules', 'highlight' => ['.fi-callout >> nth=0']],
         ],

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\MediaFolders\Pages;
 
+use App\Filament\Concerns\InSettingsAndTools;
 use App\Filament\Resources\MediaFolders\MediaFolderResource;
 use App\Models\MediaFolder;
 use Filament\Actions\CreateAction;
@@ -9,6 +10,8 @@ use Filament\Resources\Pages\ManageRecords;
 
 class ManageMediaFolders extends ManageRecords
 {
+    use InSettingsAndTools;
+
     protected static string $resource = MediaFolderResource::class;
 
     public function getSubheading(): ?string

@@ -67,7 +67,7 @@ Halaman publik `/kebijakan-privasi` dan `/syarat-layanan` sudah ada dan ditautka
 
 ## Hak atas data (ekspor dan hapus agensi)
 
-Admin agensi punya menu **Pengaturan → Data & privasi** (tetap bisa dibuka saat masa percobaan atau langganan berakhir):
+Admin agensi punya menu **Profil agensi → Data & privasi (menu akun di kanan atas)** (tetap bisa dibuka saat masa percobaan atau langganan berakhir):
 
 - **Unduh semua data (ZIP)**: lead, aktivitas, percakapan dan pesan WhatsApp, properti, landing page, aturan follow-up, pengetahuan dan draf AI, anggota, langganan, dan chat support, sebagai CSV (UTF-8, aman dibuka di Excel). Kata sandi, kunci integrasi, dan token formulir tidak ikut. Dibatasi 3 kali per jam per agensi.
 - **Hapus agensi**: admin mengetik alamat ruang kerja dan kata sandinya; tidak perlu persetujuan super admin. Seluruh data agensi dihapus seketika, termasuk gambar landing page. Akun anggota yang hanya terdaftar di agensi itu ikut dihapus; akun admin yang menghapus dan akun super admin tetap ada. Salinan di cadangan hilang sendiri setelah masa simpannya (dump database 14 hari lokal dan 60 hari di luar server; berkas yang dihapus dari `storage/app` masih 30 hari di `storage-deleted`). Bila ada permintaan penghapusan yang mendesak, hapus juga folder cadangan terkait secara manual.
@@ -176,7 +176,7 @@ Jitu Lead mengirim notifikasi sendiri saat ada lead baru (formulir, landing page
 - Kunci VAPID dibuat otomatis oleh `php artisan push:keys` (sudah ada di `install.sh` dan `update.sh`). Perintah ini hanya mengisi kunci sekali dan tidak menimpa yang sudah ada. **Jangan ganti kuncinya**, karena semua perangkat yang sudah aktif harus didaftarkan ulang.
 - Setelah kunci terisi, jalankan `php artisan config:cache` (update.sh sudah melakukannya lewat `optimize`).
 - Wajib HTTPS. Browser tidak mengizinkan push di http biasa.
-- Setiap orang mengaktifkannya di perangkatnya sendiri lewat **Pengaturan → Notifikasi**, lalu bisa mematikan jenis notifikasi yang tidak diinginkan.
+- Setiap orang mengaktifkannya di perangkatnya sendiri lewat **Profil agensi → Notifikasi (menu akun di kanan atas)**, lalu bisa mematikan jenis notifikasi yang tidak diinginkan.
 - iPhone/iPad: butuh iOS 16.4 atau lebih baru, dan Jitu Lead harus dipasang dulu lewat Bagikan → **Tambah ke Layar Utama**, baru notifikasi bisa diaktifkan.
 - Android/PC (Chrome, Edge, Firefox): cukup tekan Aktifkan. Boleh juga dipasang sebagai aplikasi lewat menu "Instal".
 - Worker antrean (`queue:work`) harus berjalan, karena notifikasi dikirim lewat antrean.
@@ -245,7 +245,7 @@ Tautan verifikasi email yang dibuka oleh akun lain atau sudah kedaluwarsa kini m
 
 ## Paket langganan (tahap 1, pembayaran manual)
 
-Paket, harga, dan batas didefinisikan di satu tempat: `config/plans.php`. Halaman `/harga`, menu Langganan, dan semua pengecekan batas membaca file itu.
+Paket, harga, dan batas didefinisikan di satu tempat: `config/plans.php`. Halaman `/harga`, Profil agensi → Langganan, dan semua pengecekan batas membaca file itu.
 
 Isi di `.env` lalu `php artisan config:cache`:
 
@@ -257,7 +257,7 @@ BILLING_CONTACT="WhatsApp 0812xxxxxxx"
 
 Agensi baru mendapat percobaan 14 hari dengan batas paket Tim Kecil. Agensi yang sudah ada mendapat 14 hari dihitung sejak migrasi `2026_10_17_000100_create_subscriptions` dijalankan.
 
-Alur: admin agensi memilih paket di menu Langganan, itu membuat permintaan (pending) berisi nominal dan instruksi transfer. Setelah Anda menerima pembayaran, aktifkan lewat artisan:
+Alur: admin agensi memilih paket di Profil agensi → Langganan, itu membuat permintaan (pending) berisi nominal dan instruksi transfer. Setelah Anda menerima pembayaran, aktifkan lewat artisan:
 
 ```
 php artisan plan:set {slug-atau-id} {mandiri|tim|agensi} [--cycle=monthly|yearly] [--months=N]
@@ -292,13 +292,13 @@ VA dan API key sandbox berbeda dengan produksi (dashboard iPaymu, menu Integrasi
 
 **URL callback (notify):** `APP_URL/billing/ipaymu/notify`, dikirim otomatis di tiap transaksi (`notifyUrl`), jadi tidak perlu diisi di dashboard. Pastikan APP_URL benar dan dapat dijangkau dari internet.
 
-Alur: admin agensi memilih paket di menu Langganan lalu klik **Bayar sekarang**, dan dialihkan ke halaman iPaymu. Setelah bayar, iPaymu memanggil URL callback. Aplikasi memeriksa tanda tangan (`X-Signature`, kunci VA), lalu menanyakan ulang status transaksi ke API iPaymu, dan hanya bila statusnya berhasil serta harga paket (SubTotal dari API iPaymu, bukan total yang dibayar pembeli) dan referensinya cocok, paket diaktifkan dengan logika yang sama seperti tombol "Setujui" di super admin. Callback ganda aman (paket diaktifkan sekali). Pemilik platform menerima email dan push "Pembayaran diterima". Daftar transaksi ada di **/admin, menu Transaksi iPaymu**, berisi harga paket, total yang dibayar pembeli (bila biaya ditanggung pembeli), biaya, dan jumlah yang diterima.
+Alur: admin agensi memilih paket di Profil agensi → Langganan lalu klik **Bayar sekarang**, dan dialihkan ke halaman iPaymu. Setelah bayar, iPaymu memanggil URL callback. Aplikasi memeriksa tanda tangan (`X-Signature`, kunci VA), lalu menanyakan ulang status transaksi ke API iPaymu, dan hanya bila statusnya berhasil serta harga paket (SubTotal dari API iPaymu, bukan total yang dibayar pembeli) dan referensinya cocok, paket diaktifkan dengan logika yang sama seperti tombol "Setujui" di super admin. Callback ganda aman (paket diaktifkan sekali). Pemilik platform menerima email dan push "Pembayaran diterima". Daftar transaksi ada di **/admin, menu Transaksi iPaymu**, berisi harga paket, total yang dibayar pembeli (bila biaya ditanggung pembeli), biaya, dan jumlah yang diterima.
 
 Kode status iPaymu: 1 berhasil, 6 berhasil (belum settle), dan 7 escrow (pembeli sudah bayar, dana ditahan iPaymu) mengaktifkan paket; 0 menunggu; -2 kedaluwarsa; 2 batal, 3 refund, 4 error, 5 gagal ditandai gagal. Kode lain dianggap menunggu dan dicatat sebagai warning. Transaksi escrow tampil sebagai "Berhasil (escrow)" di Transaksi iPaymu. API v2 tidak mendokumentasikan parameter untuk mematikan escrow; bila perlu, minta iPaymu menonaktifkannya untuk akun Anda.
 
 Pengecekan: setiap callback dicatat di log aplikasi (`storage/logs`: ID transaksi, status, referensi, hasil), tanpa API key. Callback dengan tanda tangan salah dibalas 400, referensi atau nominal tidak cocok dibalas 422, dan bila API iPaymu tidak terjangkau dibalas 503 agar iPaymu mengirim ulang.
 
-Uji sandbox: isi kunci sandbox, `IPAYMU_SANDBOX=true`, pilih paket, klik Bayar sekarang, selesaikan pembayaran di sandbox, lalu pastikan status di menu Langganan berubah menjadi Berhasil dan paket aktif.
+Uji sandbox: isi kunci sandbox, `IPAYMU_SANDBOX=true`, pilih paket, klik Bayar sekarang, selesaikan pembayaran di sandbox, lalu pastikan status di Profil agensi → Langganan berubah menjadi Berhasil dan paket aktif.
 
 ## Landing page builder
 

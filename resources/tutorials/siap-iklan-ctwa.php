@@ -6,11 +6,11 @@ return [
     'order' => 30,
     'industries' => ['properti'],
     'admin' => true,
-    'menu' => 'Pengaturan > Siap iklan CTWA',
+    'menu' => 'Pengaturan & Alat > Siap iklan CTWA',
     'intro' => '<p>Iklan Klik ke WhatsApp belajar dari sinyal yang agensi kirim ke Meta: event dari pipeline (Lead, QualifiedLead, Schedule, InitiateCheckout, Purchase) dan label WhatsApp Business (Prospek, Order baru, Lunas). Halaman ini memeriksa semuanya dalam satu tempat sebelum iklan dinyalakan, dan tidak mengubah apa pun.</p>',
     'steps' => [
         [
-            'text' => 'Buka <b>Siap iklan CTWA</b>. Tiap baris diberi tanda <b>Siap</b>, <b>Perlu dicek</b>, <b>Belum</b>, atau <b>Cek manual</b>: Pixel dan token, event pipeline, otomasi tahap, event yang pernah terkirim, lead dari iklan, label di tiap nomor gateway, dan berbagi data WhatsApp Business ke Meta. Baris yang belum siap menyebut apa yang perlu dilakukan.',
+            'text' => 'Buka <b>Pengaturan & Alat > Siap iklan CTWA</b>. Tiap baris diberi tanda <b>Siap</b>, <b>Perlu dicek</b>, <b>Belum</b>, atau <b>Cek manual</b>: Pixel dan token, event pipeline, otomasi tahap, event yang pernah terkirim, lead dari iklan, label di tiap nomor gateway, dan berbagi data WhatsApp Business ke Meta. Baris yang belum siap menyebut apa yang perlu dilakukan.',
             'alt' => 'Halaman Siap iklan CTWA dengan daftar pemeriksaan',
             'shot' => ['page' => 'siap-iklan-ctwa', 'highlight' => ['.fi-section >> nth=0']],
         ],
@@ -20,7 +20,7 @@ return [
             'shot' => ['page' => 'siap-iklan-ctwa', 'highlight' => ['.fi-header button:has-text("Uji kirim event")', '.fi-section >> nth=1']],
         ],
         [
-            'text' => 'Label dipasang dari nomor gateway: buka <b>Koneksi WhatsApp</b>, ubah nomornya, lalu di bagian label klik <b>Pakai bawaan Jitu</b> (Prospek saat Terkualifikasi atau Jadwal survei, Order baru saat Booking, Lunas saat Closing, hanya untuk chat dari iklan). Label yang belum ada di akun WhatsApp Business ditunggu dan dicoba lagi sampai 7 hari. Hasil per tahap, event dan label, terlihat di <b>AI dan Survei</b>.',
+            'text' => 'Label dipasang dari nomor gateway: buka <b>Pengaturan & Alat > Koneksi WhatsApp</b>, ubah nomornya, lalu di bagian label klik <b>Pakai bawaan Jitu</b> (Prospek saat Terkualifikasi atau Jadwal survei, Order baru saat Booking, Lunas saat Closing, hanya untuk chat dari iklan). Label yang belum ada di akun WhatsApp Business ditunggu dan dicoba lagi sampai 7 hari. Hasil per tahap, event dan label, terlihat di <b>Laporan > AI dan Survei</b>.',
             'alt' => 'Tabel per tahap di AI dan Survei dengan event Meta dan label terpasang',
             'shot' => ['page' => 'ai-dan-survei', 'highlight' => ['.as-grid > * >> nth=1']],
         ],

@@ -2,7 +2,7 @@
 
 Dokumen ini dipakai proyek gateway agar CRM JITU LEAD bisa memakai nomornya untuk follow-up. Semua alamat memakai HTTPS. CRM menolak alamat yang mengarah ke jaringan privat.
 
-Isi di CRM (menu Koneksi WhatsApp, jenis Gateway): alamat gateway, API key, dan signing secret. CRM lalu menampilkan alamat webhook unik untuk nomor itu.
+Isi di CRM (Pengaturan & Alat > Koneksi WhatsApp, jenis Gateway): alamat gateway, API key, dan signing secret. CRM lalu menampilkan alamat webhook unik untuk nomor itu.
 
 ## CRM memanggil gateway
 

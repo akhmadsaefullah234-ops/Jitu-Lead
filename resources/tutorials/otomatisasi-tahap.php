@@ -6,11 +6,11 @@ return [
     'order' => 30,
     'industries' => ['retail'],
     'admin' => true,
-    'menu' => 'Pengaturan > Otomatisasi tahap',
+    'menu' => 'Pengaturan & Alat > Otomatisasi tahap',
     'intro' => '<p>Delapan aturan yang memindahkan lead toko antar tahap sendiri, misalnya pindah ke Selesai beberapa hari setelah resi dikirim. Setiap perpindahan otomatis tercatat di aktivitas lead.</p>',
     'steps' => [
         [
-            'text' => 'Buka <b>Otomatisasi tahap</b>. Tiap aturan punya sakelar <b>Aktif</b>: 1. Format order lengkap ke Order masuk; 2. Pembeli konfirmasi ke Menunggu pembayaran (transfer) atau Dikemas & dikirim (COD); 3. Gambar saat Menunggu pembayaran ditandai "Bukti transfer masuk"; 4. Nomor resi diisi: kirim WhatsApp resi dan pindah ke Dikemas & dikirim.',
+            'text' => 'Buka <b>Pengaturan & Alat > Otomatisasi tahap</b>. Tiap aturan punya sakelar <b>Aktif</b>: 1. Format order lengkap ke Order masuk; 2. Pembeli konfirmasi ke Menunggu pembayaran (transfer) atau Dikemas & dikirim (COD); 3. Gambar saat Menunggu pembayaran ditandai "Bukti transfer masuk"; 4. Nomor resi diisi: kirim WhatsApp resi dan pindah ke Dikemas & dikirim.',
             'alt' => 'Aturan otomatisasi tahap 1 sampai 4 dengan sakelar Aktif',
             'shot' => ['page' => 'otomatisasi-tahap', 'highlight' => ['.fi-section >> nth=0', '.fi-section >> nth=1']],
         ],

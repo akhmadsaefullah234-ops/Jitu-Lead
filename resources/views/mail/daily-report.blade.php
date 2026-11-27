@@ -5,5 +5,5 @@
 Buka Dasbor
 </x-mail::button>
 
-<small>Laporan ini dikirim lewat email karena WhatsApp tidak bisa dipakai saat itu. Atur di menu Pengaturan > Laporan harian.</small>
+<small>Laporan ini dikirim lewat email karena WhatsApp tidak bisa dipakai saat itu. Atur di menu akun (kanan atas) > Profil agensi > Laporan harian.</small>
 </x-mail::message>

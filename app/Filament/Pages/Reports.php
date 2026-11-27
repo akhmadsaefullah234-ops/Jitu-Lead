@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Billing\PlanLimits;
+use App\Filament\Concerns\HasReportTabs;
 use App\Filament\Resources\Leads\LeadResource;
 use App\Models\Lead;
 use App\Models\Stage;
@@ -20,6 +21,8 @@ use Livewire\Attributes\Url;
  */
 class Reports extends Page
 {
+    use HasReportTabs;
+
     protected string $view = 'filament.pages.reports';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChartBar;
@@ -29,6 +32,12 @@ class Reports extends Page
     protected static ?string $title = 'Laporan';
 
     protected static ?int $navigationSort = 10;
+
+    /** "Laporan" stays lit on its "AI dan Survei" tab. */
+    public static function getNavigationItemActiveRoutePattern(): string|array
+    {
+        return [static::getRouteName(), AiSurveyReport::getRouteName()];
+    }
 
     /** The same period picker as the Dashboard, Lead and Pipeline (App\Support\Period); 30 days unless chosen. */
     #[Url]

@@ -6,6 +6,7 @@ use App\Billing\Ipaymu\IpaymuPayments;
 use App\Billing\PlanLimits;
 use App\Billing\PlanRequests;
 use App\Enums\Role;
+use App\Filament\Concerns\HasAgencyProfileTabs;
 use App\Models\IpaymuPayment;
 use App\Models\SubscriptionRequest;
 use App\Support\CurrentTenant;
@@ -20,6 +21,8 @@ use Filament\Support\Icons\Heroicon;
  */
 class Subscription extends Page
 {
+    use HasAgencyProfileTabs;
+
     protected string $view = 'filament.pages.subscription';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCreditCard;
@@ -28,7 +31,11 @@ class Subscription extends Page
 
     protected static ?string $title = 'Langganan';
 
+    // A tab of "Profil agensi" (App\Filament\Support\AgencyProfileTabs), opened from the account menu. The group stays
+    // for the one sidebar item a locked agency sees (App\Billing\TrialLock), which is built from this page.
     protected static string|\UnitEnum|null $navigationGroup = 'Pengaturan';
+
+    protected static bool $shouldRegisterNavigation = false;
 
     protected static ?int $navigationSort = 1;
 

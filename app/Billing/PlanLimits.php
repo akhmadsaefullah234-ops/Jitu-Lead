@@ -124,7 +124,7 @@ class PlanLimits
     public function denyAdding(string $key): ?string
     {
         if ($this->readOnly()) {
-            return 'Langganan Anda sedang hanya-baca. Perpanjang paket di menu Langganan untuk menambah atau mengubah data.';
+            return 'Langganan Anda sedang hanya-baca. Perpanjang paket di Profil agensi > Langganan untuk menambah atau mengubah data.';
         }
 
         if (! $this->atLimit($key)) {
@@ -133,7 +133,7 @@ class PlanLimits
 
         $label = mb_strtolower(config("plans.limit_labels.$key"));
 
-        return "Batas {$label} paket {$this->plan()['name']} sudah tercapai ({$this->limit($key)}). Naikkan paket atau beli tambahan di menu Langganan.";
+        return "Batas {$label} paket {$this->plan()['name']} sudah tercapai ({$this->limit($key)}). Naikkan paket atau beli tambahan di Profil agensi > Langganan.";
     }
 
     public function denyFeature(string $feature): ?string
@@ -142,7 +142,7 @@ class PlanLimits
             return null;
         }
 
-        return config("plans.feature_labels.$feature").' tidak termasuk paket '.$this->plan()['name'].'. Naikkan paket di menu Langganan.';
+        return config("plans.feature_labels.$feature").' tidak termasuk paket '.$this->plan()['name'].'. Naikkan paket di Profil agensi > Langganan.';
     }
 
     /** Whether the AI may answer another message, and if not, why. */

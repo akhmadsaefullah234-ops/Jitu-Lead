@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Enums\Role;
+use App\Filament\Concerns\InSettingsAndTools;
 use App\Filament\Resources\Shipments\ShipmentResource;
 use App\Models\CarrierAccount;
 use App\Models\Stage;
@@ -45,17 +46,20 @@ use Illuminate\Support\HtmlString;
  */
 class ShippingSettingsPage extends Page
 {
+    use InSettingsAndTools;
+
     protected string $view = 'filament.pages.shipping-settings';
 
     protected static ?string $slug = 'pengiriman';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedTruck;
 
-    protected static ?string $navigationLabel = 'Pengiriman';
+    protected static ?string $navigationLabel = 'Pengaturan pengiriman';
 
     protected static ?string $title = 'Pengiriman';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Pengaturan';
+    // Opened from "Pengaturan & Alat" (App\Filament\Support\SettingsCatalog), not from the sidebar.
+    protected static bool $shouldRegisterNavigation = false;
 
     protected static ?int $navigationSort = 13;
 

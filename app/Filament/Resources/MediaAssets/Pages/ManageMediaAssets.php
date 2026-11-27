@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\MediaAssets\Pages;
 
+use App\Filament\Concerns\InSettingsAndTools;
 use App\Filament\Resources\MediaAssets\MediaAssetResource;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ManageRecords;
@@ -9,6 +10,8 @@ use Illuminate\Support\Facades\Storage;
 
 class ManageMediaAssets extends ManageRecords
 {
+    use InSettingsAndTools;
+
     protected static string $resource = MediaAssetResource::class;
 
     protected function getHeaderActions(): array

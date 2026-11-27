@@ -6,16 +6,16 @@ return [
     'group' => 'mulai',
     'order' => 10,
     'admin' => true,
-    'menu' => 'Pengaturan > Tim',
+    'menu' => 'Menu akun (kanan atas) > Profil agensi > Tim',
     'intro' => '<p>Setiap akun punya data sendiri yang terpisah dari akun lain. Ada tiga peran:</p><ul>'
         .'<li><b>Admin</b>: semua data dan semua pengaturan, termasuk Koneksi WhatsApp, Mode AI, Pengiriman, dan Langganan.</li>'
         .'<li><b>Team leader</b>: semua lead, chat, dan kiriman, ditambah Formulir dan Halaman landing.</li>'
         .'<li><b>Agen</b>: hanya lead miliknya, chat lead itu, dan kiriman lead itu.</li></ul>',
     'steps' => [
         [
-            'text' => 'Buka <b>Pengaturan > Tim</b>. Tabel menampilkan nama, email, peran, porsi lead, dan status tiap anggota.',
+            'text' => 'Buka <b>Profil agensi</b> dari menu akun (foto di kanan atas), lalu tab <b>Tim</b>. Tabel menampilkan nama, email, peran, porsi lead, dan status tiap anggota.',
             'alt' => 'Halaman Tim berisi empat anggota demo dengan peran Admin, Team leader, dan Agen',
-            'shot' => ['page' => 'team/teams', 'highlight' => ['.fi-sidebar-item-btn:has-text("Tim")', '.fi-ta-ctn']],
+            'shot' => ['page' => 'team/teams', 'highlight' => ['.fi-page-sub-navigation-tabs .fi-tabs-item:has-text("Tim")', '.fi-ta-ctn']],
         ],
         [
             'text' => 'Klik <b>Tambah anggota</b>, isi Nama, Email, Kata sandi sementara (minimal 10 karakter), dan Peran, lalu simpan. Berikan kata sandinya ke anggota baru dan minta ia menggantinya setelah masuk.',

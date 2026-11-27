@@ -16,7 +16,7 @@ class DigitalStageAutomationSettings
     /** Rule => [label, help, number settings (key => [label, default, suffix])] */
     public const RULES = [
         'purchase_recorded' => ['Pembeli konfirmasi pembelian → Menunggu pembayaran',
-            'Saat AI atau agen mencatat pembelian yang sudah dikonfirmasi pembeli. Instruksi bayar dikirim sistem bila rekening sudah diisi di Pengaturan > Pembayaran.', []],
+            'Saat AI atau agen mencatat pembelian yang sudah dikonfirmasi pembeli. Instruksi bayar dikirim sistem bila rekening sudah diisi di Pengaturan & Alat > Pembayaran.', []],
         'payment_proof' => ['Gambar saat Menunggu pembayaran → tandai "Bukti transfer masuk"',
             'Admin dan agen pemilik lead diberi notifikasi untuk mengecek. AI tidak pernah menyatakan lunas; agen menekan "Pembayaran diterima" untuk memindah lead ke Lunas & akses terkirim.', []],
         'no_payment' => ['Belum bayar di Menunggu pembayaran → Tidak jadi bayar ("Pembayaran gagal")',

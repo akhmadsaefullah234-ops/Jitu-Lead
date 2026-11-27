@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Enums\Role;
+use App\Filament\Concerns\HasAgencyProfileTabs;
 use App\Privacy\TenantEraser;
 use App\Privacy\TenantExport;
 use App\Support\CurrentTenant;
@@ -22,6 +23,8 @@ use Illuminate\Support\Facades\RateLimiter;
  */
 class DataPrivacy extends Page
 {
+    use HasAgencyProfileTabs;
+
     protected string $view = 'filament.pages.data-privacy';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShieldCheck;
@@ -30,7 +33,8 @@ class DataPrivacy extends Page
 
     protected static ?string $title = 'Data & privasi';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Pengaturan';
+    // A tab of "Profil agensi" (App\Filament\Support\AgencyProfileTabs), opened from the account menu.
+    protected static bool $shouldRegisterNavigation = false;
 
     protected static ?int $navigationSort = 30;
 

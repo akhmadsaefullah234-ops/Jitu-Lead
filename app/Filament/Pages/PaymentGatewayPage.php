@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Enums\Role;
+use App\Filament\Concerns\InSettingsAndTools;
 use App\Models\PaymentGateway;
 use App\Support\CurrentTenant;
 use BackedEnum;
@@ -25,6 +26,8 @@ use Illuminate\Validation\ValidationException;
  */
 class PaymentGatewayPage extends Page
 {
+    use InSettingsAndTools;
+
     protected string $view = 'filament.pages.payment-gateway';
 
     protected static ?string $slug = 'pembayaran-otomatis';
@@ -35,7 +38,8 @@ class PaymentGatewayPage extends Page
 
     protected static ?string $title = 'Pembayaran otomatis (iPaymu)';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Pengaturan';
+    // Opened from "Pengaturan & Alat" (App\Filament\Support\SettingsCatalog), not from the sidebar.
+    protected static bool $shouldRegisterNavigation = false;
 
     protected static ?int $navigationSort = 15;
 

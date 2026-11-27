@@ -2,10 +2,12 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Concerns\HasReportTabs;
 use App\Reports\AiSurveyData;
 use App\Support\CurrentTenant;
 use App\Support\Period;
 use BackedEnum;
+use Filament\Facades\Filament;
 use Filament\Pages\Page;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -18,6 +20,8 @@ use Livewire\Attributes\Url;
  */
 class AiSurveyReport extends Page
 {
+    use HasReportTabs;
+
     protected string $view = 'filament.pages.ai-survey-report';
 
     protected static ?string $slug = 'ai-dan-survei';
@@ -28,7 +32,8 @@ class AiSurveyReport extends Page
 
     protected static ?string $title = 'AI dan Survei';
 
-    protected static ?int $navigationSort = 11;
+    // A tab on Laporan (App\Filament\Concerns\HasReportTabs); not in the sidebar.
+    protected static bool $shouldRegisterNavigation = false;
 
     #[Url]
     public ?string $periode = null;
@@ -38,6 +43,16 @@ class AiSurveyReport extends Page
 
     #[Url]
     public ?string $sampai = null;
+
+    /** @return array<string> */
+    public function getBreadcrumbs(): array
+    {
+        if (Filament::getTenant() === null) {
+            return [];
+        }
+
+        return [Reports::getUrl() => Reports::getNavigationLabel(), static::getNavigationLabel()];
+    }
 
     public static function canAccess(): bool
     {

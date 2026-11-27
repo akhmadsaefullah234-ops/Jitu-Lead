@@ -14,6 +14,22 @@ langkah. Isinya berkas di repo, bukan database:
   `pipeline` dan `pipeline-properti`) masing-masing diberi `industries` sendiri, jadi tiap jenis usaha hanya melihat
   satu versi.
 
+## Jalur menu (sejak 27-11-2026)
+
+Menu kiri hanya berisi menu utama (Dasbor, Pipeline, Lead, Inbox, Pengiriman, Tugas, Halaman landing, Formulir,
+Produk/Properti, Laporan, Tutorial, **Pengaturan & Alat**). Saat menulis baris `menu` dan teks langkah, pakai jalur ini:
+
+- Halaman yang dulu di grup AI Asisten, Pustaka media, dan Pengaturan: **Pengaturan & Alat > {nama kartu}**, mis.
+  `Pengaturan & Alat > Mode AI`, `Pengaturan & Alat > Pengaturan pengiriman` (dulu "Pengaturan > Pengiriman"). Daftar
+  kartunya ada di `App\Filament\Support\SettingsCatalog`.
+- Profil, Tim, Langganan, Notifikasi, Laporan harian, Data & privasi: **Menu akun (kanan atas) > Profil agensi > {tab}**
+  (`App\Filament\Support\AgencyProfileTabs`).
+- Impor lead: tombol di halaman **Lead**. AI dan Survei: tab di halaman **Laporan**.
+
+Untuk `shot`, jangan menyorot item menu kiri yang sudah pindah. Sorot `.fi-breadcrumbs` (tautan kembali ke Pengaturan &
+Alat), kartu `.st-card`, atau tab Profil agensi `.fi-page-sub-navigation-tabs .fi-tabs-item:has-text("Tim")`. Menu akun
+dibuka dengan `['click' => '.fi-user-menu-trigger']`. Bab pembuka `menu-dan-pengaturan` menjelaskan semuanya ke pengguna.
+
 ## Format bab
 
 ```php

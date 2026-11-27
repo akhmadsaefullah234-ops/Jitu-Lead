@@ -6,11 +6,11 @@ return [
     'order' => 30,
     'industries' => ['properti'],
     'admin' => true,
-    'menu' => 'Pengaturan > Otomatisasi tahap',
+    'menu' => 'Pengaturan & Alat > Otomatisasi tahap',
     'intro' => '<p>Sembilan aturan yang menggerakkan lead properti sendiri mengikuti percakapan: Dihubungi saat klien membalas, Terkualifikasi saat kebutuhannya tercatat, Sudah survei setelah jadwal lewat, dan Gugur bila klien diam. Tugas agen ikut rapi: yang sudah dibalas AI selesai sendiri, yang butuh manusia muncul dengan alasannya. Setiap perpindahan tercatat di aktivitas lead sebagai "Pindah otomatis" dan memicu follow-up, event iklan, dan label WhatsApp tahap barunya.</p>',
     'steps' => [
         [
-            'text' => 'Buka <b>Otomatisasi tahap</b>. Agensi baru mendapati aturannya sudah menyala, dengan tombol <b>Simpan</b> dan <b>Terapkan ke lead yang ada</b>. Agensi yang dibuat sebelum fitur ini melihat semua aturan mati dan tombol <b>Nyalakan</b> di tempat yang sama: klik, lalu konfirmasi. Semua aturan menyala dengan nilai bawaannya kecuali pesan terima kasih setelah survei.',
+            'text' => 'Buka <b>Pengaturan & Alat > Otomatisasi tahap</b>. Agensi baru mendapati aturannya sudah menyala, dengan tombol <b>Simpan</b> dan <b>Terapkan ke lead yang ada</b>. Agensi yang dibuat sebelum fitur ini melihat semua aturan mati dan tombol <b>Nyalakan</b> di tempat yang sama: klik, lalu konfirmasi. Semua aturan menyala dengan nilai bawaannya kecuali pesan terima kasih setelah survei.',
             'alt' => 'Halaman Otomatisasi tahap properti dengan tombol Nyalakan',
             'shot' => ['page' => 'otomatisasi-tahap', 'highlight' => ['.fi-header button:has-text("Simpan")', '.fi-header button:has-text("Terapkan ke lead yang ada")']],
         ],
@@ -37,7 +37,7 @@ return [
         ],
     ],
     'tips' => [
-        'Berapa lead yang digerakkan tiap tahap, dan event serta label yang ikut terkirim, terlihat di <b>AI dan Survei</b>.',
+        'Berapa lead yang digerakkan tiap tahap, dan event serta label yang ikut terkirim, terlihat di <b>Laporan > AI dan Survei</b>.',
         'Tahap dikenali dari namanya di templat properti atau dari syaratnya (tahap bersyarat survei, tahap bersyarat booking), jadi aturan tetap jalan bila urutan pipeline sedikit berbeda.',
         'Dari terminal: <code>php artisan stages:catch-up --tenant=&lt;slug&gt;</code> menampilkan pratinjau yang sama; tambahkan <code>--apply</code> untuk menerapkan.',
     ],

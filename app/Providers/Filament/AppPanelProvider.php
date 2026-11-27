@@ -7,10 +7,12 @@ use App\Filament\Pages\Auth\MyProfile;
 use App\Filament\Pages\Auth\Register;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\Tenancy\RegisterAgency;
+use App\Filament\Support\AgencyProfileTabs;
 use App\Filament\Support\InitialsAvatarProvider;
 use App\Http\Middleware\LockExpiredTrial;
 use App\Http\Middleware\SetCurrentTenant;
 use App\Models\Tenant;
+use Filament\Actions\Action;
 use Filament\Facades\Filament;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -20,6 +22,7 @@ use Filament\Navigation\NavigationBuilder;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\Support\Icons\Heroicon;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -47,6 +50,15 @@ class AppPanelProvider extends PanelProvider
             // Profil saya: a new e-mail address is used only after the link sent to it is opened.
             ->profile(MyProfile::class, isSimple: false)
             ->emailChangeVerification()
+            // Profil agensi: the agency's own settings as tabs (App\Filament\Support\AgencyProfileTabs), under Profil saya.
+            ->userMenuItems([
+                'agency-profile' => fn (): Action => Action::make('agencyProfile')
+                    ->label(AgencyProfileTabs::LABEL)
+                    ->icon(Heroicon::OutlinedBuildingStorefront)
+                    ->url(fn (): ?string => AgencyProfileTabs::firstUrl())
+                    ->visible(fn (): bool => AgencyProfileTabs::firstUrl() !== null)
+                    ->sort(0),
+            ])
             ->tenant(Tenant::class, slugAttribute: 'slug')
             ->tenantRegistration(RegisterAgency::class)
             ->tenantMiddleware([SetCurrentTenant::class], isPersistent: true)

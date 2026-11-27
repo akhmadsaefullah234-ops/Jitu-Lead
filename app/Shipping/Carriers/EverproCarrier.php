@@ -415,7 +415,7 @@ class EverproCarrier implements CarrierProvider, ListsOrders, ValidatesPhones
     public function phoneProblems(?string $shipperPhone, ?string $receiverPhone): array
     {
         return array_values(array_filter([
-            self::phone($shipperPhone) === null ? 'Nomor HP pengirim tidak valid: isi 10–15 angka (mis. 0812…) di Pengaturan > Pengiriman.' : null,
+            self::phone($shipperPhone) === null ? 'Nomor HP pengirim tidak valid: isi 10–15 angka (mis. 0812…) di Pengaturan & Alat > Pengaturan pengiriman.' : null,
             self::phone($receiverPhone) === null ? 'Nomor HP penerima tidak valid: perbaiki nomor HP lead (10–15 angka, mis. 0812…).' : null,
         ]));
     }
@@ -795,7 +795,7 @@ class EverproCarrier implements CarrierProvider, ListsOrders, ValidatesPhones
         Log::warning('Everpro call failed', ['tenant' => $this->account->tenant_id, 'path' => $this->safePath($path), 'status' => $status, 'message' => mb_substr($message, 0, 200)]);
 
         if ($status === 401 || $status === 403) {
-            return new CarrierException('Kredensial Everpro ditolak. Periksa client key dan client secret di Pengaturan > Pengiriman.', CarrierException::AUTH, $status);
+            return new CarrierException('Kredensial Everpro ditolak. Periksa client key dan client secret di Pengaturan & Alat > Pengaturan pengiriman.', CarrierException::AUTH, $status);
         }
 
         if (preg_match('/saldo|balance|insufficient/i', $message)) {
@@ -832,7 +832,7 @@ class EverproCarrier implements CarrierProvider, ListsOrders, ValidatesPhones
         }
 
         if (! $this->account->hasCredentials()) {
-            throw new CarrierException('Client key dan client secret Everpro belum diisi di Pengaturan > Pengiriman.', CarrierException::AUTH);
+            throw new CarrierException('Client key dan client secret Everpro belum diisi di Pengaturan & Alat > Pengaturan pengiriman.', CarrierException::AUTH);
         }
 
         try {

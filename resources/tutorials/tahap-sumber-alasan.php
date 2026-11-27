@@ -5,7 +5,7 @@ return [
     'group' => 'akun',
     'order' => 20,
     'admin' => true,
-    'menu' => 'Pengaturan > Tahap pipeline / Sumber lead / Alasan gugur',
+    'menu' => 'Pengaturan & Alat > Tahap pipeline / Sumber lead / Alasan gugur',
     'intro' => '<p>Tiga daftar yang membentuk pipeline dan laporan Anda.</p>',
     'steps' => [
         [

@@ -6,11 +6,11 @@ return [
     'order' => 60,
     'industries' => ['retail'],
     'admin' => true,
-    'menu' => 'Pengaturan > Pengiriman > Pesan status kiriman',
+    'menu' => 'Pengaturan & Alat > Pengaturan pengiriman > Pesan status kiriman',
     'intro' => '<p>Pembeli menerima WhatsApp otomatis saat status paketnya berubah, sekali per status per resi, lewat nomor WhatsApp pemilik lead.</p>',
     'steps' => [
         [
-            'text' => 'Buka <b>Pengaturan > Pengiriman</b>, gulir ke <b>Pesan status kiriman</b>. Status yang bisa diatur: Diambil kurir (aktif), Dalam perjalanan (nonaktif), Sedang diantar (aktif), Gagal diantar (aktif), dan Diterima (aktif). Buka satu status untuk menyalakan <b>Kirim ke pembeli</b> dan mengubah teksnya.',
+            'text' => 'Buka <b>Pengaturan & Alat > Pengaturan pengiriman</b>, gulir ke <b>Pesan status kiriman</b>. Status yang bisa diatur: Diambil kurir (aktif), Dalam perjalanan (nonaktif), Sedang diantar (aktif), Gagal diantar (aktif), dan Diterima (aktif). Buka satu status untuk menyalakan <b>Kirim ke pembeli</b> dan mengubah teksnya.',
             'alt' => 'Bagian Pesan status kiriman dengan daftar status',
             'shot' => ['page' => 'pengiriman', 'steps' => [['scroll' => '.fi-section:has(.fi-section-header-heading:text-is("Pesan status kiriman"))']],
                 'highlight' => ['.fi-section:has(.fi-section-header-heading:text-is("Pesan status kiriman")) .fi-section-header >> nth=0']],

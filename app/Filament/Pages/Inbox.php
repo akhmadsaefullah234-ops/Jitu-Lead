@@ -356,7 +356,7 @@ class Inbox extends Page
         return Action::make('shippingQuote')
             ->label('Hitung ongkir')->icon(Heroicon::OutlinedTruck)->color('gray')->size('sm')
             ->modalHeading('Hitung ongkir')
-            ->modalDescription('Dari tabel zona di Pengaturan > Pengiriman. Hasilnya masuk ke kotak pesan untuk Anda periksa sebelum dikirim.')
+            ->modalDescription('Dari tabel zona di Pengaturan & Alat > Pengaturan pengiriman. Hasilnya masuk ke kotak pesan untuk Anda periksa sebelum dikirim.')
             ->modalSubmitActionLabel('Hitung')
             ->visible(fn () => $this->current() !== null && Shipping::available(app(CurrentTenant::class)->get()))
             ->fillForm(function () {
@@ -473,7 +473,7 @@ class Inbox extends Page
             ->modalHeading('Nomor resi')
             ->modalDescription(fn () => StageAutomationSettings::of(app(CurrentTenant::class)->get())->enabled('tracking')
                 ? 'Kurir, nomor resi, dan tautan lacak dikirim ke pembeli lewat WhatsApp, lalu lead pindah ke Dikemas & dikirim.'
-                : 'Nomor resi disimpan di lead. Pengiriman otomatis ke pembeli sedang dimatikan di Pengaturan > Otomatisasi tahap.')
+                : 'Nomor resi disimpan di lead. Pengiriman otomatis ke pembeli sedang dimatikan di Pengaturan & Alat > Otomatisasi tahap.')
             ->modalSubmitActionLabel('Simpan')
             ->fillForm(fn () => ['courier' => $this->current()?->lead?->courier, 'tracking_number' => $this->current()?->lead?->tracking_number])
             ->schema([
