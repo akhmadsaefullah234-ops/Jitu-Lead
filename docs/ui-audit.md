@@ -51,6 +51,7 @@ Ukuran yang diukur di tiap layar:
 | Area sentuh kecil | tombol, tautan, dan kolom di bawah 44 x 44 px, hanya di lebar HP dan tablet; tautan di tengah kalimat tidak dihitung. Sejak PR 4 sel tabel yang membuka data barisnya (`.fi-ta-col`) diukur sebagai seluruh baris atau kartu: sel-sel itu bersambung dan semuanya membuka data yang sama |
 | Teks kecil | elemen yang memuat teks di bawah 14px; ringkasan juga menghitung teks di bawah 12px (batas untuk keterangan dan lencana). Label yang sengaja disembunyikan dengan `font-size: 0` (tetap terbaca pembaca layar) tidak dihitung |
 | Area kosong | panel (berlatar, bergaris, atau berbayang) setinggi minimal 250px yang kosong, atau yang isinya berakhir jauh di atas tepi bawahnya |
+| Ikut tergulung | halaman panel digulir 900px (atau sejauh bisa): bar atas harus tetap di puncak layar, menu kiri (desktop, terbuka dan diciutkan) mengisi tinggi di bawahnya, dan tab bar (HP dan tablet) tetap di dasar layar. Dilewati bila halaman terlalu pendek untuk digulir. Ditambahkan setelah `overflow-x: hidden` pada `html` dan `body` membuat `body` jadi wadah gulir sendiri sehingga `position: sticky` tidak bekerja; kini `overflow-x: clip` |
 
 Catatan: panel `/app` memakai `darkMode(false)`, jadi tangkapan layar mode gelap di panel sama dengan mode terang.
 Halaman publik juga tidak punya tampilan gelap. Audit tetap mengambil keduanya supaya bisa dibandingkan bila mode gelap

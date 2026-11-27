@@ -9,6 +9,9 @@
 //   touch     a button, link or field under 44 x 44 px (phones and tablets only; links inside running text skipped)
 //   smalltext text under 14px (the summary also counts text under 12px, the floor for captions and badges)
 //   blank     a panel at least 250px tall that is empty, or whose content ends far above its bottom edge
+//   sticky    with the page scrolled down (900px, or as far as it goes), the top bar is not at the top of the screen,
+//             the sidebar (desktop, open and collapsed) does not fill the height below it, or the tab bar (phones and
+//             tablets) is not at the bottom. Panel pages only; skipped when the page is too short to scroll
 //
 //   npm run ui:audit                       # every page, 320 375 414 768 1280, light and dark
 //   npm run ui:audit -- --widths=375 --schemes=light --only=inbox,pipeline --out=storage/app/ui-audit/after --concurrency=4
@@ -181,7 +184,7 @@ async function measure({ touchCheck }) {
             // A bar fixed to the top hides what scrolls under it, and one fixed to the bottom what is still to come:
             // that is only a problem when scrolling can no longer bring it out (top bars at the top of the page,
             // bottom bars at the end of it).
-            const fixed = cover !== hit || getComputedStyle(cover).position === 'fixed';
+            const fixed = cover !== hit || ['fixed', 'sticky'].includes(getComputedStyle(cover).position);
             if (fixed) {
                 const cr = cover.getBoundingClientRect();
                 const atTop = cr.top + cr.height / 2 < vh / 2;
@@ -281,6 +284,54 @@ async function measure({ touchCheck }) {
     return result;
 }
 
+// The top bar, sidebar and tab bar stay in place while the page scrolls. Runs inside the page.
+async function measureSticky() {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const doc = document.documentElement;
+    const settle = (ms = 300) => new Promise((resolve) => setTimeout(resolve, ms));
+    const box = (sel) => {
+        const el = document.querySelector(sel);
+        if (!el || getComputedStyle(el).display === 'none') return null;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 ? { top: Math.round(r.top), bottom: Math.round(r.bottom) } : null;
+    };
+    const issues = [];
+    const check = (where) => {
+        const top = box('.fi-topbar-ctn');
+        if (top && Math.abs(top.top) > 1) issues.push({ where, el: 'bar atas', top: top.top, bottom: top.bottom });
+        if (vw >= 1024) {
+            const side = box('.fi-sidebar');
+            const below = top ? Math.max(top.bottom, 0) : 0;
+            if (side && (Math.abs(side.top - below) > 1 || side.bottom < vh - 1)) issues.push({ where, el: 'menu kiri', top: side.top, bottom: side.bottom });
+        } else {
+            const bar = box('.jl-tabbar');
+            if (bar && (bar.bottom > vh + 1 || bar.bottom < vh - 100)) issues.push({ where, el: 'tab bar', top: bar.top, bottom: bar.bottom });
+        }
+    };
+    window.scrollTo({ top: 900, behavior: 'instant' });
+    await settle();
+    const scrolled = Math.round(window.scrollY);
+    if (scrolled < 50) {
+        window.scrollTo({ top: 0, behavior: 'instant' });
+        return { stickyScrolled: scrolled, sticky: [] };
+    }
+    check('menu terbuka');
+    const store = vw >= 1024 && window.Alpine?.store?.('sidebar');
+    if (store && store.isOpen) {
+        store.close();
+        await settle(500);
+        window.scrollTo({ top: 900, behavior: 'instant' });
+        await settle();
+        check('menu diciutkan');
+        store.open();
+        await settle(500);
+    }
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    await settle();
+    return { stickyScrolled: scrolled, sticky: issues };
+}
+
 async function login(browser, tenant) {
     const context = await browser.newContext({ locale: 'id-ID', timezoneId: 'Asia/Jakarta' });
     const page = await context.newPage();
@@ -367,6 +418,7 @@ async function audit({ tenant, def, scheme, width }) {
         await page.waitForTimeout(String(def.path).includes('#') ? 2000 : 300);
         row.url = page.url().replace(BASE, '');
         Object.assign(row, await page.evaluate(measure, { touchCheck: phone }));
+        if (!def.public) Object.assign(row, await page.evaluate(measureSticky));
         if (SHOTS) {
             row.shot = `shots/${def.key}-${row.tenant}-${width}-${scheme}.jpg`;
             await page.screenshot({ path: join(OUT, row.shot), fullPage: true, type: 'jpeg', quality: 70 });
@@ -376,7 +428,7 @@ async function audit({ tenant, def, scheme, width }) {
     }
     await context.close();
     const n = (k) => (Array.isArray(row[k]) ? row[k].length : 0);
-    console.log(`${row.error ? 'ERR ' : ''}${def.key} ${row.tenant} ${width} ${scheme}: hscroll=${row.hscroll ? 'YA' : '-'} overflow=${n('overflow')} covered=${n('covered')} touch=${n('touch')} small=${n('smalltext')} blank=${n('blank')}${row.error ? ` ${row.error}` : ''}`);
+    console.log(`${row.error ? 'ERR ' : ''}${def.key} ${row.tenant} ${width} ${scheme}: hscroll=${row.hscroll ? 'YA' : '-'} overflow=${n('overflow')} covered=${n('covered')} touch=${n('touch')} small=${n('smalltext')} blank=${n('blank')} sticky=${n('sticky')}${row.error ? ` ${row.error}` : ''}`);
     return row;
 }
 
@@ -402,6 +454,7 @@ const totals = {
     smalltext: ok.reduce((s, r) => s + r.smalltext.length, 0),
     tinytext: ok.reduce((s, r) => s + r.smalltext.filter((t) => t.px < 12).length, 0),
     blank: ok.reduce((s, r) => s + r.blank.length, 0),
+    sticky: ok.reduce((s, r) => s + (r.sticky || []).length, 0),
 };
 writeFileSync(join(OUT, 'report.json'), JSON.stringify({ base: BASE, widths: WIDTHS, schemes: SCHEMES, totals, rows }, null, 2));
 
@@ -419,12 +472,13 @@ const lines = [
     `| Teks < 14px | ${totals.smalltext} |`,
     `| Teks < 12px | ${totals.tinytext} |`,
     `| Area kosong besar | ${totals.blank} |`,
+    `| Bar atas, menu kiri atau tab bar ikut tergulung | ${totals.sticky} |`,
     '',
-    '| Halaman | Akun | Lebar | Mode | Scroll samping | Meluber | Tertutup | Sentuh kecil | Teks kecil | Kosong |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    '| Halaman | Akun | Lebar | Mode | Scroll samping | Meluber | Tertutup | Sentuh kecil | Teks kecil | Kosong | Ikut tergulung |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
     ...rows.map((r) => r.error
-        ? `| ${r.name} | ${r.tenant} | ${r.width} | ${r.scheme} | gagal: ${r.error.replace(/\|/g, '/')} | | | | | |`
-        : `| ${r.name} | ${r.tenant} | ${r.width} | ${r.scheme} | ${r.hscroll ? `ya (${r.scrollWidth}px)` : '-'} | ${r.overflow.length} | ${r.covered.length} | ${r.touch.length} | ${r.smalltext.length} | ${r.blank.length} |`),
+        ? `| ${r.name} | ${r.tenant} | ${r.width} | ${r.scheme} | gagal: ${r.error.replace(/\|/g, '/')} | | | | | | |`
+        : `| ${r.name} | ${r.tenant} | ${r.width} | ${r.scheme} | ${r.hscroll ? `ya (${r.scrollWidth}px)` : '-'} | ${r.overflow.length} | ${r.covered.length} | ${r.touch.length} | ${r.smalltext.length} | ${r.blank.length} | ${(r.sticky || []).length} |`),
 ];
 writeFileSync(join(OUT, 'summary.md'), lines.join('\n') + '\n');
 console.log(JSON.stringify(totals));
