@@ -181,6 +181,8 @@ class AiMorningAndRetryTest extends TestCase
         $this->assertSame([AiSettings::of($this->tenant)->quietMessage()], $this->sent(), 'Nothing invented is sent');
         $this->assertSame('AI gagal menjawab: layanan AI menolak permintaan (kode 400)',
             $this->in(fn () => LeadActivity::query()->where('type', 'ai_handoff')->value('body')));
+        $this->assertSame('Alasan layanan AI (kode 400): invalid_request_error: This model does not support assistant message prefill. The conversation must end with a user message.',
+            $this->in(fn () => LeadActivity::query()->where('type', 'ai_trace')->value('body')));
         Mail::assertSent(AiReplyFailed::class, fn (AiReplyFailed $m) => $m->hasTo($this->tenant->users()->first()->email));
 
         // A second failure within the hour is on the Inbox, not in another e-mail.
