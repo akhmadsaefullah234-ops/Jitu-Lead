@@ -1129,6 +1129,12 @@ class GenerateAiReply
         Log::warning('AI reply failed', ['tenant_id' => $inbound->tenant_id, 'conversation_id' => $inbound->conversation_id,
             'message_id' => $inbound->getKey(), 'error' => $e->getMessage()]);
         $inbound->conversation->lead?->activities()->create(['type' => 'ai_handoff', 'body' => $body]);
+
+        // The API's own words (field and rule, digits masked) on the lead, so a refusal can be explained from the app.
+        if ($e instanceof AiException && $e->reason !== '') {
+            $inbound->conversation->lead?->activities()->create(['type' => 'ai_trace', 'meta' => ['message_id' => $inbound->getKey(), 'status' => $e->status],
+                'body' => 'Alasan layanan AI (kode '.$e->status.'): '.$e->reason]);
+        }
         app(AiFailureAlert::class)->tell($this->current->get(), $inbound, $reason);
 
         return $this->draft($inbound, null, AiDraft::HANDOFF, $body);

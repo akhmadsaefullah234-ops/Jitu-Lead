@@ -76,8 +76,8 @@ class AnthropicClient
 
             $toolText = $this->text($response) !== '' ? $this->text($response) : $toolText;
 
-            // The assistant turn goes back exactly as it came; every result answers it in one user turn.
-            $messages[] = ['role' => 'assistant', 'content' => $response['content']];
+            // The assistant turn goes back as it came (see blocks()); every result answers it in one user turn.
+            $messages[] = ['role' => 'assistant', 'content' => self::blocks($response['content'])];
             $results = [];
 
             foreach ($response['content'] as $block) {
@@ -88,7 +88,7 @@ class AnthropicClient
                 $input = is_array($block['input'] ?? null) ? $block['input'] : [];
                 $result = $run((string) $block['name'], $input);
                 $calls[] = ['name' => (string) $block['name'], 'input' => $input, 'result' => $result];
-                $results[] = ['type' => 'tool_result', 'tool_use_id' => $block['id'], 'content' => json_encode($result, JSON_UNESCAPED_UNICODE)];
+                $results[] = ['type' => 'tool_result', 'tool_use_id' => $block['id'], 'content' => self::encode($result)];
             }
 
             $messages[] = ['role' => 'user', 'content' => $results];
@@ -150,6 +150,8 @@ class AnthropicClient
 
     private function send(array $body): array
     {
+        $body = self::scrub($body);
+
         $response = Http::withHeaders([
             'x-api-key' => (string) config('services.anthropic.key'),
             'anthropic-version' => '2023-06-01',
@@ -189,6 +191,11 @@ class AnthropicClient
         $out = [];
 
         foreach ($messages as $m) {
+            // A turn with nothing readable (a blank caption, "ㅤ", a zero-width space) is refused with a 400.
+            if (is_string($m['content']) && self::blank($m['content'])) {
+                continue;
+            }
+
             $last = $out === [] ? null : array_key_last($out);
 
             if ($last !== null && $out[$last]['role'] === $m['role'] && is_string($out[$last]['content']) && is_string($m['content'])) {
@@ -209,6 +216,61 @@ class AnthropicClient
         }
 
         return array_values($out);
+    }
+
+    /** True when a text has no visible character: only spaces, line breaks, invisible or filler characters. */
+    public static function blank(string $text): bool
+    {
+        return preg_replace('/[\s\p{Z}\p{Cc}\p{Cf}\x{2800}\x{3164}\x{115F}\x{1160}\x{FFA0}]+/u', '', mb_scrub($text, 'UTF-8')) === '';
+    }
+
+    /**
+     * The model's own content blocks, made fit to send back: PHP decodes a tool call's empty input {} as [], which
+     * goes out again as a JSON list and is refused with a 400 ("tool_use.input: Input should be a valid
+     * dictionary"); an empty text block is refused too.
+     *
+     * @param  list<array<string, mixed>>  $content
+     * @return list<array<string, mixed>>
+     */
+    public static function blocks(array $content): array
+    {
+        $out = [];
+
+        foreach ($content as $block) {
+            if (($block['type'] ?? null) === 'text' && self::blank((string) ($block['text'] ?? ''))) {
+                continue;
+            }
+
+            if (($block['type'] ?? null) === 'tool_use' && (! is_array($block['input'] ?? null) || $block['input'] === [])) {
+                $block['input'] = new \stdClass;
+            }
+
+            $out[] = $block;
+        }
+
+        return $out;
+    }
+
+    /** A tool's result as text: never false (bad UTF-8, a NaN), which the API refuses with a 400. */
+    public static function encode(mixed $result): string
+    {
+        $json = json_encode($result, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+
+        return is_string($json) && $json !== '' ? $json : '{}';
+    }
+
+    /** Every string of a request as valid UTF-8 (a cut emoji or a bad byte from a webhook), so the body always encodes. */
+    private static function scrub(mixed $value): mixed
+    {
+        if (is_string($value)) {
+            return mb_check_encoding($value, 'UTF-8') ? $value : mb_scrub($value, 'UTF-8');
+        }
+
+        if (is_array($value)) {
+            return array_map(self::scrub(...), $value);
+        }
+
+        return $value;
     }
 
     private function text(array $response): string
